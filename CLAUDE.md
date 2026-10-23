@@ -113,7 +113,7 @@ feat(track): Record a track in a foreground service. v26.10.2
 - `app/build.gradle` sets `enableKotlin = false`. Without it, the plugin adds the Kotlin standard library to the APK. Do not use the deprecated `android.builtInKotlin` option.
 - `Dockerfile` has two stages. `test` runs the gate. `project_builder` runs `gradle assembleRelease` and copies the APK to `/app/bin/`. It reads the version from `app/build.gradle` for the name of the APK file.
 - The build does not use the variant API of the Android Gradle plugin. The plugin removes the old variant API.
-- `local/build.sh` builds both images and copies the APK to `output-binaries/`. It keeps the full output of each build in `local/logs/`. Git ignores that directory.
+- `local/build.sh` builds both images and copies the APK to `output-binaries/`. The terminal shows the interactive progress of BuildKit. The script writes the full plain log of both stages to `output-binaries/build.log` with `docker buildx history logs`.
 - The toolchain image holds each SDK package that the build needs. A missing package goes into the layer of the build step, thus each build downloads it again. If the log shows "Install Android SDK", add that package to `Dockerfile.base`.
 - The first run of `local/build.sh` makes `app/retrace.keystore` with the passwords from `.env`. The keytool of the toolchain image makes it. Without `.env`, the defaults of `.env.example` apply.
 - The release build uses R8 (`minifyEnabled = true`) and `shrinkResources = true`.

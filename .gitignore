@@ -1,7 +1,6 @@
 app/retrace.keystore
 .env
 output-binaries/
-local/logs/
 build/
 app/build/
 .gradle/

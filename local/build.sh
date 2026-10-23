@@ -5,17 +5,31 @@
 # no Android SDK. Optional: the .env file gives the keystore passwords. See
 # .env.example.
 #
-# The script keeps the full output of each build in local/logs/. The output
-# of the terminal is often too long to read back.
+# The terminal shows the interactive progress of BuildKit. That view
+# removes the lines of each finished step. Thus the script also writes the
+# full plain log of both stages to output-binaries/build.log.
 set -e
-set -o pipefail
 
 cd "$(dirname "$0")/.."
 
-mkdir -p local/logs
-LOG="local/logs/build-$(date +%Y%m%d-%H%M%S).log"
-exec > >(tee "$LOG") 2>&1
-echo "The log of this build is $LOG."
+OUT=./output-binaries
+LOG="$OUT/build.log"
+
+# The APK and the log of the last build go into an empty directory. A failed
+# build thus leaves its log and no old APK.
+rm -rf "$OUT"
+mkdir -p "$OUT"
+
+# Adds the plain log of the last BuildKit build to the log file.
+# "docker buildx history logs" gives the same text as --progress=plain.
+save_log() {
+    {
+        echo "======== $1 ========"
+        docker buildx history logs 2>&1 \
+            || echo "docker buildx history logs failed. Update Docker Buildx for the log."
+        echo
+    } >> "$LOG"
+}
 
 # Read the .env file. Each line that is not empty and not a comment becomes
 # one build argument.
@@ -38,7 +52,12 @@ KEY_ALIAS="${KEY_ALIAS:-retrace}"
 KEY_PASSWORD="${KEY_PASSWORD:-retrace123}"
 
 echo "-------- STAGE 1: toolchain image -------"
-docker buildx build --progress=plain -f Dockerfile.base -t retrace-base:latest --load .
+if ! docker buildx build -f Dockerfile.base -t retrace-base:latest --load .; then
+    save_log "STAGE 1: toolchain image"
+    echo "STAGE 1 failed. The log is in $LOG."
+    exit 1
+fi
+save_log "STAGE 1: toolchain image"
 
 # The first build makes the release keystore. The keytool of the toolchain
 # image makes it, thus the host needs no JDK. Keep a copy of this file.
@@ -60,15 +79,18 @@ if [ ! -f app/retrace.keystore ]; then
 fi
 
 echo "-------- STAGE 2: test gate and APK -------"
-docker buildx build --progress=plain -t retrace-builder:latest --load "${BUILD_ARGS[@]}" .
+if ! docker buildx build -t retrace-builder:latest --load "${BUILD_ARGS[@]}" .; then
+    save_log "STAGE 2: test gate and APK"
+    echo "STAGE 2 failed. The log is in $LOG."
+    exit 1
+fi
+save_log "STAGE 2: test gate and APK"
 
-# Copy the APK out of the image into an empty directory.
-rm -rf ./output-binaries/
-mkdir -p ./output-binaries/
+# Copy the APK out of the image.
 docker rm -f retrace-extract > /dev/null 2>&1 || true
 docker create --name retrace-extract retrace-builder:latest > /dev/null
-docker cp retrace-extract:/app/bin/. ./output-binaries/
+docker cp retrace-extract:/app/bin/. "$OUT/"
 docker rm retrace-extract > /dev/null
 
-ls -l ./output-binaries/
-echo "The APK is in ./output-binaries/."
+ls -l "$OUT/"
+echo "The APK and build.log are in $OUT/."
