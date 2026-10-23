@@ -1,6 +1,7 @@
 .git/
 .gitignore
 .env
+app/retrace.keystore
 doc/
 local/
 output-binaries/

@@ -5,9 +5,14 @@
 # no Android SDK. Optional: the .env file gives the keystore passwords. See
 # .env.example.
 #
-# The terminal shows the interactive progress of BuildKit. That view
-# removes the lines of each finished step. Thus the script also writes the
-# full plain log of both stages to output-binaries/build.log.
+# The terminal shows the interactive progress of BuildKit. That view removes
+# the lines of each finished step. Thus the script also writes the full plain
+# log to output-binaries/build.log:
+# - Docker Buildx v0.20.0 and newer give the log of each stage with
+#   "docker buildx history logs".
+# - An older Docker Buildx cannot give the log afterwards. The script then
+#   builds a failed stage again with --progress=plain into the log. The
+#   cache makes the steps before the failed step fast.
 set -e
 
 cd "$(dirname "$0")/.."
@@ -20,27 +25,48 @@ LOG="$OUT/build.log"
 rm -rf "$OUT"
 mkdir -p "$OUT"
 
-# Adds the plain log of the last BuildKit build to the log file.
-# "docker buildx history logs" gives the same text as --progress=plain.
-save_log() {
+# An older Docker Buildx prints its general help for an unknown command, and
+# its exit code is 0. Thus the test looks for an option of "history logs".
+if docker buildx history logs --help 2>&1 | grep -q -- '--progress'; then
+    HAVE_HISTORY=1
+else
+    HAVE_HISTORY=0
     {
-        echo "======== $1 ========"
-        docker buildx history logs 2>&1 \
-            || echo "docker buildx history logs failed. Update Docker Buildx for the log."
+        echo "This Docker Buildx has no 'docker buildx history logs'."
+        echo "That command needs Docker Buildx v0.20.0 or newer: $(docker buildx version 2>&1)"
+        echo "This log holds the plain output of a failed stage only."
         echo
     } >> "$LOG"
+fi
+
+# Runs one stage. $1 is the title for the log, the other arguments go to
+# "docker buildx build".
+build_stage() {
+    local title="$1"
+    shift
+    echo "-------- $title -------"
+    if docker buildx build "$@"; then
+        if [ "$HAVE_HISTORY" = 1 ]; then
+            { echo "======== $title ========"; docker buildx history logs 2>&1; echo; } >> "$LOG"
+        fi
+        return 0
+    fi
+    {
+        echo "======== $title: FAILED ========"
+        if [ "$HAVE_HISTORY" = 1 ]; then
+            docker buildx history logs 2>&1
+        else
+            docker buildx build --progress=plain "$@" 2>&1
+        fi
+        echo
+    } >> "$LOG" || true
+    echo "$title failed. The log is in $LOG."
+    exit 1
 }
 
-# Read the .env file. Each line that is not empty and not a comment becomes
-# one build argument.
-BUILD_ARGS=()
+# The .env file gives the passwords to keytool here. It goes to the build as
+# a BuildKit secret, not as build arguments. See the Dockerfile.
 if [ -f .env ]; then
-    while IFS= read -r line || [ -n "$line" ]; do
-        case "$line" in
-            ''|'#'*) continue ;;
-        esac
-        BUILD_ARGS+=(--build-arg "$line")
-    done < .env
     set -a
     . ./.env
     set +a
@@ -51,13 +77,8 @@ KEYSTORE_PASSWORD="${KEYSTORE_PASSWORD:-retrace123}"
 KEY_ALIAS="${KEY_ALIAS:-retrace}"
 KEY_PASSWORD="${KEY_PASSWORD:-retrace123}"
 
-echo "-------- STAGE 1: toolchain image -------"
-if ! docker buildx build -f Dockerfile.base -t retrace-base:latest --load .; then
-    save_log "STAGE 1: toolchain image"
-    echo "STAGE 1 failed. The log is in $LOG."
-    exit 1
-fi
-save_log "STAGE 1: toolchain image"
+build_stage "STAGE 1: toolchain image" \
+    -f Dockerfile.base -t retrace-base:latest --load .
 
 # The first build makes the release keystore. The keytool of the toolchain
 # image makes it, thus the host needs no JDK. Keep a copy of this file.
@@ -78,13 +99,13 @@ if [ ! -f app/retrace.keystore ]; then
             -dname "CN=Retrace, O=Basov"
 fi
 
-echo "-------- STAGE 2: test gate and APK -------"
-if ! docker buildx build -t retrace-builder:latest --load "${BUILD_ARGS[@]}" .; then
-    save_log "STAGE 2: test gate and APK"
-    echo "STAGE 2 failed. The log is in $LOG."
-    exit 1
+SECRETS=(--secret id=keystore,src=app/retrace.keystore)
+if [ -f .env ]; then
+    SECRETS+=(--secret id=signing_env,src=.env)
 fi
-save_log "STAGE 2: test gate and APK"
+
+build_stage "STAGE 2: test gate and APK" \
+    -t retrace-builder:latest --load "${SECRETS[@]}" .
 
 # Copy the APK out of the image.
 docker rm -f retrace-extract > /dev/null 2>&1 || true

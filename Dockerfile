@@ -26,12 +26,6 @@ RUN if [ "$SKIP_TESTS" = "1" ]; then \
 # -------------------------- project_builder --------------------------
 FROM retrace-base:latest AS project_builder
 
-# The signing configuration in app/build.gradle reads these values.
-# local/build.sh gives them from the .env file.
-ARG KEYSTORE_PASSWORD
-ARG KEY_ALIAS
-ARG KEY_PASSWORD
-
 # This copy makes the test stage a part of each build of this stage.
 COPY --from=test /gate-passed /tmp/gate-passed
 
@@ -41,7 +35,18 @@ COPY . .
 # The name of the APK file comes from the appVersion line of app/build.gradle.
 # If the signature is missing, Gradle writes app-release-unsigned.apk. The
 # copy then fails, and the build stops.
+#
+# The keystore and the .env file come in as BuildKit secrets. A secret is
+# present only during this one step. Thus no layer and no image history
+# holds the key or its passwords. A build argument stays readable in the
+# image history. local/build.sh gives the secrets.
 RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
+    --mount=type=secret,id=keystore \
+    --mount=type=secret,id=signing_env \
+    if [ -f /run/secrets/signing_env ]; then \
+        set -a && . /run/secrets/signing_env && set +a; \
+    fi && \
+    export KEYSTORE_FILE=/run/secrets/keystore && \
     gradle --no-daemon assembleRelease && \
     mkdir -p bin && \
     VERSION=$(awk -F"'" '/^def appVersion/ {print $2}' app/build.gradle) && \
