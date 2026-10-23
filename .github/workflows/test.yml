@@ -1,0 +1,38 @@
+# The fast quality gate, the same as in OMN-Go. It builds the test stage of
+# Dockerfile.ci and nothing else. That stage runs test/run.sh in the same
+# image as the release build. It needs no secret. A pull request from a
+# fork thus gets a test result too.
+#
+# The release build (release.yml) runs the same gate before it makes an
+# APK.
+name: Test Retrace
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Run the quality gate
+        run: |
+          docker buildx build \
+            -f Dockerfile.ci \
+            --target test \
+            --progress plain \
+            --cache-from type=gha,scope=retrace-test \
+            --cache-to type=gha,mode=max,scope=retrace-test \
+            .

@@ -1,0 +1,119 @@
+# The CI version of Dockerfile.base and Dockerfile in one file, the same as
+# in OMN-Go. The release workflow and the test workflow use it.
+#
+# Why a separate file: the setup-buildx-action of GitHub makes a builder
+# with the docker-container driver. That builder has its own image store.
+# Two builds where the second has "FROM retrace-base:latest" thus try to
+# download that image from a registry, and fail. One file gives one
+# BuildKit graph, and no image of a first build is necessary.
+#
+# The local build keeps the two files. Keep this file the same as the two
+# files when you change one of them. BuildFilesTest compares them.
+#
+# THE STAGES.
+#
+#   base_env        The toolchain of Dockerfile.base.
+#   test            base_env plus the source. It runs the quality gate.
+#   project_builder base_env plus the source. It makes the signed APK.
+#   export          The APK alone.
+#
+# The signing step differs from Dockerfile. The CI gives four secrets:
+# keystore, keystore_password, key_alias and key_password. The local build
+# gives the keystore and the .env file.
+
+# ============================== STAGE 1 ===============================
+FROM debian:trixie-slim AS base_env
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+    openjdk-21-jdk-headless ca-certificates wget unzip
+
+# The Android command-line tools give sdkmanager.
+RUN --mount=type=cache,target=/tmp/dl,sharing=locked \
+    wget -q https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip -O /tmp/dl/cmd.zip && \
+    mkdir -p /opt/android/cmdline-tools && \
+    unzip -q /tmp/dl/cmd.zip -d /opt/android/cmdline-tools && \
+    mv /opt/android/cmdline-tools/cmdline-tools /opt/android/cmdline-tools/latest
+
+ENV ANDROID_HOME=/opt/android
+ENV PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+
+# The platform agrees with compileSdk in app/build.gradle.
+# The build-tools package is the one that the Android Gradle plugin asks for.
+# The Android Gradle plugin also asks for the platform tools. Without them
+# here, each build downloads them again.
+RUN yes | sdkmanager --licenses > /dev/null && \
+    sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
+# Gradle runs from this image. The repository holds no Gradle wrapper.
+# The plugin version in build.gradle and this Gradle version change together.
+RUN --mount=type=cache,target=/tmp/dl,sharing=locked \
+    wget -q https://services.gradle.org/distributions/gradle-9.6.1-bin.zip -O /tmp/dl/gradle.zip && \
+    mkdir -p /opt/gradle && \
+    unzip -q /tmp/dl/gradle.zip -d /opt/gradle
+
+ENV PATH=$PATH:/opt/gradle/gradle-9.6.1/bin
+
+WORKDIR /app
+
+# ============================== STAGE 2 ===============================
+# The quality gate runs the Java tests of test/ with javac and java.
+# The last step writes /gate-passed. project_builder copies that file.
+# Thus no APK comes from a build with a failed gate.
+FROM base_env AS test
+
+# Set SKIP_TESTS to 1 to skip the gate for an emergency build:
+#   docker buildx build --build-arg SKIP_TESTS=1 ...
+ARG SKIP_TESTS=0
+
+COPY . .
+
+RUN if [ "$SKIP_TESTS" = "1" ]; then \
+        echo "WARNING: SKIP_TESTS=1 - test gate bypassed"; \
+    else \
+        sh test/run.sh; \
+    fi && \
+    touch /gate-passed
+
+# ============================== STAGE 3 ===============================
+FROM base_env AS project_builder
+
+# This copy makes the test stage a part of each build of this stage.
+COPY --from=test /gate-passed /tmp/gate-passed
+
+COPY . .
+
+# The secrets are present only during this one step. Thus no layer and no
+# image history holds the key or its passwords. KEYSTORE_FILE points the
+# signing configuration of app/build.gradle to the keystore.
+#
+# required=true stops the step at once with a clear message if the CI job
+# does not give a secret. Without it, Gradle fails later with a message
+# about the keystore that is not clear.
+#
+# The name of the APK file comes from the appVersion line of app/build.gradle.
+RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
+    --mount=type=secret,id=keystore,required=true \
+    --mount=type=secret,id=keystore_password,required=true \
+    --mount=type=secret,id=key_alias,required=true \
+    --mount=type=secret,id=key_password,required=true \
+    export KEYSTORE_FILE="/run/secrets/keystore" && \
+    export KEYSTORE_PASSWORD="$(cat /run/secrets/keystore_password)" && \
+    export KEY_ALIAS="$(cat /run/secrets/key_alias)" && \
+    export KEY_PASSWORD="$(cat /run/secrets/key_password)" && \
+    gradle --no-daemon assembleRelease && \
+    mkdir -p bin && \
+    VERSION=$(awk -F"'" '/^def appVersion/ {print $2}' app/build.gradle) && \
+    test -n "$VERSION" && \
+    cp app/build/outputs/apk/release/app-release.apk "bin/retrace-v${VERSION}-release.apk"
+
+# ============================== EXPORT ===============================
+# The APK alone. Build this stage with
+#   docker buildx build -f Dockerfile.ci --target export --output type=local,dest=artifacts .
+# BuildKit then writes only the APK to the host, and does not load the
+# toolchain image into the Docker daemon.
+FROM scratch AS export
+COPY --from=project_builder /app/bin/ /

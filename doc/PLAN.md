@@ -50,8 +50,7 @@ The build follows the pattern of OMN-Go.
 - `local/build.sh` builds the two images and copies the APK to `./output-binaries/`.
 - Gradle uses the Android Gradle plugin 9 and **no dependency**. The release build sets `minifyEnabled true` and `shrinkResources true`.
 - Signing: the first build makes a keystore with the passwords from `.env`. The keystore and the passwords go to the build as BuildKit secrets.
-- Release: a push of a tag `vYY.MM.S` starts `.github/workflows/release.yml`, the same as in OMN-Go. The workflow builds the signed APK and makes a GitHub release with it. OMN-Go keeps a merged `Dockerfile.ci` by hand. Retrace makes the merged file at each run with `.github/ci-dockerfile.sh`. Thus it cannot go out of date.
-- The signing secrets are secrets of the GitHub environment `release`. Its rules let only a tag `v*` use them. Each action of the workflow has a fixed commit. The release section of `README.md` gives the setup.
+- Release: the GitHub workflows follow the workflows of OMN-Go. `.github/workflows/release.yml` builds the signed APK from `Dockerfile.ci` for each push to `master`, each pull request and each tag `v*`. A tag push also makes a GitHub release. `.github/workflows/test.yml` runs the quality gate alone. The signing secrets are repository secrets. The release section of `README.md` gives the setup.
 - The tests use no JUnit. `test/run.sh` compiles and runs them with `javac` and `java` in the same image.
 
 ## 4. Project layout

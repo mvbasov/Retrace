@@ -58,29 +58,63 @@ docker buildx build --target test .
 
 ## Release
 
-A push of a tag `vYY.MM.S` starts the release workflow on GitHub. The workflow builds the signed APK and makes a GitHub release with it. The tag must agree with `appVersion` in `app/build.gradle`.
+The GitHub workflows follow the workflows of OMN-Go:
+
+- `.github/workflows/release.yml` builds the signed APK for each push to `master`, each pull request and each tag `v*`.
+- A push of a tag `vYY.MM.S` also makes a GitHub release with the APK. The tag must agree with `appVersion` in `app/build.gradle`.
+- `.github/workflows/test.yml` runs the quality gate alone. It needs no secret.
 
 The workflow signs the APK with the keystore of your local build. Android installs an update only when the same key signs it. Thus an APK from GitHub installs over an APK from `local/build.sh`, and the reverse.
 
-### Set up the release environment
+### Add the signing secrets
 
-Do these steps one time. The secrets go to the environment `release`, not to the repository. The rules of the environment let only a tag `v*` use them.
+Do these steps one time. The secrets have the same names as the secrets of OMN-Go. Their values must come from the Retrace keystore, not from the OMN-Go keystore.
 
-1. On GitHub, open **Settings → Environments → New environment**. Type the name `release`.
-2. In **Deployment branches and tags**, select **Selected branches and tags**. Add a rule of the type **Tag** with the pattern `v*`.
-3. Optional: in **Required reviewers**, add yourself. Then each release waits for your approval.
-4. On your computer, go to the directory of the repository. Send the keystore and the passwords with the GitHub CLI (`gh`):
+1. On your computer, go to the directory of the repository. Write the keystore as base64 text to a file outside the repository:
 
    ```
-   base64 -w0 app/retrace.keystore | gh secret set KEYSTORE_BASE64 --env release --repo mvbasov/Retrace
-   gh secret set --env release --repo mvbasov/Retrace -f .env
+   base64 -w0 app/retrace.keystore > /tmp/retrace-keystore.txt
    ```
 
-   The CLI sends the values directly. Thus the key does not go through the clipboard or a web form. On macOS, use `base64 -i app/retrace.keystore`. Without `.env`, use `-f .env.example`.
-5. Make sure that the environment has the secrets `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD`. Remove the same secrets from the repository secrets, if they are there.
-6. Optional: protect the release tags. Open **Settings → Rules → Rulesets → New ruleset → New tag ruleset**. Add the target pattern `v*`, and select **Restrict creations**, **Restrict updates** and **Restrict deletions**. Add **Repository admin** to the bypass list. Then only you can make a release tag.
+   On macOS, use `base64 -i app/retrace.keystore -o /tmp/retrace-keystore.txt`.
+2. On GitHub, open the repository Retrace. Push **Settings → Secrets and variables → Actions**.
+3. On the tab **Secrets**, push **New repository secret**.
+4. In **Name**, type `KEYSTORE_BASE64`. In **Secret**, paste all the text of `/tmp/retrace-keystore.txt`. Push **Add secret**.
+5. Add three more secrets in the same way. Take the values from `.env`. Without `.env`, take the values from `.env.example`.
+
+   | Name | Value |
+   | --- | --- |
+   | `KEYSTORE_PASSWORD` | The value of `KEYSTORE_PASSWORD` |
+   | `KEY_ALIAS` | The value of `KEY_ALIAS` |
+   | `KEY_PASSWORD` | The value of `KEY_PASSWORD` |
+
+6. Remove the text file: `rm /tmp/retrace-keystore.txt`.
+7. Make sure that the list of repository secrets shows `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD`.
 
 Keep a copy of `app/retrace.keystore` outside the repository. GitHub does not show a secret again. Without the keystore, no update installs over the old APK.
+
+### Make a release
+
+1. Push the patch with the new version to `master`.
+2. Push the tag of that version, for example:
+
+   ```
+   git tag v26.10.26
+   git push origin v26.10.26
+   ```
+
+3. On GitHub, open **Actions** and look at the run of **Build Retrace**.
+4. After the run, open **Releases**. The release has the APK `retrace-vYY.MM.S-release.apk`.
+
+### Check the signature
+
+Compare the certificate of a local APK with the certificate of the release APK:
+
+```
+docker run --rm -v "$PWD:/w" retrace-base:latest /opt/android/build-tools/36.0.0/apksigner verify --print-certs /w/output-binaries/retrace-v26.10.26-release.apk
+```
+
+The line `Signer #1 certificate SHA-256 digest` must be the same for the two files.
 
 ### Change the default passwords
 
@@ -94,26 +128,7 @@ Without `.env`, the passwords are the public values of `.env.example`. Then the 
 
 2. Write the new password into `.env`, for `KEYSTORE_PASSWORD` and for `KEY_PASSWORD`.
 3. Run `docker builder prune`. A change of the keystore alone does not change the cache key of the build step.
-4. Send the keystore and the passwords again with the commands of step 4 above.
-
-### Make a release
-
-Push the tag of the current version:
-
-```
-git tag v26.10.25
-git push origin v26.10.25
-```
-
-### Check the signature
-
-Compare the certificate of a local APK with the certificate of the release APK:
-
-```
-docker run --rm -v "$PWD:/w" retrace-base:latest /opt/android/build-tools/36.0.0/apksigner verify --print-certs /w/output-binaries/retrace-v26.10.25-release.apk
-```
-
-The line `Signer #1 certificate SHA-256 digest` must be the same for the two files.
+4. On GitHub, change the secrets `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD` and `KEY_PASSWORD`. Push the pencil icon of each secret, and paste the new value. Use step 1 of "Add the signing secrets" for the new base64 text.
 
 ## Check the map tile server
 
