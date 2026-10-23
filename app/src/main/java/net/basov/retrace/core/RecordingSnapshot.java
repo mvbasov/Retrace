@@ -12,6 +12,10 @@ package net.basov.retrace.core;
 // the last result of TrackMatcher and the smoothed time difference. A trip
 // without a reference track has null and UNKNOWN there. The selection field
 // tells how the trip got its reference track.
+//
+// A replay is a trip with the points of a saved track. It has the name of
+// that track and its speed. Its elapsed time comes from the times of the
+// points, not from the clock of the device.
 public final class RecordingSnapshot {
 
     // The values of the error field.
@@ -19,6 +23,7 @@ public final class RecordingSnapshot {
     public static final int ERROR_NO_PERMISSION = 1;
     public static final int ERROR_STORAGE = 2;
     public static final int ERROR_NO_GPS = 3;
+    public static final int ERROR_REPLAY = 4;
 
     // The values of the selection field.
     // No comparison. The user selected this.
@@ -37,7 +42,7 @@ public final class RecordingSnapshot {
     // The state of a service that does not record.
     public static final RecordingSnapshot IDLE =
             new RecordingSnapshot(false, null, 0, 0, 0, Double.NaN, TrackPoint.NO_TIME, 0, ERROR_NONE,
-                    null, SELECTION_OFF, null, MatchResult.UNKNOWN);
+                    null, SELECTION_OFF, null, MatchResult.UNKNOWN, null, 0, 0);
 
     public final boolean recording;
     public final Profile profile;
@@ -72,10 +77,20 @@ public final class RecordingSnapshot {
     // this value. At the finish it is the exact result.
     public final long smoothedDeltaMs;
 
+    // The name of the replayed track, or null for a trip with the GPS.
+    public final String replayName;
+
+    // The speed of the replay, or 0 for a trip with the GPS.
+    public final int replaySpeed;
+
+    // The time from the first to the last replayed point.
+    public final long replayElapsedMs;
+
     public RecordingSnapshot(boolean recording, Profile profile, long startTimeMs, int points,
                              double distanceM, double lastAccuracyM, long lastFixTimeMs,
                              int savedCount, int error, String referencePath, int selection,
-                             MatchResult match, long smoothedDeltaMs) {
+                             MatchResult match, long smoothedDeltaMs, String replayName,
+                             int replaySpeed, long replayElapsedMs) {
         this.recording = recording;
         this.profile = profile;
         this.startTimeMs = startTimeMs;
@@ -89,6 +104,21 @@ public final class RecordingSnapshot {
         this.selection = selection;
         this.match = match;
         this.smoothedDeltaMs = smoothedDeltaMs;
+        this.replayName = replayName;
+        this.replaySpeed = replaySpeed;
+        this.replayElapsedMs = replayElapsedMs;
+    }
+
+    public boolean isReplay() {
+        return replaySpeed > 0;
+    }
+
+    // The elapsed time of the trip. A stopped trip shows 0.
+    public long elapsedMs(long nowMs) {
+        if (!recording) {
+            return 0;
+        }
+        return isReplay() ? replayElapsedMs : nowMs - startTimeMs;
     }
 
     public boolean hasReference() {

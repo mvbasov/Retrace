@@ -65,6 +65,15 @@
     <string name="reference_selected">Reference track: %1$s</string>
     <string name="reference_not_found">No saved track starts here. Retrace records a new route.</string>
 
+    <!-- The replay -->
+    <string name="replay_track">Replay this track</string>
+    <string name="replay_line">Replay of %1$s at %2$d× speed</string>
+    <string name="replay_speed">Replay speed</string>
+    <string name="replay_speed_value">%1$d×</string>
+    <string name="replay_done">The replay is complete.</string>
+    <string name="status_replay">Replay: %1$s\n%2$d points · %3$s · %4$s</string>
+    <string name="error_replay">Retrace cannot read the track for the replay.</string>
+
     <!-- The map -->
     <string name="map_loading">Retrace reads the track.</string>
     <string name="map_zoom_in">+</string>

@@ -33,6 +33,7 @@ import net.basov.retrace.core.Profile;
 import net.basov.retrace.core.RecordFilter;
 import net.basov.retrace.core.RecordingSnapshot;
 import net.basov.retrace.core.ReferenceSelector;
+import net.basov.retrace.core.Replay;
 import net.basov.retrace.core.Track;
 import net.basov.retrace.core.TrackMatcher;
 import net.basov.retrace.core.TrackPoint;
@@ -60,6 +61,12 @@ import net.basov.retrace.core.TrackPoint;
 // comparison continues as if the trip started with that track. A manual
 // selection stops the automatic selection.
 //
+// ACTION_REPLAY starts a replay: the points of a saved track go through the
+// same steps as GPS fixes, faster than the real time. See Replay. A replay
+// does not use the GPS, writes no log file and saves no track. It does not
+// use the foreground state, because it needs no location permission. Thus
+// Android can stop a replay soon after the user leaves Retrace.
+//
 // One worker thread does all the work: the GPS fixes, the filter, the
 // matcher and the log file. Thus the fields of the recording need no lock.
 // The main thread only receives the intents and posts the work to the worker
@@ -78,6 +85,14 @@ public final class TrackService extends Service {
     // selection again. Without it and without EXTRA_REFERENCE, the trip has
     // no comparison.
     static final String EXTRA_AUTOMATIC = "net.basov.retrace.extra.AUTOMATIC";
+
+    // ACTION_REPLAY takes the path of the replayed track in EXTRA_REPLAY, and
+    // the reference track the same as ACTION_SELECT. ACTION_REPLAY_SPEED
+    // changes the speed of the running replay.
+    static final String ACTION_REPLAY = "net.basov.retrace.action.REPLAY";
+    static final String ACTION_REPLAY_SPEED = "net.basov.retrace.action.REPLAY_SPEED";
+    static final String EXTRA_REPLAY = "net.basov.retrace.extra.REPLAY";
+    static final String EXTRA_SPEED = "net.basov.retrace.extra.SPEED";
 
     private static final String CHANNEL_ID = "recording";
     private static final int NOTIFICATION_ID = 1;
@@ -147,6 +162,15 @@ public final class TrackService extends Service {
     private long smoothedDeltaMs = MatchResult.UNKNOWN;
     private boolean finishSignaled;
 
+    // The replay. A speed of 0 is a trip with the GPS.
+    private int replaySpeed;
+    private String replayPath;
+    private String replayName;
+    private List<TrackPoint> replayPoints;
+    private int replayIndex;
+    private long replayElapsedMs;
+    private final Runnable replayStep = this::replayNext;
+
     private final LocationListener listener = new LocationListener() {
         @Override
         public void onLocationChanged(Location location) {
@@ -194,7 +218,8 @@ public final class TrackService extends Service {
             RecordingSnapshot first = new RecordingSnapshot(true, p, start, 0, 0, Double.NaN,
                     TrackPoint.NO_TIME, snapshot.savedCount, RecordingSnapshot.ERROR_NONE,
                     reference, reference == null ? RecordingSnapshot.SELECTION_SEARCH
-                            : RecordingSnapshot.SELECTION_MANUAL, null, MatchResult.UNKNOWN);
+                            : RecordingSnapshot.SELECTION_MANUAL, null, MatchResult.UNKNOWN,
+                    null, 0, 0);
             if (!enterForeground(notification(first))) {
                 snapshot = withError(RecordingSnapshot.ERROR_NO_PERMISSION);
                 stopSelf();
@@ -203,6 +228,26 @@ public final class TrackService extends Service {
             worker.post(() -> begin(p, start, reference));
         } else if (ACTION_STOP.equals(action)) {
             worker.post(() -> finish(true));
+        } else if (ACTION_REPLAY.equals(action)) {
+            final String path = intent.getStringExtra(EXTRA_REPLAY);
+            final String reference = intent.getStringExtra(EXTRA_REFERENCE);
+            final boolean automatic = intent.getBooleanExtra(EXTRA_AUTOMATIC, false);
+            final int speed = intent.getIntExtra(EXTRA_SPEED, Replay.DEFAULT_SPEED);
+            worker.post(() -> {
+                if (!recording && !beginReplay(path, reference, automatic, speed)) {
+                    stopSelf(startId);
+                }
+            });
+        } else if (ACTION_REPLAY_SPEED.equals(action)) {
+            final int speed = intent.getIntExtra(EXTRA_SPEED, Replay.DEFAULT_SPEED);
+            worker.post(() -> {
+                if (recording && replaySpeed > 0) {
+                    replaySpeed = Math.max(1, speed);
+                    publish();
+                } else if (!recording) {
+                    stopSelf(startId);
+                }
+            });
         } else if (ACTION_SELECT.equals(action)) {
             final String reference = intent.getStringExtra(EXTRA_REFERENCE);
             final boolean automatic = intent.getBooleanExtra(EXTRA_AUTOMATIC, false);
@@ -243,16 +288,7 @@ public final class TrackService extends Service {
         if (recording) {
             return;
         }
-        profile = p;
-        startTimeMs = start;
-        filter = new RecordFilter(p);
-        lastAccuracyM = Double.NaN;
-        lastFixTimeMs = TrackPoint.NO_TIME;
-        error = RecordingSnapshot.ERROR_NONE;
-        synchronized (POINTS) {
-            POINTS.clear();
-        }
-        resetComparison(p);
+        resetTrip(p, start);
         if (reference == null) {
             selection = RecordingSnapshot.SELECTION_SEARCH;
         } else {
@@ -278,6 +314,80 @@ public final class TrackService extends Service {
             return;
         }
         publish();
+    }
+
+    // Worker thread. The common start of a trip and of a replay.
+    private void resetTrip(Profile p, long start) {
+        profile = p;
+        startTimeMs = start;
+        filter = new RecordFilter(p);
+        lastAccuracyM = Double.NaN;
+        lastFixTimeMs = TrackPoint.NO_TIME;
+        error = RecordingSnapshot.ERROR_NONE;
+        replaySpeed = 0;
+        replayPath = null;
+        replayName = null;
+        replayPoints = null;
+        replayIndex = 0;
+        replayElapsedMs = 0;
+        synchronized (POINTS) {
+            POINTS.clear();
+        }
+        resetComparison(p);
+    }
+
+    // Worker thread. Returns false if Retrace cannot read the track. The
+    // replayed track gives the profile. A track with no profile is replayed
+    // as walking.
+    private boolean beginReplay(String path, String reference, boolean automatic, int speed) {
+        Track track;
+        try {
+            track = path == null ? null : store.load(new File(path));
+        } catch (IOException | IllegalArgumentException e) {
+            track = null;
+        }
+        if (track == null || track.points.size() < 2) {
+            snapshot = withError(RecordingSnapshot.ERROR_REPLAY);
+            return false;
+        }
+        resetTrip(track.profile != null ? track.profile : Profile.WALKING,
+                System.currentTimeMillis());
+        replaySpeed = Math.max(1, speed);
+        replayPath = path;
+        replayName = track.name;
+        replayPoints = track.points;
+        if (reference != null) {
+            loadReference(reference);
+        } else if (automatic) {
+            selection = RecordingSnapshot.SELECTION_SEARCH;
+        }
+        recording = true;
+        publish();
+        worker.post(replayStep);
+        return true;
+    }
+
+    // Worker thread. Sends one point of the replayed track, and posts the
+    // next point. After the last point, the replay stops.
+    private void replayNext() {
+        if (!recording || replaySpeed == 0) {
+            return;
+        }
+        TrackPoint p = replayPoints.get(replayIndex++);
+        TrackPoint first = replayPoints.get(0);
+        if (p.hasTime() && first.hasTime()) {
+            replayElapsedMs = p.timeMs - first.timeMs;
+        }
+        onPoint(p);
+        if (!recording) {
+            return;
+        }
+        if (replayIndex >= replayPoints.size()) {
+            finish(true);
+            return;
+        }
+        worker.postDelayed(replayStep,
+                Replay.waitMs(p, replayPoints.get(replayIndex), replaySpeed));
     }
 
     // Worker thread. Removes the reference track and the comparison.
@@ -315,6 +425,11 @@ public final class TrackService extends Service {
     private void startSearch(TrackPoint first) {
         List<ReferenceSelector.Candidate> near = new ArrayList<>();
         for (File f : store.trackFiles()) {
+            // The replayed track always agrees with itself. It is not a
+            // candidate for its own replay.
+            if (f.getPath().equals(replayPath)) {
+                continue;
+            }
             try {
                 Track track = store.load(f);
                 if (ReferenceSelector.startsNear(track, profile, first)) {
@@ -346,8 +461,10 @@ public final class TrackService extends Service {
             compare(p);
         }
         publish();
-        lastNotificationMs = System.currentTimeMillis();
-        notificationManager.notify(NOTIFICATION_ID, notification(snapshot));
+        if (replaySpeed == 0) {
+            lastNotificationMs = System.currentTimeMillis();
+            notificationManager.notify(NOTIFICATION_ID, notification(snapshot));
+        }
     }
 
     // Worker thread.
@@ -361,18 +478,27 @@ public final class TrackService extends Service {
                 location.getTime(),
                 location.hasAltitude() ? location.getAltitude() : Double.NaN,
                 location.hasAccuracy() ? location.getAccuracy() : Double.NaN);
+        onPoint(fix);
+    }
+
+    // Worker thread. A GPS fix, or a point of a replay. A replay writes no
+    // log file and shows no notification.
+    private void onPoint(TrackPoint fix) {
         lastAccuracyM = fix.accuracyM;
         lastFixTimeMs = System.currentTimeMillis();
+        boolean live = replaySpeed == 0;
 
         boolean finishNow = false;
         if (filter.accept(fix)) {
-            try {
-                log.write(PointLog.line(fix));
-                log.write('\n');
-                log.flush();
-            } catch (IOException e) {
-                stopWithError(RecordingSnapshot.ERROR_STORAGE);
-                return;
+            if (live) {
+                try {
+                    log.write(PointLog.line(fix));
+                    log.write('\n');
+                    log.flush();
+                } catch (IOException e) {
+                    stopWithError(RecordingSnapshot.ERROR_STORAGE);
+                    return;
+                }
             }
             synchronized (POINTS) {
                 POINTS.add(fix);
@@ -382,7 +508,7 @@ public final class TrackService extends Service {
         publish();
 
         long now = System.currentTimeMillis();
-        if (finishNow || now - lastNotificationMs >= NOTIFICATION_INTERVAL_MS) {
+        if (live && (finishNow || now - lastNotificationMs >= NOTIFICATION_INTERVAL_MS)) {
             lastNotificationMs = now;
             notificationManager.notify(NOTIFICATION_ID, notification(snapshot));
         }
@@ -464,19 +590,23 @@ public final class TrackService extends Service {
         boolean saved = false;
         if (recording) {
             recording = false;
-            locationManager.removeUpdates(listener);
-            closeLog();
-            try {
-                saved = store.saveLog() != null;
-            } catch (IOException e) {
-                error = RecordingSnapshot.ERROR_STORAGE;
+            if (replaySpeed > 0) {
+                worker.removeCallbacks(replayStep);
+            } else {
+                locationManager.removeUpdates(listener);
+                closeLog();
+                try {
+                    saved = store.saveLog() != null;
+                } catch (IOException e) {
+                    error = RecordingSnapshot.ERROR_STORAGE;
+                }
             }
         }
         RecordingSnapshot last = snapshot;
         snapshot = new RecordingSnapshot(false, profile, startTimeMs, filter.count(),
                 filter.distanceM(), lastAccuracyM, lastFixTimeMs,
                 last.savedCount + (saved ? 1 : 0), error, referencePath, selection, match,
-                smoothedDeltaMs);
+                smoothedDeltaMs, replayName, replaySpeed, replayElapsedMs);
         if (stopService) {
             leaveForeground();
             stopSelf();
@@ -503,14 +633,15 @@ public final class TrackService extends Service {
     private void publish() {
         snapshot = new RecordingSnapshot(recording, profile, startTimeMs, filter.count(),
                 filter.distanceM(), lastAccuracyM, lastFixTimeMs, snapshot.savedCount, error,
-                referencePath, selection, match, smoothedDeltaMs);
+                referencePath, selection, match, smoothedDeltaMs, replayName, replaySpeed,
+                replayElapsedMs);
     }
 
     private static RecordingSnapshot withError(int code) {
         RecordingSnapshot s = snapshot;
         return new RecordingSnapshot(false, s.profile, s.startTimeMs, 0, 0, Double.NaN,
                 TrackPoint.NO_TIME, s.savedCount, code, null, RecordingSnapshot.SELECTION_OFF, null,
-                MatchResult.UNKNOWN);
+                MatchResult.UNKNOWN, null, 0, 0);
     }
 
     @SuppressWarnings("deprecation")

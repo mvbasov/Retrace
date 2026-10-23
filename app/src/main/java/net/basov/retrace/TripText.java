@@ -28,7 +28,7 @@ final class TripText {
         MatchResult m = s.match;
         if (m == null) {
             return c.getString(R.string.status_recording_short, s.points,
-                    Labels.distance(c, s.distanceM), TimeText.duration(elapsed(s)));
+                    Labels.distance(c, s.distanceM), TimeText.duration(s.elapsedMs(System.currentTimeMillis())));
         }
         switch (m.state) {
             case WAITING:
@@ -105,9 +105,5 @@ final class TripText {
             return head + " · " + toFinish(c, m);
         }
         return head;
-    }
-
-    private static long elapsed(RecordingSnapshot s) {
-        return s.recording ? System.currentTimeMillis() - s.startTimeMs : 0;
     }
 }

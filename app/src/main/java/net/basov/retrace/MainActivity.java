@@ -45,6 +45,7 @@ import net.basov.retrace.core.GpxReader;
 import net.basov.retrace.core.LimitedInputStream;
 import net.basov.retrace.core.Profile;
 import net.basov.retrace.core.RecordingSnapshot;
+import net.basov.retrace.core.Replay;
 import net.basov.retrace.core.TimeText;
 import net.basov.retrace.core.Track;
 import net.basov.retrace.core.TrackImport;
@@ -56,7 +57,8 @@ import net.basov.retrace.core.TrackImport;
 // The top row holds the profile and the start or stop button. Below it, a
 // line shows the state of the recording. The list of saved tracks fills the
 // rest of the screen. A push on a track shows it on the map. A long push on a
-// track opens a menu: start a trip on its route, share, rename or delete.
+// track opens a menu: start a trip on its route, replay it, share, rename or
+// delete.
 // The options menu imports a GPX file from another application.
 //
 // A start opens the trip screen. While Retrace records, a push on the status
@@ -82,6 +84,7 @@ public final class MainActivity extends Activity {
     private static final int MENU_SHARE = 5;
     private static final int MENU_IMPORT = 6;
     private static final int MENU_ABOUT = 7;
+    private static final int MENU_REPLAY = 8;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService files = Executors.newSingleThreadExecutor();
@@ -303,11 +306,15 @@ public final class MainActivity extends Activity {
 
     private String statusText(RecordingSnapshot s) {
         if (s.recording) {
-            String elapsed = TimeText.duration(System.currentTimeMillis() - s.startTimeMs);
+            String elapsed = TimeText.duration(s.elapsedMs(System.currentTimeMillis()));
+            String open = "\n" + getString(R.string.status_open_trip);
+            if (s.isReplay()) {
+                return getString(R.string.status_replay, s.replayName, s.points,
+                        Labels.distance(this, s.distanceM), elapsed) + open;
+            }
             String progress = getString(R.string.status_recording,
                     Labels.profile(this, s.profile), s.points,
                     Labels.distance(this, s.distanceM), elapsed);
-            String open = "\n" + getString(R.string.status_open_trip);
             if (!s.hasFix()) {
                 return progress + "\n" + getString(R.string.waiting_for_gps) + open;
             }
@@ -324,6 +331,8 @@ public final class MainActivity extends Activity {
                 return getString(R.string.error_storage);
             case RecordingSnapshot.ERROR_NO_GPS:
                 return getString(R.string.error_no_gps);
+            case RecordingSnapshot.ERROR_REPLAY:
+                return getString(R.string.error_replay);
             default:
                 return getString(R.string.status_idle);
         }
@@ -362,6 +371,7 @@ public final class MainActivity extends Activity {
         menu.setHeaderTitle(e.name);
         if (e.readable && e.points >= 2 && !TrackService.snapshot().recording) {
             menu.add(Menu.NONE, MENU_TRIP, Menu.NONE, R.string.start_trip_on_route);
+            menu.add(Menu.NONE, MENU_REPLAY, Menu.NONE, R.string.replay_track);
         }
         if (e.readable) {
             menu.add(Menu.NONE, MENU_SHARE, Menu.NONE, R.string.share);
@@ -383,6 +393,10 @@ public final class MainActivity extends Activity {
             pendingProfile = e.profile != null ? e.profile : selected;
             pendingReference = e.file.getPath();
             startRecording();
+            return true;
+        }
+        if (item.getItemId() == MENU_REPLAY) {
+            askReplay(e);
             return true;
         }
         if (item.getItemId() == MENU_SHARE) {
@@ -428,6 +442,22 @@ public final class MainActivity extends Activity {
                 }, R.string.error_delete))
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
+    }
+
+    // A replay needs no location permission and no GPS. The dialog selects
+    // the reference track. The automatic selection does not use the
+    // replayed track itself.
+    private void askReplay(TrackStore.Entry e) {
+        Profile selected = Profile.values()[profileSpinner.getSelectedItemPosition()];
+        Profile profile = e.profile != null ? e.profile : selected;
+        ReferenceDialog.show(this, files, profile, (automatic, path) -> {
+            Intent replay = new Intent(this, TrackService.class)
+                    .setAction(TrackService.ACTION_REPLAY)
+                    .putExtra(TrackService.EXTRA_REPLAY, e.file.getPath())
+                    .putExtra(TrackService.EXTRA_SPEED, Replay.DEFAULT_SPEED);
+            startService(ReferenceDialog.putSelection(replay, automatic, path));
+            startActivity(new Intent(this, RunActivity.class));
+        });
     }
 
     // ------------------------------------------------------------------

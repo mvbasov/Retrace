@@ -233,7 +233,12 @@ Retrace does not need `ACCESS_BACKGROUND_LOCATION`. The service starts while the
   - a trip that joins the route away from the start
   - a wait at the start, and a GPS gap
   - a faster trip, a slower trip, and a route with no times
-- Replay mode in the debug build: the service reads the fixes from a GPX file and not from the GPS, at 1× to 10× speed. Thus you can test the full user interface at your desk.
+- Replay mode: the service takes the points of a saved track and not the fixes of the GPS. Thus you can test the full user interface at your desk.
+  - A long push on a track starts its replay. A dialog first selects the reference track: the automatic selection, no comparison, or a saved track of the same profile.
+  - The automatic selection does not use the replayed track. A replay with the replayed track as the reference track gives a time difference near zero. This is a quick check of the matcher.
+  - Each point keeps its own time. Only the wait on the screen is shorter. The speeds are 1×, 5×, 10×, 30× and 100×, and the menu of the trip screen changes the speed. No wait is longer than 2 seconds.
+  - A replay uses no GPS, writes no log file and saves no track. It does not use the foreground state. Thus Android can stop it soon after you leave Retrace.
+  - A saved track has no accuracy for its points. TrackMatcher then uses an accuracy of 0, and its limits are smaller than on the real trip.
 
 ## 9. Milestones
 

@@ -25,8 +25,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import net.basov.retrace.core.MatchResult;
-import net.basov.retrace.core.Profile;
 import net.basov.retrace.core.RecordingSnapshot;
+import net.basov.retrace.core.Replay;
 import net.basov.retrace.core.Track;
 import net.basov.retrace.core.TrackMatcher;
 import net.basov.retrace.core.TrackPoint;
@@ -45,7 +45,9 @@ import net.basov.retrace.core.TrackPoint;
 // the activity is visible, thus the user can read it during the trip.
 //
 // The line above the panel tells the reference track and how the trip got
-// it. During the trip, the menu selects a different reference track.
+// it. During the trip, the menu selects a different reference track. A
+// replay adds a line with the replayed track and the speed, and the menu
+// changes the speed.
 //
 // After the stop, the screen keeps the last values. The stop button then
 // closes the screen.
@@ -53,6 +55,7 @@ public final class RunActivity extends Activity {
 
     private static final long REFRESH_MS = 1000;
     private static final int MENU_SELECT = 1;
+    private static final int MENU_SPEED = 2;
     private static final String STATE_FOLLOW = "follow";
     private static final String STATE_LAT = "lat";
     private static final String STATE_LON = "lon";
@@ -76,6 +79,7 @@ public final class RunActivity extends Activity {
     private String shownReference;
     private String shownReferenceName;
     private boolean shownRecording;
+    private int shownSpeed;
     private boolean cameraRestored;
     private volatile boolean destroyed;
 
@@ -207,13 +211,16 @@ public final class RunActivity extends Activity {
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         menu.add(Menu.NONE, MENU_SELECT, Menu.NONE, R.string.select_reference);
+        menu.add(Menu.NONE, MENU_SPEED, Menu.NONE, R.string.replay_speed);
         return true;
     }
 
-    // The selection needs a running trip.
+    // The selection needs a running trip. The speed needs a running replay.
     @Override
     public boolean onPrepareOptionsMenu(Menu menu) {
-        menu.findItem(MENU_SELECT).setVisible(TrackService.snapshot().recording);
+        RecordingSnapshot s = TrackService.snapshot();
+        menu.findItem(MENU_SELECT).setVisible(s.recording);
+        menu.findItem(MENU_SPEED).setVisible(s.recording && s.isReplay());
         return true;
     }
 
@@ -223,50 +230,38 @@ public final class RunActivity extends Activity {
             selectReference();
             return true;
         }
+        if (item.getItemId() == MENU_SPEED) {
+            selectSpeed();
+            return true;
+        }
         return super.onOptionsItemSelected(item);
     }
 
-    // Reads the saved tracks of the profile of the trip on the background
-    // thread, then shows them in a dialog. The first two lines of the dialog
-    // are the automatic selection and no comparison.
+    // The new reference track applies to the trip from its first point.
     private void selectReference() {
-        final Profile profile = TrackService.snapshot().profile;
-        TrackStore store = new TrackStore(this);
-        files.execute(() -> {
-            List<TrackStore.Entry> tracks = new ArrayList<>();
-            for (TrackStore.Entry e : store.list()) {
-                if (e.readable && e.profile == profile && e.points >= TrackStore.MIN_POINTS) {
-                    tracks.add(e);
-                }
-            }
-            runOnUiThread(() -> {
-                if (!destroyed) {
-                    showSelectDialog(tracks);
-                }
-            });
-        });
+        ReferenceDialog.show(this, files, TrackService.snapshot().profile, (automatic, path) ->
+                startService(ReferenceDialog.putSelection(new Intent(this, TrackService.class)
+                        .setAction(TrackService.ACTION_SELECT), automatic, path)));
     }
 
-    private void showSelectDialog(List<TrackStore.Entry> tracks) {
-        String[] items = new String[tracks.size() + 2];
-        items[0] = getString(R.string.select_automatic);
-        items[1] = getString(R.string.select_none);
-        for (int i = 0; i < tracks.size(); i++) {
-            TrackStore.Entry e = tracks.get(i);
-            items[i + 2] = getString(R.string.select_item, e.name, Labels.distance(this, e.distanceM));
+    // The speed applies from the next point of the replay.
+    private void selectSpeed() {
+        int current = TrackService.snapshot().replaySpeed;
+        String[] labels = new String[Replay.SPEEDS.length];
+        int checked = -1;
+        for (int i = 0; i < Replay.SPEEDS.length; i++) {
+            labels[i] = getString(R.string.replay_speed_value, Replay.SPEEDS[i]);
+            if (Replay.SPEEDS[i] == current) {
+                checked = i;
+            }
         }
         new AlertDialog.Builder(this)
-                .setTitle(R.string.select_reference)
-                .setItems(items, (d, which) -> {
-                    Intent select = new Intent(this, TrackService.class)
-                            .setAction(TrackService.ACTION_SELECT);
-                    if (which == 0) {
-                        select.putExtra(TrackService.EXTRA_AUTOMATIC, true);
-                    } else if (which >= 2) {
-                        select.putExtra(TrackService.EXTRA_REFERENCE,
-                                tracks.get(which - 2).file.getPath());
-                    }
-                    startService(select);
+                .setTitle(R.string.replay_speed)
+                .setSingleChoiceItems(labels, checked, (d, which) -> {
+                    startService(new Intent(this, TrackService.class)
+                            .setAction(TrackService.ACTION_REPLAY_SPEED)
+                            .putExtra(TrackService.EXTRA_SPEED, Replay.SPEEDS[which]));
+                    d.dismiss();
                 })
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
@@ -274,8 +269,9 @@ public final class RunActivity extends Activity {
 
     // Shows one snapshot: the panel, the new points and the markers.
     private void show(RecordingSnapshot s) {
-        if (s.recording != shownRecording) {
+        if (s.recording != shownRecording || s.replaySpeed != shownSpeed) {
             shownRecording = s.recording;
+            shownSpeed = s.replaySpeed;
             invalidateOptionsMenu();
         }
         stopButton.setText(s.recording ? R.string.stop_recording : R.string.close);
@@ -292,7 +288,9 @@ public final class RunActivity extends Activity {
             map.setCurrent(new ArrayList<TrackPoint>());
         }
         loadReference(s.referencePath);
-        referenceView.setText(referenceText(s));
+        String reference = referenceText(s);
+        referenceView.setText(s.isReplay() ? getString(R.string.replay_line, s.replayName,
+                s.replaySpeed) + "\n" + reference : reference);
         List<TrackPoint> fresh = TrackService.pointsFrom(shownPoints);
         for (TrackPoint p : fresh) {
             map.addCurrent(p);
@@ -309,7 +307,7 @@ public final class RunActivity extends Activity {
         if (m == null) {
             detail1.setText(s.hasFix() ? "" : getString(R.string.waiting_for_gps));
             detail2.setText("");
-            detail3.setText(s.recording ? "" : getString(R.string.trip_stopped));
+            detail3.setText(s.recording ? "" : stoppedText(s));
             map.setGhost(Double.NaN, Double.NaN);
             return;
         }
@@ -317,7 +315,7 @@ public final class RunActivity extends Activity {
                 || m.state == TrackMatcher.State.FINISHED;
         detail1.setText(compared ? TripText.ghost(this, m.deltaDistanceM) : "");
         detail2.setText(compared ? TripText.speeds(this, m) : "");
-        String stopped = s.recording ? "" : getString(R.string.trip_stopped);
+        String stopped = s.recording ? "" : stoppedText(s);
         detail3.setText(m.state == TrackMatcher.State.ON_ROUTE
                 ? TripText.toFinish(this, m) : stopped);
         if (m.started() && m.state != TrackMatcher.State.FINISHED) {
@@ -344,6 +342,10 @@ public final class RunActivity extends Activity {
             return R.color.trip_neutral;
         }
         return s.smoothedDeltaMs < 0 ? R.color.trip_ahead : R.color.trip_behind;
+    }
+
+    private String stoppedText(RecordingSnapshot s) {
+        return getString(s.isReplay() ? R.string.replay_done : R.string.trip_stopped);
     }
 
     // The line above the panel.
