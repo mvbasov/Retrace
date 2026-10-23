@@ -11,10 +11,10 @@ package net.basov.retrace.core;
 // must not change after a release.
 public enum Profile {
 
-    WALKING("walking", 20, 2, 25, 15, 15),
-    RUNNING("running", 25, 3, 30, 10, 20),
-    CYCLING("cycling", 30, 5, 40, 8, 25),
-    DRIVING("driving", 50, 10, 60, 5, 40);
+    WALKING("walking", 20, 2, 25, 15, 15, 3),
+    RUNNING("running", 25, 3, 30, 10, 20, 7),
+    CYCLING("cycling", 30, 5, 40, 8, 25, 20),
+    DRIVING("driving", 50, 10, 60, 5, 40, 50);
 
     // The text in GPX files and file names.
     public final String id;
@@ -34,14 +34,20 @@ public enum Profile {
     // The radius around the start and the finish, in meters.
     public final double radiusM;
 
+    // A speed above this value is not possible for the profile, in meters
+    // per second. TrackMatcher uses it for the length of its search window
+    // after a gap in the GPS fixes.
+    public final double maxSpeedMps;
+
     Profile(String id, double accuracyLimitM, double minDistanceM, double offRouteM,
-            int speedSmoothingS, double radiusM) {
+            int speedSmoothingS, double radiusM, double maxSpeedMps) {
         this.id = id;
         this.accuracyLimitM = accuracyLimitM;
         this.minDistanceM = minDistanceM;
         this.offRouteM = offRouteM;
         this.speedSmoothingS = speedSmoothingS;
         this.radiusM = radiusM;
+        this.maxSpeedMps = maxSpeedMps;
     }
 
     // Returns the profile with the id, or null for an unknown id. A GPX file

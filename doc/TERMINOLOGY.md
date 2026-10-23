@@ -16,6 +16,10 @@ Use one name for one thing. If a term is not in the table, use the plain word. A
 | current track | The track that Retrace records now. | live track, actual track |
 | profile | The settings for one type of movement: walking, running, cycling or driving. | mode, activity type |
 | start, finish | The first point and the last point of the reference track. | origin, goal, destination |
+| start circle, finish circle | The circle around the start and the finish. Its radius is the radius of the profile plus twice the accuracy of the fix. | start zone, geofence |
+| leg | A part of a route in one direction. A route out and back has two legs. | branch, section |
+| join | To find the route away from its start, at the first fixes near it. | snap, attach |
+| drift | The slow part of the GPS error. It changes over minutes. | bias, offset |
 | distance along the route | The distance from the start to your projection on the reference track. The code calls it `s`. | progress, odometer |
 | cross-track distance | The distance from your position to the nearest part of the route. | deviation, offset, error |
 | on route, off route | The cross-track distance is below or above the limit of the profile. | lost, deviated |

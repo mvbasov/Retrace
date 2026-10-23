@@ -98,6 +98,8 @@ feat(track): Record a track in a foreground service. v26.10.2
 - `--build-arg SKIP_TESTS=1` skips the gate. Use it only for an emergency build.
 - **Put the logic into `core`, and test it there.** A test that runs the code is better than a test that reads the source text.
 - Give each test method a comment that says why the test exists.
+- **Use only invented tracks in the tests.** `TestTracks` makes them. Do not add a real track to the repository. A real track holds the precise positions of a person.
+- Take each tolerance of a test from the noise model, not from one run. Check a change of TrackMatcher with many seeds, not only with the seeds of the tests.
 - `test/java/net/basov/retrace/repocheck/CommentStyleTest.java` reads each comment of the repository. It checks the rules of section 8. It demands zero faults.
 - `test/java/net/basov/retrace/repocheck/AndroidApiTest.java` reads the source of the application. It finds calls of the Java library that Android 6 does not have. See rule 4 of section 1.
 

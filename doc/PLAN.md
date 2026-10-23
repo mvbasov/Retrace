@@ -98,36 +98,47 @@ The `core` package imports no Android package. Thus the tests run on the JVM.
 
 ### 5.3 Profiles
 
-| Profile | Accuracy limit | Minimum distance | Off route above | Speed smoothing | Start and finish radius |
-|---|---|---|---|---|---|
-| Walking | 20 m | 2 m | 25 m | 15 s | 15 m |
-| Running | 25 m | 3 m | 30 m | 10 s | 20 m |
-| Cycling | 30 m | 5 m | 40 m | 8 s | 25 m |
-| Driving | 50 m | 10 m | 60 m | 5 s | 40 m |
+| Profile | Accuracy limit | Minimum distance | Off route above | Speed smoothing | Start and finish radius | Maximum speed |
+|---|---|---|---|---|---|---|
+| Walking | 20 m | 2 m | 25 m | 15 s | 15 m | 3 m/s |
+| Running | 25 m | 3 m | 30 m | 10 s | 20 m | 7 m/s |
+| Cycling | 30 m | 5 m | 40 m | 8 s | 25 m | 20 m/s |
+| Driving | 50 m | 10 m | 60 m | 5 s | 40 m | 50 m/s |
 
 These values are the defaults. You can change them in Settings.
 
+TrackMatcher adds twice the accuracy of each fix to the off-route limit and to the radius. The reference track and the current track both have GPS noise. A fixed limit then gives a false off-route state in a city with poor GPS.
+
 ### 5.4 TrackMatcher
 
-TrackMatcher is the core of Retrace. It is plain Java with no Android import. Thus the tests run it on the JVM.
+TrackMatcher is the core of Retrace. It is plain Java with no Android import. Thus the tests run it on the JVM. The banner comment of `TrackMatcher.java` gives the reason for each rule.
 
 Preparation of the reference track:
 
-- Convert each point to local meters. An equirectangular projection near the start is sufficient.
-- Calculate the distance along the route `S[i]` and the elapsed time `T[i]` of each point.
+- Smooth the track. Each point becomes the mean of the points within 10 m along the track. GPS noise gives a recorded track a small zigzag, and the zigzag makes the length too large.
+- Calculate the distance along the route `S[i]` and the time `T[i]` of each point.
+- The reference track starts where it leaves its start circle. Its finish place is where it enters its finish circle.
+
+The start of the trip:
+
+- At the start of the route, the trip starts when it leaves the start circle. A wait at the start does not count.
+- Away from the start, the trip joins the route after 3 fixes near the route.
+- In both cases, the elapsed time starts with the time of the reference track at that place. Thus `Δt` starts at zero.
 
 Steps for each GPS fix, with the current position P and the elapsed time t:
 
-1. **Filter.** Drop the fix if its accuracy is worse than the limit of the profile.
-2. **Project.** Project P onto the segments of the reference track. Search only a window ahead of the last match. This keeps the distance along the route monotonic. It also handles a loop and a route that goes out and back. The result has two values:
+1. **Project.** Project P onto the segments of the reference track in a window ahead of the last place. The result has two values:
    - the cross-track distance
    - the distance along the route, `s`
-3. **On route or off route.** You are off route when the cross-track distance is above the limit for N fixes in sequence. While you are off route, a search of the full track finds the route again.
+2. **Select the leg.** On a route out and back, or on a loop that crosses itself, two legs of the route can be equally near P. Each leg gives one local minimum of the distance. The search takes the minimum with the lowest cost: the distance, plus 0.25 for each meter forward, plus 1.0 for each meter back. A leg that goes against the direction of movement is not a candidate.
+3. **On route or off route.** You are off route after 3 fixes above the limit. Off the route, the search looks at the rest of the route, then at the whole route. You are on route again after 2 fixes inside the limit.
 4. **Time difference.** `Δt = t − T_ref(s)`. A negative value means ahead. A positive value means behind.
 5. **Distance difference.** `Δs = s − S_ref(t)`. This is your distance from the ghost, for example "120 m ahead of the ghost".
-6. **Speed.** Compare your smoothed speed with the speed of the reference track at `s`.
-7. **Time of arrival.** `t + (T_total − T_ref(s)) × recent pace ratio`.
-8. **Finish.** The trip is at the finish when `s ≥ S_total − radius` and P is inside the radius of the last point. Retrace then vibrates, speaks an optional message and shows the result, for example "1:12 faster than the reference track".
+6. **Speed.** Compare your speed along the route with the speed of the reference track at `s`. Both use the smoothing window of the profile.
+7. **Time of arrival.** `t + (T_total − T_ref(s)) × (t / T_ref(s))`. The pace ratio applies after 30 s of the reference track.
+8. **Finish.** The trip finishes inside the finish circle after the finish place of the reference track. It also finishes when `s` is within the circle size from the end. Retrace then vibrates, speaks an optional message and shows the result, for example "1:12 faster than the reference track".
+
+The precision of `Δt` has a limit. The GPS drift of two trips is different, and it stays for minutes. Thus the two tracks differ by about σ × √2 along the route. At walking speed, that is about 4 s for σ = 4 m and 8 s for σ = 8 m. The error is smaller at a higher speed.
 
 ### 5.5 ReferenceSelector
 
@@ -187,7 +198,15 @@ Retrace does not need `ACCESS_BACKGROUND_LOCATION`. The service starts while the
 
 ## 8. Testing
 
-- JVM tests for TrackMatcher and ReferenceSelector, with sample GPX files: a straight line, a loop, a route out and back, a part off route, a faster trip and a slower trip.
+- JVM tests for TrackMatcher and ReferenceSelector. The tests use only invented tracks. A real track holds the precise positions of a person, and the repository is public.
+- `test/java/net/basov/retrace/core/TestTracks.java` makes the invented tracks. It moves along a route of corners at a fixed speed, adds GPS-like noise and sends the points through RecordFilter. The noise is a slow drift with a size of σ and a correlation time of 3 minutes, plus a small fast part.
+- Each test compares two trips with different seeds. The tests cover these cases:
+  - a straight line, a route with corners, and a route for driving
+  - a detour off the route
+  - a route out and back, a square loop, and a figure eight
+  - a trip that joins the route away from the start
+  - a wait at the start, and a GPS gap
+  - a faster trip, a slower trip, and a route with no times
 - Replay mode in the debug build: the service reads the fixes from a GPX file and not from the GPS, at 1× to 10× speed. Thus you can test the full user interface at your desk.
 
 ## 9. Milestones
