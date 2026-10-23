@@ -1,0 +1,81 @@
+plugins {
+    id 'com.android.application'
+}
+
+// The version of the application, in the form YY.MM.S.
+// Change this one line in each commit. See section 4 of CLAUDE.md.
+def appVersion = '26.10.1'
+
+// The version code is YY * 100000 + MM * 1000 + S.
+def versionCodeOf(String name) {
+    def parts = name.tokenize('.').collect { it as int }
+    if (parts.size() != 3) {
+        throw new GradleException("appVersion must have the form YY.MM.S: " + name)
+    }
+    return parts[0] * 100000 + parts[1] * 1000 + parts[2]
+}
+
+android {
+    namespace 'net.basov.retrace'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'net.basov.retrace'
+        // Android 6.0. Put each call above this level behind a
+        // Build.VERSION.SDK_INT check.
+        minSdk 23
+        targetSdk 34
+        versionCode versionCodeOf(appVersion)
+        versionName appVersion
+    }
+
+    // The Android Gradle plugin can put a list of dependencies into the APK
+    // Signing Block. Google Play encrypts the list with a new random key for
+    // each build. Thus two builds of one commit differ. Android does not read
+    // the list, and Retrace has no dependencies.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
+
+    signingConfigs {
+        release {
+            // KEYSTORE_FILE can point at a secret mount of a CI build.
+            // A local build uses the keystore that local/build.sh makes.
+            storeFile file(System.getenv("KEYSTORE_FILE") ?: 'retrace.keystore')
+            storePassword System.getenv("KEYSTORE_PASSWORD") ?: 'retrace123'
+            keyAlias System.getenv("KEY_ALIAS") ?: 'retrace'
+            keyPassword System.getenv("KEY_PASSWORD") ?: 'retrace123'
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            // A debug build installs beside the release build.
+            applicationIdSuffix '.debug'
+            versionNameSuffix '-debug'
+        }
+    }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            outputFileName = "retrace-v${variant.versionName}-${variant.buildType.name}.apk"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+// This block stays empty. Retrace uses the Android framework only.
+// Ask the maintainer before you add a line here.
+dependencies {
+}

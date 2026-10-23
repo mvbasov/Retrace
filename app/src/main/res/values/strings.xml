@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Retrace</string>
+    <string name="version">Version %1$s</string>
+    <string name="intro">This version is a test of the build and of the map tile server. Push the button to download one map tile.</string>
+    <string name="probe_button">Check the map tile server</string>
+    <string name="probe_running">The application connects to the tile server.</string>
+    <string name="probe_ok">The tile server sends the tile.\nHTTP status: %1$d\nSize: %2$d bytes\nTime: %3$d ms</string>
+    <string name="probe_http_error">The tile server sends an error.\nHTTP status: %1$d\nTime: %2$d ms</string>
+    <string name="probe_issuer">Root certificate: %1$s</string>
+    <string name="probe_fail">The connection failed.\n%1$s</string>
+    <string name="probe_tls_fail">This device does not trust the certificate of the tile server. The map needs its own trust store on this device. Tell the developer this result.</string>
+    <string name="probe_no_image">The application cannot show the tile as an image.</string>
+    <string name="osm_attribution">Map data © OpenStreetMap contributors</string>
+</resources>

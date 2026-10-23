@@ -1,0 +1,12 @@
+.git/
+.gitignore
+.env
+doc/
+local/
+output-binaries/
+build/
+app/build/
+.gradle/
+local.properties
+README.md
+CLAUDE.md

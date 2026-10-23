@@ -1,0 +1,9 @@
+app/retrace.keystore
+.env
+output-binaries/
+build/
+app/build/
+.gradle/
+local.properties
+*.iml
+.idea/

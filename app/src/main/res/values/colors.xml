@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="icon_background">#1E4D6B</color>
+    <color name="icon_route">#CFE3EE</color>
+    <color name="icon_progress">#FF9A3C</color>
+</resources>

@@ -1,0 +1,42 @@
+# STAGE 1: The toolchain image.
+#
+# local/build.sh builds this file and tags the result as retrace-base:latest.
+# Docker keeps the image in its cache. Thus a change to the source does not
+# download the toolchain again.
+#
+# The image holds the JDK, the Android command-line tools, one SDK platform,
+# one build-tools package and Gradle. Retrace has no native code. Thus the
+# image holds no NDK.
+FROM debian:bookworm-slim
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+    openjdk-17-jdk-headless ca-certificates wget unzip
+
+# The Android command-line tools give sdkmanager.
+RUN --mount=type=cache,target=/tmp/dl,sharing=locked \
+    wget -q https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip -O /tmp/dl/cmd.zip && \
+    mkdir -p /opt/android/cmdline-tools && \
+    unzip -q /tmp/dl/cmd.zip -d /opt/android/cmdline-tools && \
+    mv /opt/android/cmdline-tools/cmdline-tools /opt/android/cmdline-tools/latest
+
+ENV ANDROID_HOME=/opt/android
+ENV PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+
+# The platform agrees with compileSdk in app/build.gradle.
+# The build-tools package is the one that the Android Gradle plugin asks for.
+RUN yes | sdkmanager --licenses > /dev/null && \
+    sdkmanager "platforms;android-34" "build-tools;34.0.0"
+
+# Gradle runs from this image. The repository holds no Gradle wrapper.
+RUN --mount=type=cache,target=/tmp/dl,sharing=locked \
+    wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip -O /tmp/dl/gradle.zip && \
+    mkdir -p /opt/gradle && \
+    unzip -q /tmp/dl/gradle.zip -d /opt/gradle
+
+ENV PATH=$PATH:/opt/gradle/gradle-8.5/bin
+
+WORKDIR /app

@@ -1,0 +1,18 @@
+// The Android Gradle plugin is the only build dependency.
+// The application itself has no dependency. See app/build.gradle.
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.2.2'
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
