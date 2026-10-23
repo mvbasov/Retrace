@@ -5,7 +5,7 @@
     <!-- The list of tracks and the recording -->
     <string name="start_recording">Start</string>
     <string name="stop_recording">Stop</string>
-    <string name="status_idle">Select a profile and push Start.</string>
+    <string name="status_idle">Select a profile and push Start. Retrace then selects the reference track.</string>
     <string name="status_recording">Retrace records: %1$s\n%2$d points · %3$s · %4$s</string>
     <string name="waiting_for_gps">No GPS fix yet.</string>
     <string name="gps_accuracy">GPS accuracy: %1$d m</string>
@@ -39,6 +39,16 @@
     <string name="to_finish">%1$s to the finish · %2$s</string>
     <string name="value_unknown">\u2013</string>
     <string name="close">Close</string>
+
+    <!-- The selection of the reference track -->
+    <string name="select_reference">Select the reference track</string>
+    <string name="select_automatic">Automatic selection</string>
+    <string name="select_none">No comparison</string>
+    <string name="select_item">%1$s · %2$s</string>
+    <string name="reference_search">Retrace looks for a saved track that starts here.</string>
+    <string name="reference_temporary">Reference track: %1$s (temporary)</string>
+    <string name="reference_selected">Reference track: %1$s</string>
+    <string name="reference_not_found">No saved track starts here. Retrace records a new route.</string>
 
     <!-- The map -->
     <string name="map_loading">Retrace reads the track.</string>

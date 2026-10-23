@@ -144,14 +144,20 @@ The precision of `Δt` has a limit. The GPS drift of two trips is different, and
 
 Automatic selection:
 
-1. At the start of a trip, find the saved tracks of the same profile. Keep each track that has its start inside three times the start radius.
-2. Show the nearest track as a temporary reference track.
-3. After about 300 m, or 10 % of the route if that is shorter, run the matcher on each candidate. Select the track with the lowest mean cross-track distance.
-4. If no candidate agrees with the trip, record a new track with no comparison.
+1. At the first point of a trip, TrackService reads the saved tracks one at a time. It keeps each track of the same profile with its start inside three start circles. These tracks are the candidates.
+2. Each point of the trip goes to one TrackMatcher for each candidate.
+3. The temporary reference track is the valid candidate with the lowest mean cross-track distance. Before the first valid candidate, it is the candidate with the nearest start. A valid candidate is on the route, and it is at least half the decision distance along its route.
+4. The decision distance is 10 % of the shortest candidate, between 50 m and 300 m. When one candidate on the route reaches it, Retrace selects the temporary reference track. Its matcher has all the points, thus the comparison continues with no gap.
+5. Two tracks of the same route have almost the same score. Thus candidates within 3 m of the best mean cross-track distance count as equal. The newest of them wins, and the trip races the last trip on that route.
+6. If no candidate is valid after three decision distances, Retrace records a new route with no comparison.
+
+Limit: two routes with the same first part. The selection can come before the routes go apart. Then the newest track wins, also if the trip later follows the other route. A manual selection corrects this.
 
 Manual selection:
 
-- Select a reference track from the list before the start, or at any time during the trip.
+- A long push on a track starts a trip with that track as the reference track.
+- During the trip, the menu of the trip screen selects a track of the same profile, the automatic selection or no comparison.
+- After a change, TrackService gives all the points of the trip to the new matcher. A finish in these points gives no vibration.
 - A manual selection always replaces the automatic selection for that trip.
 
 ### 5.6 Map
@@ -187,6 +193,7 @@ The OpenStreetMap tile usage policy for `tile.openstreetmap.org` has these rules
   - The map follows your position. A move of the map stops that. The button **Me** starts it again.
   - A long push on a track starts a trip on its route. A push on the notification, or on the status line of the list, opens the trip screen.
   - At the finish, the device vibrates. The recording continues until you push Stop.
+  - A line above the panel shows the reference track and how the trip got it: temporary, selected, no saved track, or no comparison. The menu changes the reference track during the trip.
 - **SettingsActivity**: the limits of each profile, the tile URL, the size of the tile cache and the voice messages.
 - Alerts: vibration and optional `TextToSpeech` messages. Android has `TextToSpeech` in the framework.
 

@@ -29,6 +29,9 @@ Use one name for one thing. If a term is not in the table, use the plain word. A
 | trip screen | The screen with the comparison and the map during a trip. | run screen, live view, dashboard |
 | elapsed time | The time since the start of the trip. | duration, run time |
 | select | To choose the reference track, by Retrace or by you. | pick, choose |
+| candidate | A saved track that can become the reference track. It has the profile of the trip, and its start is near the first point of the trip. | option, match |
+| temporary reference track | The best candidate during the automatic selection. The trip screen compares with it until Retrace selects the reference track. | provisional track, preliminary track |
+| decision distance | The distance along the route at which Retrace selects the reference track. | threshold, trigger distance |
 | tile | One square image of the map from the tile server. | map piece, image |
 | tile server | The web server that sends the tiles. | map server, tile provider |
 | tile cache | The tiles that Retrace keeps in memory and on the disk. | offline map, store |

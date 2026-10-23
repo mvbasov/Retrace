@@ -10,7 +10,8 @@ package net.basov.retrace.core;
 //
 // A trip with a reference track also has the path of the reference track,
 // the last result of TrackMatcher and the smoothed time difference. A trip
-// without a reference track has null and UNKNOWN there.
+// without a reference track has null and UNKNOWN there. The selection field
+// tells how the trip got its reference track.
 public final class RecordingSnapshot {
 
     // The values of the error field.
@@ -19,10 +20,24 @@ public final class RecordingSnapshot {
     public static final int ERROR_STORAGE = 2;
     public static final int ERROR_NO_GPS = 3;
 
+    // The values of the selection field.
+    // No comparison. The user selected this.
+    public static final int SELECTION_OFF = 0;
+    // The automatic selection waits for the first point of the trip.
+    public static final int SELECTION_SEARCH = 1;
+    // The automatic selection continues. The reference track is temporary.
+    public static final int SELECTION_TEMPORARY = 2;
+    // Retrace selected the reference track.
+    public static final int SELECTION_AUTOMATIC = 3;
+    // The user selected the reference track.
+    public static final int SELECTION_MANUAL = 4;
+    // No saved track agrees with the trip. The trip has no comparison.
+    public static final int SELECTION_NOT_FOUND = 5;
+
     // The state of a service that does not record.
     public static final RecordingSnapshot IDLE =
             new RecordingSnapshot(false, null, 0, 0, 0, Double.NaN, TrackPoint.NO_TIME, 0, ERROR_NONE,
-                    null, null, MatchResult.UNKNOWN);
+                    null, SELECTION_OFF, null, MatchResult.UNKNOWN);
 
     public final boolean recording;
     public final Profile profile;
@@ -47,6 +62,9 @@ public final class RecordingSnapshot {
     // The path of the reference track file, or null.
     public final String referencePath;
 
+    // One of the SELECTION values.
+    public final int selection;
+
     // The last result of TrackMatcher, or null.
     public final MatchResult match;
 
@@ -56,8 +74,8 @@ public final class RecordingSnapshot {
 
     public RecordingSnapshot(boolean recording, Profile profile, long startTimeMs, int points,
                              double distanceM, double lastAccuracyM, long lastFixTimeMs,
-                             int savedCount, int error, String referencePath, MatchResult match,
-                             long smoothedDeltaMs) {
+                             int savedCount, int error, String referencePath, int selection,
+                             MatchResult match, long smoothedDeltaMs) {
         this.recording = recording;
         this.profile = profile;
         this.startTimeMs = startTimeMs;
@@ -68,6 +86,7 @@ public final class RecordingSnapshot {
         this.savedCount = savedCount;
         this.error = error;
         this.referencePath = referencePath;
+        this.selection = selection;
         this.match = match;
         this.smoothedDeltaMs = smoothedDeltaMs;
     }

@@ -32,6 +32,7 @@ import net.basov.retrace.core.PointLog;
 import net.basov.retrace.core.Profile;
 import net.basov.retrace.core.RecordFilter;
 import net.basov.retrace.core.RecordingSnapshot;
+import net.basov.retrace.core.ReferenceSelector;
 import net.basov.retrace.core.Track;
 import net.basov.retrace.core.TrackMatcher;
 import net.basov.retrace.core.TrackPoint;
@@ -44,10 +45,20 @@ import net.basov.retrace.core.TrackPoint;
 // screen is off. MainActivity starts it with ACTION_START and stops it with
 // ACTION_STOP. The stop button of the notification also sends ACTION_STOP.
 //
-// With EXTRA_REFERENCE, the service also compares the trip with that track.
+// With EXTRA_REFERENCE, the service compares the trip with that track.
+// Without it, ReferenceSelector selects the reference track. At the first
+// point, the service reads the saved tracks of the profile, and keeps the
+// tracks with a start near that point. If no track starts there, the trip
+// has no comparison.
+//
 // Each point that RecordFilter accepts goes to TrackMatcher. The notification
 // and the trip screen show the result. At the finish, the device vibrates.
 // The recording continues until the user stops it.
+//
+// ACTION_SELECT changes the reference track during the trip. The service
+// then gives all the points of the trip to the new matcher again. Thus the
+// comparison continues as if the trip started with that track. A manual
+// selection stops the automatic selection.
 //
 // One worker thread does all the work: the GPS fixes, the filter, the
 // matcher and the log file. Thus the fields of the recording need no lock.
@@ -60,8 +71,13 @@ public final class TrackService extends Service {
 
     static final String ACTION_START = "net.basov.retrace.action.START";
     static final String ACTION_STOP = "net.basov.retrace.action.STOP";
+    static final String ACTION_SELECT = "net.basov.retrace.action.SELECT";
     static final String EXTRA_PROFILE = "net.basov.retrace.extra.PROFILE";
     static final String EXTRA_REFERENCE = "net.basov.retrace.extra.REFERENCE";
+    // ACTION_SELECT with this extra set to true starts the automatic
+    // selection again. Without it and without EXTRA_REFERENCE, the trip has
+    // no comparison.
+    static final String EXTRA_AUTOMATIC = "net.basov.retrace.extra.AUTOMATIC";
 
     private static final String CHANNEL_ID = "recording";
     private static final int NOTIFICATION_ID = 1;
@@ -123,6 +139,8 @@ public final class TrackService extends Service {
     private int error = RecordingSnapshot.ERROR_NONE;
 
     private String referencePath;
+    private int selection = RecordingSnapshot.SELECTION_OFF;
+    private ReferenceSelector selector;
     private TrackMatcher matcher;
     private DeltaSmoother smoother;
     private MatchResult match;
@@ -175,7 +193,8 @@ public final class TrackService extends Service {
             // come soon after startForegroundService. Thus it comes first.
             RecordingSnapshot first = new RecordingSnapshot(true, p, start, 0, 0, Double.NaN,
                     TrackPoint.NO_TIME, snapshot.savedCount, RecordingSnapshot.ERROR_NONE,
-                    reference, null, MatchResult.UNKNOWN);
+                    reference, reference == null ? RecordingSnapshot.SELECTION_SEARCH
+                            : RecordingSnapshot.SELECTION_MANUAL, null, MatchResult.UNKNOWN);
             if (!enterForeground(notification(first))) {
                 snapshot = withError(RecordingSnapshot.ERROR_NO_PERMISSION);
                 stopSelf();
@@ -184,6 +203,17 @@ public final class TrackService extends Service {
             worker.post(() -> begin(p, start, reference));
         } else if (ACTION_STOP.equals(action)) {
             worker.post(() -> finish(true));
+        } else if (ACTION_SELECT.equals(action)) {
+            final String reference = intent.getStringExtra(EXTRA_REFERENCE);
+            final boolean automatic = intent.getBooleanExtra(EXTRA_AUTOMATIC, false);
+            worker.post(() -> {
+                if (recording) {
+                    select(reference, automatic);
+                } else {
+                    // The intent started a service with no trip.
+                    stopSelf(startId);
+                }
+            });
         } else {
             worker.post(() -> {
                 if (!recording) {
@@ -222,7 +252,12 @@ public final class TrackService extends Service {
         synchronized (POINTS) {
             POINTS.clear();
         }
-        loadReference(reference, p);
+        resetComparison(p);
+        if (reference == null) {
+            selection = RecordingSnapshot.SELECTION_SEARCH;
+        } else {
+            loadReference(reference);
+        }
 
         try {
             log = store.openLog(p, start);
@@ -245,27 +280,74 @@ public final class TrackService extends Service {
         publish();
     }
 
-    // Worker thread. A reference track that Retrace cannot read gives a trip
-    // with no comparison. The recording itself still works.
-    private void loadReference(String path, Profile p) {
+    // Worker thread. Removes the reference track and the comparison.
+    private void resetComparison(Profile p) {
         referencePath = null;
+        selection = RecordingSnapshot.SELECTION_OFF;
+        selector = null;
         matcher = null;
         match = null;
         smoother = DeltaSmoother.forProfile(p);
         smoothedDeltaMs = MatchResult.UNKNOWN;
         finishSignaled = false;
-        if (path == null) {
-            return;
-        }
+    }
+
+    // Worker thread. The manual selection. A reference track that Retrace
+    // cannot read gives a trip with no comparison. The recording itself
+    // still works.
+    private void loadReference(String path) {
         try {
             Track reference = store.load(new File(path));
             if (reference.points.size() >= 2) {
-                matcher = new TrackMatcher(reference, p);
+                matcher = new TrackMatcher(reference, profile);
                 referencePath = path;
+                selection = RecordingSnapshot.SELECTION_MANUAL;
             }
         } catch (IOException | IllegalArgumentException e) {
             matcher = null;
         }
+    }
+
+    // Worker thread. Starts the automatic selection at the first point. Each
+    // saved track is read and checked alone. Thus only the near tracks stay
+    // in memory. The GPS fixes wait in the queue of the worker thread during
+    // this work.
+    private void startSearch(TrackPoint first) {
+        List<ReferenceSelector.Candidate> near = new ArrayList<>();
+        for (File f : store.trackFiles()) {
+            try {
+                Track track = store.load(f);
+                if (ReferenceSelector.startsNear(track, profile, first)) {
+                    near.add(new ReferenceSelector.Candidate(f.getPath(), track));
+                }
+            } catch (IOException | IllegalArgumentException e) {
+                // A file that Retrace cannot read is not a candidate.
+            }
+        }
+        if (near.isEmpty()) {
+            selection = RecordingSnapshot.SELECTION_NOT_FOUND;
+            return;
+        }
+        selector = new ReferenceSelector(near, profile, first);
+        selection = RecordingSnapshot.SELECTION_TEMPORARY;
+    }
+
+    // Worker thread. A new reference track during the trip. The points of
+    // the trip go to the new matcher again. A finish in these points gives
+    // no vibration, because it is in the past.
+    private void select(String path, boolean automatic) {
+        resetComparison(profile);
+        if (automatic) {
+            selection = RecordingSnapshot.SELECTION_SEARCH;
+        } else if (path != null) {
+            loadReference(path);
+        }
+        for (TrackPoint p : pointsFrom(0)) {
+            compare(p);
+        }
+        publish();
+        lastNotificationMs = System.currentTimeMillis();
+        notificationManager.notify(NOTIFICATION_ID, notification(snapshot));
     }
 
     // Worker thread.
@@ -309,14 +391,54 @@ public final class TrackService extends Service {
         }
     }
 
-    // Worker thread. Gives the point to the matcher. Returns true at the first
-    // point of the finish.
+    // Worker thread. Gives the point to the matcher, or to the selector
+    // during the automatic selection. Returns true at the first point of the
+    // finish.
     private boolean compare(TrackPoint fix) {
+        if (selection == RecordingSnapshot.SELECTION_SEARCH) {
+            startSearch(fix);
+        }
+        if (selector != null) {
+            return compareCandidates(fix);
+        }
         if (matcher == null) {
             return false;
         }
+        return follow(fix, matcher.update(fix));
+    }
+
+    // Worker thread. The temporary reference track can change at each point.
+    // A change starts the comparison again, with the result of the matcher
+    // of the new candidate.
+    private boolean compareCandidates(TrackPoint fix) {
+        ReferenceSelector.State state = selector.update(fix);
+        if (state == ReferenceSelector.State.NONE) {
+            resetComparison(profile);
+            selection = RecordingSnapshot.SELECTION_NOT_FOUND;
+            return false;
+        }
+        String path = selector.current().id;
+        if (!path.equals(referencePath)) {
+            referencePath = path;
+            match = null;
+            smoother.reset();
+            smoothedDeltaMs = MatchResult.UNKNOWN;
+            finishSignaled = false;
+        }
+        MatchResult result = selector.currentResult();
+        if (state == ReferenceSelector.State.SELECTED) {
+            matcher = selector.selectedMatcher();
+            selector = null;
+            selection = RecordingSnapshot.SELECTION_AUTOMATIC;
+        }
+        return follow(fix, result);
+    }
+
+    // Worker thread. Takes one result of the matcher. Returns true at the
+    // first point of the finish.
+    private boolean follow(TrackPoint fix, MatchResult result) {
         boolean wasStarted = match != null && match.started();
-        match = matcher.update(fix);
+        match = result;
         if (match.state == TrackMatcher.State.FINISHED) {
             // At the finish, the exact value is the result.
             smoothedDeltaMs = match.deltaTimeMs;
@@ -353,7 +475,8 @@ public final class TrackService extends Service {
         RecordingSnapshot last = snapshot;
         snapshot = new RecordingSnapshot(false, profile, startTimeMs, filter.count(),
                 filter.distanceM(), lastAccuracyM, lastFixTimeMs,
-                last.savedCount + (saved ? 1 : 0), error, referencePath, match, smoothedDeltaMs);
+                last.savedCount + (saved ? 1 : 0), error, referencePath, selection, match,
+                smoothedDeltaMs);
         if (stopService) {
             leaveForeground();
             stopSelf();
@@ -380,13 +503,14 @@ public final class TrackService extends Service {
     private void publish() {
         snapshot = new RecordingSnapshot(recording, profile, startTimeMs, filter.count(),
                 filter.distanceM(), lastAccuracyM, lastFixTimeMs, snapshot.savedCount, error,
-                referencePath, match, smoothedDeltaMs);
+                referencePath, selection, match, smoothedDeltaMs);
     }
 
     private static RecordingSnapshot withError(int code) {
         RecordingSnapshot s = snapshot;
         return new RecordingSnapshot(false, s.profile, s.startTimeMs, 0, 0, Double.NaN,
-                TrackPoint.NO_TIME, s.savedCount, code, null, null, MatchResult.UNKNOWN);
+                TrackPoint.NO_TIME, s.savedCount, code, null, RecordingSnapshot.SELECTION_OFF, null,
+                MatchResult.UNKNOWN);
     }
 
     @SuppressWarnings("deprecation")

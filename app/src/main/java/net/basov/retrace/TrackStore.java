@@ -119,14 +119,7 @@ final class TrackStore {
     List<Entry> list() {
         synchronized (LOCK) {
             List<Entry> entries = new ArrayList<>();
-            File[] files = trackDirectory.listFiles();
-            if (files == null) {
-                return entries;
-            }
-            for (File f : files) {
-                if (!f.isFile() || !f.getName().endsWith(GPX)) {
-                    continue;
-                }
+            for (File f : trackFiles()) {
                 try {
                     entries.add(new Entry(f, readGpx(f)));
                 } catch (IOException e) {
@@ -140,6 +133,23 @@ final class TrackStore {
                 return b.file.getName().compareTo(a.file.getName());
             });
             return entries;
+        }
+    }
+
+    // Returns the GPX files of the saved tracks, in no specific sequence.
+    List<File> trackFiles() {
+        synchronized (LOCK) {
+            List<File> result = new ArrayList<>();
+            File[] files = trackDirectory.listFiles();
+            if (files == null) {
+                return result;
+            }
+            for (File f : files) {
+                if (f.isFile() && f.getName().endsWith(GPX)) {
+                    result.add(f);
+                }
+            }
+            return result;
         }
     }
 
