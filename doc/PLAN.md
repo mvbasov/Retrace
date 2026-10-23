@@ -50,7 +50,7 @@ The build follows the pattern of OMN-Go.
 - `local/build.sh` builds the two images and copies the APK to `./output-binaries/`.
 - Gradle uses the Android Gradle plugin 9 and **no dependency**. The release build sets `minifyEnabled true` and `shrinkResources true`.
 - Signing: the first build makes a keystore with the passwords from `.env`. The keystore and the passwords go to the build as BuildKit secrets.
-- Release: the GitHub workflows follow the workflows of OMN-Go. `.github/workflows/release.yml` builds the signed APK from `Dockerfile.ci` for each push to `master`, each pull request and each tag `v*`. A tag push also makes a GitHub release. `.github/workflows/test.yml` runs the quality gate alone. The signing secrets are repository secrets. The release section of `README.md` gives the setup.
+- Release: the GitHub workflows follow the workflows of OMN-Go. `.github/workflows/release.yml` builds the signed APK from `Dockerfile.ci` for each push to `master`, each pull request and each tag `v*`. A tag push also makes a GitHub release. `.github/workflows/test.yml` runs the quality gate alone. The signing secrets are repository secrets. `doc/RELEASE.md` gives the setup and the release procedure.
 - The tests use no JUnit. `test/run.sh` compiles and runs them with `javac` and `java` in the same image.
 
 ## 4. Project layout

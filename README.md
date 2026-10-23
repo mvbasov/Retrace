@@ -64,71 +64,9 @@ The GitHub workflows follow the workflows of OMN-Go:
 - A push of a tag `vYY.MM.S` also makes a GitHub release with the APK. The tag must agree with `appVersion` in `app/build.gradle`.
 - `.github/workflows/test.yml` runs the quality gate alone. It needs no secret.
 
-The workflow signs the APK with the keystore of your local build. Android installs an update only when the same key signs it. Thus an APK from GitHub installs over an APK from `local/build.sh`, and the reverse.
+The workflow signs the APK with the keystore of your local build. It reads the keystore and the passwords from four repository secrets.
 
-### Add the signing secrets
-
-Do these steps one time. The secrets have the same names as the secrets of OMN-Go. Their values must come from the Retrace keystore, not from the OMN-Go keystore.
-
-1. On your computer, go to the directory of the repository. Write the keystore as base64 text to a file outside the repository:
-
-   ```
-   base64 -w0 app/retrace.keystore > /tmp/retrace-keystore.txt
-   ```
-
-   On macOS, use `base64 -i app/retrace.keystore -o /tmp/retrace-keystore.txt`.
-2. On GitHub, open the repository Retrace. Push **Settings → Secrets and variables → Actions**.
-3. On the tab **Secrets**, push **New repository secret**.
-4. In **Name**, type `KEYSTORE_BASE64`. In **Secret**, paste all the text of `/tmp/retrace-keystore.txt`. Push **Add secret**.
-5. Add three more secrets in the same way. Take the values from `.env`. Without `.env`, take the values from `.env.example`.
-
-   | Name | Value |
-   | --- | --- |
-   | `KEYSTORE_PASSWORD` | The value of `KEYSTORE_PASSWORD` |
-   | `KEY_ALIAS` | The value of `KEY_ALIAS` |
-   | `KEY_PASSWORD` | The value of `KEY_PASSWORD` |
-
-6. Remove the text file: `rm /tmp/retrace-keystore.txt`.
-7. Make sure that the list of repository secrets shows `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD`.
-
-Keep a copy of `app/retrace.keystore` outside the repository. GitHub does not show a secret again. Without the keystore, no update installs over the old APK.
-
-### Make a release
-
-1. Push the patch with the new version to `master`.
-2. Push the tag of that version, for example:
-
-   ```
-   git tag v26.10.26
-   git push origin v26.10.26
-   ```
-
-3. On GitHub, open **Actions** and look at the run of **Build Retrace**.
-4. After the run, open **Releases**. The release has the APK `retrace-vYY.MM.S-release.apk`.
-
-### Check the signature
-
-Compare the certificate of a local APK with the certificate of the release APK:
-
-```
-docker run --rm -v "$PWD:/w" retrace-base:latest /opt/android/build-tools/36.0.0/apksigner verify --print-certs /w/output-binaries/retrace-v26.10.26-release.apk
-```
-
-The line `Signer #1 certificate SHA-256 digest` must be the same for the two files.
-
-### Change the default passwords
-
-Without `.env`, the passwords are the public values of `.env.example`. Then the keystore file is the only protection of the key. You can change the password and keep the key. The signature stays the same.
-
-1. Change the password. The keystore is a PKCS12 keystore, thus the key has the password of the keystore:
-
-   ```
-   docker run --rm -it --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/app:/out" retrace-base:latest keytool -storepasswd -keystore /out/retrace.keystore
-   ```
-
-2. Write the new password into `.env`, for `KEYSTORE_PASSWORD` and for `KEY_PASSWORD`.
-3. Run `docker builder prune`. A change of the keystore alone does not change the cache key of the build step.
-4. On GitHub, change the secrets `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD` and `KEY_PASSWORD`. Push the pencil icon of each secret, and paste the new value. Use step 1 of "Add the signing secrets" for the new base64 text.
+[doc/RELEASE.md](doc/RELEASE.md) tells how the workflows work. It also gives the setup of the secrets in the web interface of GitHub, the release procedure, the check of the signature and the remedies for faults.
 
 ## Check the map tile server
 

@@ -41,7 +41,7 @@ Do not remove a constraint without an instruction from the maintainer.
 | `Dockerfile.ci` | `Dockerfile.base` and `Dockerfile` in one file, for the GitHub workflows. |
 | `.github/workflows/release.yml` | The build of the signed APK. A tag push also makes a GitHub release. |
 | `.github/workflows/test.yml` | The quality gate for each push and each pull request. |
-| `doc/` | Maintainer documents. The Docker context excludes `doc/`. |
+| `doc/` | Maintainer documents: the plan, the terminology and the release guide. The Docker context excludes `doc/`. |
 | `CLAUDE.md` | This document. |
 
 The repository does not hold `output-binaries/`, `.env` or the keystore.
@@ -130,6 +130,7 @@ feat(track): Record a track in a foreground service. v26.10.2
 - The release build uses R8 (`minifyEnabled = true`) and `shrinkResources = true`.
 - The GitHub workflows follow the workflows of OMN-Go. They use the `docker-container` driver of Docker Buildx. That builder has its own image store, thus a second build cannot use `retrace-base:latest`. Thus `Dockerfile.ci` holds the stages of `Dockerfile.base` and `Dockerfile` in one file.
 - **Change `Dockerfile.ci` together with `Dockerfile.base` or `Dockerfile`.** `BuildFilesTest` finds a difference.
+- `doc/RELEASE.md` describes the workflows, the setup of the secrets and the release procedure. Change it together with the workflows.
 - `Dockerfile.ci` gets four BuildKit secrets: `keystore`, `keystore_password`, `key_alias` and `key_password`. The workflow takes them from the repository secrets `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS` and `KEY_PASSWORD`. The local build gives `keystore` and `signing_env`.
 - **Ask the maintainer before you add a build step, a tool or a dependency.**
 
