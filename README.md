@@ -11,11 +11,13 @@ Retrace has profiles for walking, running, cycling and driving. It finds the sav
 
 ## Status
 
-Retrace records tracks and shows them on a map. It does not show the comparison yet. The plan and the milestones are in [doc/PLAN.md](doc/PLAN.md).
+Retrace records tracks, shows them on a map, and compares a trip with a saved track. You select the reference track yourself. The automatic selection comes later. The plan and the milestones are in [doc/PLAN.md](doc/PLAN.md).
 
 - Select a profile and push **Start**. A notification shows the recording while the screen is off.
 - Push **Stop** in the application or in the notification. Retrace saves the track as a GPX file.
 - A push on a track shows it on the map. The map uses OpenStreetMap tiles and keeps them in a cache.
+- To start a trip on the route of a track, do a long push on the track. Then push **Start a trip on this route**. That track becomes the reference track.
+- The trip screen shows if you are ahead or behind, and your distance from the ghost. It also shows your speed, and the distance and time to the finish. At the finish, the device vibrates.
 - A long push on a track opens the menu to rename or delete it.
 - Retrace keeps the GPX files in `/storage/emulated/0/Android/media/net.basov.retrace/tracks/`. Copy this directory for a backup.
 

@@ -11,4 +11,7 @@
     <color name="map_ring">#FFFFFFFF</color>
     <color name="map_attribution_text">#FF333333</color>
     <color name="map_attribution_background">#B3FFFFFF</color>
+    <color name="trip_ahead">#FF2E7D32</color>
+    <color name="trip_behind">#FFC62828</color>
+    <color name="trip_neutral">#DE000000</color>
 </resources>

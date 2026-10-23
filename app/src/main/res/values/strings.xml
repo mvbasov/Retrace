@@ -18,11 +18,34 @@
     <string name="error_rename">Retrace cannot rename the track.</string>
     <string name="error_delete">Retrace cannot delete the track.</string>
 
+    <!-- The trip screen and the notification -->
+    <string name="start_trip_on_route">Start a trip on this route</string>
+    <string name="status_open_trip">Push here to show the trip.</string>
+    <string name="status_recording_short">%1$d points · %2$s · %3$s</string>
+    <string name="trip_waiting">Go to the route. The comparison starts at the start of the route.</string>
+    <string name="trip_at_start">At the start. The comparison starts when you leave the start.</string>
+    <string name="trip_off_route">Off route: %1$d m from the route</string>
+    <string name="trip_stopped">The trip stopped.</string>
+    <string name="delta_ahead">%1$s ahead</string>
+    <string name="delta_behind">%1$s behind</string>
+    <string name="delta_even">On time</string>
+    <string name="finish_faster">Finish: %1$s faster</string>
+    <string name="finish_slower">Finish: %1$s slower</string>
+    <string name="finish_same">Finish: the same time</string>
+    <string name="ghost_ahead">%1$s ahead of the ghost</string>
+    <string name="ghost_behind">%1$s behind the ghost</string>
+    <string name="speed_value">%1$.1f km/h</string>
+    <string name="speed_compare">Speed %1$s · reference %2$s</string>
+    <string name="to_finish">%1$s to the finish · %2$s</string>
+    <string name="value_unknown">\u2013</string>
+    <string name="close">Close</string>
+
     <!-- The map -->
     <string name="map_loading">Retrace reads the track.</string>
     <string name="map_zoom_in">+</string>
     <string name="map_zoom_out">\u2212</string>
     <string name="map_show_all">All</string>
+    <string name="map_follow">Me</string>
 
     <!-- Permissions and the GPS -->
     <string name="gps_off">The location of the device is off. Turn on the location in the settings.</string>

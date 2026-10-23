@@ -180,7 +180,13 @@ The OpenStreetMap tile usage policy for `tile.openstreetmap.org` has these rules
 ### 5.7 User interface
 
 - **MainActivity**: the list of tracks, with name, profile, distance, time and date. Actions: record a new track, select the reference track, rename, delete, share and import.
-- **RunActivity**: the map and a panel with large numbers. The panel shows Δt, Δs, and on route or off route. It also shows the speed compared with the reference track, the distance to the finish and the time of arrival.
+- **RunActivity**, the trip screen: the map and a panel with large numbers. The panel shows Δt, Δs, and on route or off route. It also shows the speed compared with the reference track, the distance to the finish and the time to the finish.
+  - The large Δt is smoothed by `DeltaSmoother`, with a time constant of two times the speed smoothing window of the profile. At the finish, the panel shows the exact result.
+  - The text is green while you are ahead, and red while you are behind or off route.
+  - The screen stays on while the trip screen is visible.
+  - The map follows your position. A move of the map stops that. The button **Me** starts it again.
+  - A long push on a track starts a trip on its route. A push on the notification, or on the status line of the list, opens the trip screen.
+  - At the finish, the device vibrates. The recording continues until you push Stop.
 - **SettingsActivity**: the limits of each profile, the tile URL, the size of the tile cache and the voice messages.
 - Alerts: vibration and optional `TextToSpeech` messages. Android has `TextToSpeech` in the framework.
 

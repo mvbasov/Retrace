@@ -17,27 +17,42 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.Writer;
+import java.util.ArrayList;
+import java.util.List;
 
+import net.basov.retrace.core.DeltaSmoother;
+import net.basov.retrace.core.MatchResult;
 import net.basov.retrace.core.PointLog;
 import net.basov.retrace.core.Profile;
 import net.basov.retrace.core.RecordFilter;
 import net.basov.retrace.core.RecordingSnapshot;
+import net.basov.retrace.core.Track;
+import net.basov.retrace.core.TrackMatcher;
 import net.basov.retrace.core.TrackPoint;
 
 // ----------------------------------------------------------------------
-// The recording of the current track
+// The recording of the current track, and the comparison
 // ----------------------------------------------------------------------
 //
 // A foreground service with a notification. It continues to record when the
 // screen is off. MainActivity starts it with ACTION_START and stops it with
 // ACTION_STOP. The stop button of the notification also sends ACTION_STOP.
 //
-// One worker thread does all the work: the GPS fixes, the filter and the log
-// file. Thus the fields of the recording need no lock. The main thread only
-// receives the intents and posts the work to the worker thread.
+// With EXTRA_REFERENCE, the service also compares the trip with that track.
+// Each point that RecordFilter accepts goes to TrackMatcher. The notification
+// and the trip screen show the result. At the finish, the device vibrates.
+// The recording continues until the user stops it.
+//
+// One worker thread does all the work: the GPS fixes, the filter, the
+// matcher and the log file. Thus the fields of the recording need no lock.
+// The main thread only receives the intents and posts the work to the worker
+// thread.
 //
 // The service returns START_NOT_STICKY. If Android stops the process, the
 // log file keeps the points. The next start of MainActivity saves them.
@@ -46,6 +61,7 @@ public final class TrackService extends Service {
     static final String ACTION_START = "net.basov.retrace.action.START";
     static final String ACTION_STOP = "net.basov.retrace.action.STOP";
     static final String EXTRA_PROFILE = "net.basov.retrace.extra.PROFILE";
+    static final String EXTRA_REFERENCE = "net.basov.retrace.extra.REFERENCE";
 
     private static final String CHANNEL_ID = "recording";
     private static final int NOTIFICATION_ID = 1;
@@ -57,6 +73,9 @@ public final class TrackService extends Service {
     // An update of the notification each second uses battery for no value.
     private static final long NOTIFICATION_INTERVAL_MS = 5000;
 
+    // Three short and one long vibration at the finish.
+    private static final long[] FINISH_PATTERN = {0, 300, 150, 300, 150, 300, 150, 800};
+
     // The last state of the recording. The activity reads it.
     private static volatile RecordingSnapshot snapshot = RecordingSnapshot.IDLE;
 
@@ -64,12 +83,26 @@ public final class TrackService extends Service {
     // old log file.
     private static volatile boolean active;
 
+    // The points of the current track, for the map of the trip screen. The
+    // worker thread adds them. The activity reads a copy.
+    private static final List<TrackPoint> POINTS = new ArrayList<>();
+
     static RecordingSnapshot snapshot() {
         return snapshot;
     }
 
     static boolean isActive() {
         return active;
+    }
+
+    // Returns a copy of the points from an index to the end.
+    static List<TrackPoint> pointsFrom(int from) {
+        synchronized (POINTS) {
+            if (from >= POINTS.size()) {
+                return new ArrayList<>();
+            }
+            return new ArrayList<>(POINTS.subList(Math.max(0, from), POINTS.size()));
+        }
     }
 
     private HandlerThread thread;
@@ -88,6 +121,13 @@ public final class TrackService extends Service {
     private long lastFixTimeMs = TrackPoint.NO_TIME;
     private long lastNotificationMs;
     private int error = RecordingSnapshot.ERROR_NONE;
+
+    private String referencePath;
+    private TrackMatcher matcher;
+    private DeltaSmoother smoother;
+    private MatchResult match;
+    private long smoothedDeltaMs = MatchResult.UNKNOWN;
+    private boolean finishSignaled;
 
     private final LocationListener listener = new LocationListener() {
         @Override
@@ -129,15 +169,19 @@ public final class TrackService extends Service {
         if (ACTION_START.equals(action)) {
             Profile requested = Profile.fromId(intent.getStringExtra(EXTRA_PROFILE));
             final Profile p = requested == null ? Profile.WALKING : requested;
+            final String reference = intent.getStringExtra(EXTRA_REFERENCE);
             final long start = System.currentTimeMillis();
             // Android 8 and newer stop the service if startForeground does not
             // come soon after startForegroundService. Thus it comes first.
-            if (!enterForeground(notification(p, start, 0, 0, false))) {
+            RecordingSnapshot first = new RecordingSnapshot(true, p, start, 0, 0, Double.NaN,
+                    TrackPoint.NO_TIME, snapshot.savedCount, RecordingSnapshot.ERROR_NONE,
+                    reference, null, MatchResult.UNKNOWN);
+            if (!enterForeground(notification(first))) {
                 snapshot = withError(RecordingSnapshot.ERROR_NO_PERMISSION);
                 stopSelf();
                 return START_NOT_STICKY;
             }
-            worker.post(() -> begin(p, start));
+            worker.post(() -> begin(p, start, reference));
         } else if (ACTION_STOP.equals(action)) {
             worker.post(() -> finish(true));
         } else {
@@ -165,7 +209,7 @@ public final class TrackService extends Service {
     }
 
     // Worker thread.
-    private void begin(Profile p, long start) {
+    private void begin(Profile p, long start, String reference) {
         if (recording) {
             return;
         }
@@ -175,6 +219,10 @@ public final class TrackService extends Service {
         lastAccuracyM = Double.NaN;
         lastFixTimeMs = TrackPoint.NO_TIME;
         error = RecordingSnapshot.ERROR_NONE;
+        synchronized (POINTS) {
+            POINTS.clear();
+        }
+        loadReference(reference, p);
 
         try {
             log = store.openLog(p, start);
@@ -197,6 +245,29 @@ public final class TrackService extends Service {
         publish();
     }
 
+    // Worker thread. A reference track that Retrace cannot read gives a trip
+    // with no comparison. The recording itself still works.
+    private void loadReference(String path, Profile p) {
+        referencePath = null;
+        matcher = null;
+        match = null;
+        smoother = DeltaSmoother.forProfile(p);
+        smoothedDeltaMs = MatchResult.UNKNOWN;
+        finishSignaled = false;
+        if (path == null) {
+            return;
+        }
+        try {
+            Track reference = store.load(new File(path));
+            if (reference.points.size() >= 2) {
+                matcher = new TrackMatcher(reference, p);
+                referencePath = path;
+            }
+        } catch (IOException | IllegalArgumentException e) {
+            matcher = null;
+        }
+    }
+
     // Worker thread.
     private void onFix(Location location) {
         if (!recording) {
@@ -211,6 +282,7 @@ public final class TrackService extends Service {
         lastAccuracyM = fix.accuracyM;
         lastFixTimeMs = System.currentTimeMillis();
 
+        boolean finishNow = false;
         if (filter.accept(fix)) {
             try {
                 log.write(PointLog.line(fix));
@@ -220,18 +292,52 @@ public final class TrackService extends Service {
                 stopWithError(RecordingSnapshot.ERROR_STORAGE);
                 return;
             }
+            synchronized (POINTS) {
+                POINTS.add(fix);
+            }
+            finishNow = compare(fix);
         }
         publish();
 
         long now = System.currentTimeMillis();
-        if (now - lastNotificationMs >= NOTIFICATION_INTERVAL_MS) {
+        if (finishNow || now - lastNotificationMs >= NOTIFICATION_INTERVAL_MS) {
             lastNotificationMs = now;
-            notificationManager.notify(NOTIFICATION_ID, notification(
-                    profile, startTimeMs, filter.count(), filter.distanceM(), true));
+            notificationManager.notify(NOTIFICATION_ID, notification(snapshot));
+        }
+        if (finishNow) {
+            vibrate();
         }
     }
 
-    // Worker thread. Stops the GPS updates and saves the track.
+    // Worker thread. Gives the point to the matcher. Returns true at the first
+    // point of the finish.
+    private boolean compare(TrackPoint fix) {
+        if (matcher == null) {
+            return false;
+        }
+        boolean wasStarted = match != null && match.started();
+        match = matcher.update(fix);
+        if (match.state == TrackMatcher.State.FINISHED) {
+            // At the finish, the exact value is the result.
+            smoothedDeltaMs = match.deltaTimeMs;
+            if (!finishSignaled) {
+                finishSignaled = true;
+                return true;
+            }
+            return false;
+        }
+        if (match.started() && !wasStarted) {
+            // At the start or at a join, the difference starts again from zero.
+            smoother.reset();
+        }
+        if (match.state == TrackMatcher.State.ON_ROUTE && match.deltaTimeMs != MatchResult.UNKNOWN) {
+            smoothedDeltaMs = smoother.add(fix.timeMs, match.deltaTimeMs);
+        }
+        return false;
+    }
+
+    // Worker thread. Stops the GPS updates and saves the track. The last
+    // snapshot keeps the comparison, thus the trip screen shows the result.
     private void finish(boolean stopService) {
         boolean saved = false;
         if (recording) {
@@ -247,7 +353,7 @@ public final class TrackService extends Service {
         RecordingSnapshot last = snapshot;
         snapshot = new RecordingSnapshot(false, profile, startTimeMs, filter.count(),
                 filter.distanceM(), lastAccuracyM, lastFixTimeMs,
-                last.savedCount + (saved ? 1 : 0), error);
+                last.savedCount + (saved ? 1 : 0), error, referencePath, match, smoothedDeltaMs);
         if (stopService) {
             leaveForeground();
             stopSelf();
@@ -273,13 +379,27 @@ public final class TrackService extends Service {
 
     private void publish() {
         snapshot = new RecordingSnapshot(recording, profile, startTimeMs, filter.count(),
-                filter.distanceM(), lastAccuracyM, lastFixTimeMs, snapshot.savedCount, error);
+                filter.distanceM(), lastAccuracyM, lastFixTimeMs, snapshot.savedCount, error,
+                referencePath, match, smoothedDeltaMs);
     }
 
     private static RecordingSnapshot withError(int code) {
         RecordingSnapshot s = snapshot;
         return new RecordingSnapshot(false, s.profile, s.startTimeMs, 0, 0, Double.NaN,
-                TrackPoint.NO_TIME, s.savedCount, code);
+                TrackPoint.NO_TIME, s.savedCount, code, null, null, MatchResult.UNKNOWN);
+    }
+
+    @SuppressWarnings("deprecation")
+    private void vibrate() {
+        Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+        if (vibrator == null || !vibrator.hasVibrator()) {
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= 26) {
+            vibrator.vibrate(VibrationEffect.createWaveform(FINISH_PATTERN, -1));
+        } else {
+            vibrator.vibrate(FINISH_PATTERN, -1);
+        }
     }
 
     // Returns false if Android refuses the foreground state. Android 14
@@ -315,9 +435,9 @@ public final class TrackService extends Service {
         }
     }
 
-    private Notification notification(Profile p, long start, int points, double distanceM,
-                                      boolean hasFixes) {
-        Intent open = new Intent(this, MainActivity.class)
+    // A push on the notification opens the trip screen.
+    private Notification notification(RecordingSnapshot s) {
+        Intent open = new Intent(this, RunActivity.class)
                 .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent openIntent = PendingIntent.getActivity(this, 0, open,
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
@@ -329,20 +449,19 @@ public final class TrackService extends Service {
                 Icon.createWithResource(this, R.drawable.ic_stop),
                 getString(R.string.stop_recording), stopIntent).build();
 
-        String text = hasFixes
-                ? getString(R.string.notification_progress, points, Labels.distance(this, distanceM))
-                : getString(R.string.waiting_for_gps);
+        String text = s.points == 0 && s.match == null
+                ? getString(R.string.waiting_for_gps) : TripText.notification(this, s);
 
         return builder()
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle(getString(R.string.notification_title, Labels.profile(this, p)))
+                .setContentTitle(getString(R.string.notification_title, Labels.profile(this, s.profile)))
                 .setContentText(text)
                 .setContentIntent(openIntent)
                 .addAction(stopAction)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setShowWhen(true)
-                .setWhen(start)
+                .setWhen(s.startTimeMs)
                 .setUsesChronometer(true)
                 .setCategory(Notification.CATEGORY_SERVICE)
                 .build();

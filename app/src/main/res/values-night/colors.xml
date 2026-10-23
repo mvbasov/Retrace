@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Lighter colors for the dark theme. -->
+    <color name="trip_ahead">#FF66BB6A</color>
+    <color name="trip_behind">#FFEF5350</color>
+    <color name="trip_neutral">#DEFFFFFF</color>
+</resources>

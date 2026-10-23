@@ -45,7 +45,10 @@ import net.basov.retrace.core.TimeText;
 // The top row holds the profile and the start or stop button. Below it, a
 // line shows the state of the recording. The list of saved tracks fills the
 // rest of the screen. A push on a track shows it on the map. A long push on a
-// track opens the rename and delete menu.
+// track opens a menu: start a trip on its route, rename or delete.
+//
+// A start opens the trip screen. While Retrace records, a push on the status
+// line opens it again.
 //
 // The activity reads TrackService.snapshot() once each second. A file task
 // runs on one background thread, and its result comes back on the UI thread.
@@ -58,6 +61,7 @@ public final class MainActivity extends Activity {
     private static final int MENU_PROBE = 1;
     private static final int MENU_RENAME = 2;
     private static final int MENU_DELETE = 3;
+    private static final int MENU_TRIP = 4;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService files = Executors.newSingleThreadExecutor();
@@ -67,6 +71,11 @@ public final class MainActivity extends Activity {
     private Spinner profileSpinner;
     private Button startStopButton;
     private TextView statusView;
+
+    // The trip that waits for the permission dialog. The reference track is
+    // null for a trip without a comparison.
+    private Profile pendingProfile = Profile.WALKING;
+    private String pendingReference;
 
     // The savedCount of the last snapshot that the list shows.
     private int shownSavedCount = -1;
@@ -144,6 +153,11 @@ public final class MainActivity extends Activity {
 
         statusView = new TextView(this);
         statusView.setPadding(0, pad / 2, 0, pad / 2);
+        statusView.setOnClickListener(v -> {
+            if (TrackService.snapshot().recording) {
+                startActivity(new Intent(this, RunActivity.class));
+            }
+        });
 
         TextView empty = new TextView(this);
         empty.setText(R.string.no_tracks);
@@ -181,6 +195,8 @@ public final class MainActivity extends Activity {
         if (TrackService.snapshot().recording) {
             startService(new Intent(this, TrackService.class).setAction(TrackService.ACTION_STOP));
         } else {
+            pendingProfile = Profile.values()[profileSpinner.getSelectedItemPosition()];
+            pendingReference = null;
             startRecording();
         }
         startStopButton.setEnabled(false);
@@ -203,15 +219,18 @@ public final class MainActivity extends Activity {
                     .show();
             return;
         }
-        Profile profile = Profile.values()[profileSpinner.getSelectedItemPosition()];
         Intent start = new Intent(this, TrackService.class)
                 .setAction(TrackService.ACTION_START)
-                .putExtra(TrackService.EXTRA_PROFILE, profile.id);
+                .putExtra(TrackService.EXTRA_PROFILE, pendingProfile.id);
+        if (pendingReference != null) {
+            start.putExtra(TrackService.EXTRA_REFERENCE, pendingReference);
+        }
         if (Build.VERSION.SDK_INT >= 26) {
             startForegroundService(start);
         } else {
             startService(start);
         }
+        startActivity(new Intent(this, RunActivity.class));
     }
 
     private static String[] permissions() {
@@ -268,14 +287,15 @@ public final class MainActivity extends Activity {
             String progress = getString(R.string.status_recording,
                     Labels.profile(this, s.profile), s.points,
                     Labels.distance(this, s.distanceM), elapsed);
+            String open = "\n" + getString(R.string.status_open_trip);
             if (!s.hasFix()) {
-                return progress + "\n" + getString(R.string.waiting_for_gps);
+                return progress + "\n" + getString(R.string.waiting_for_gps) + open;
             }
             if (Double.isNaN(s.lastAccuracyM)) {
-                return progress;
+                return progress + open;
             }
             return progress + "\n" + getString(R.string.gps_accuracy,
-                    (int) Math.round(s.lastAccuracyM));
+                    (int) Math.round(s.lastAccuracyM)) + open;
         }
         switch (s.error) {
             case RecordingSnapshot.ERROR_NO_PERMISSION:
@@ -320,6 +340,9 @@ public final class MainActivity extends Activity {
         super.onCreateContextMenu(menu, v, info);
         TrackStore.Entry e = adapter.getItem(((AdapterView.AdapterContextMenuInfo) info).position);
         menu.setHeaderTitle(e.name);
+        if (e.readable && e.points >= 2 && !TrackService.snapshot().recording) {
+            menu.add(Menu.NONE, MENU_TRIP, Menu.NONE, R.string.start_trip_on_route);
+        }
         if (e.readable) {
             menu.add(Menu.NONE, MENU_RENAME, Menu.NONE, R.string.rename);
         }
@@ -331,6 +354,16 @@ public final class MainActivity extends Activity {
         AdapterView.AdapterContextMenuInfo info =
                 (AdapterView.AdapterContextMenuInfo) item.getMenuInfo();
         TrackStore.Entry e = adapter.getItem(info.position);
+        if (item.getItemId() == MENU_TRIP) {
+            // The trip uses the profile of the reference track. A track from
+            // another application can have no profile. The selected profile
+            // then applies.
+            Profile selected = Profile.values()[profileSpinner.getSelectedItemPosition()];
+            pendingProfile = e.profile != null ? e.profile : selected;
+            pendingReference = e.file.getPath();
+            startRecording();
+            return true;
+        }
         if (item.getItemId() == MENU_RENAME) {
             askRename(e);
             return true;
