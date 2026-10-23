@@ -646,6 +646,9 @@ public final class TrackService extends Service {
 
     @SuppressWarnings("deprecation")
     private void vibrate() {
+        if (!AppSettings.vibrate(this)) {
+            return;
+        }
         Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
         if (vibrator == null || !vibrator.hasVibrator()) {
             return;

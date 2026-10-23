@@ -1,6 +1,5 @@
 package net.basov.retrace;
 
-import android.app.Activity;
 import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -28,7 +27,7 @@ import net.basov.retrace.core.Track;
 //
 // The screen keeps the center and the zoom of the map when Android makes the
 // activity again, for example after a turn of the device.
-public final class TrackMapActivity extends Activity {
+public final class TrackMapActivity extends ThemedActivity {
 
     static final String EXTRA_FILE = "net.basov.retrace.extra.FILE";
 

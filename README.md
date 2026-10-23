@@ -21,6 +21,7 @@ Retrace records tracks, shows them on a map, and compares a trip with a saved tr
 - To change the reference track during the trip, open the menu of the trip screen and push **Select the reference track**. Select a track, **Automatic selection** or **No comparison**. The comparison then starts again from the start of the trip.
 - The trip screen shows if you are ahead or behind, and your distance from the ghost. It also shows your speed, and the distance and time to the finish. At the finish, the device vibrates.
 - To check the comparison at your desk, do a long push on a track and push **Replay this track**. Then select the reference track. The trip screen shows the replay at ten times the real speed. Its menu changes the speed and the reference track.
+- The menu item **Settings** turns the vibration at the finish on or off. It also selects the color theme: light, dark, or the same as the system.
 - The menu item **About Retrace** shows the version of the application.
 - A long push on a track opens the menu to share, rename or delete it. **Share** sends the GPX file to a different application.
 - To import a GPX file from a different application, open the menu and push **Import a GPX file**. The track needs a time for each point. If the file has no Retrace profile, Retrace shows a guess from the speed. Confirm it or select a different profile.

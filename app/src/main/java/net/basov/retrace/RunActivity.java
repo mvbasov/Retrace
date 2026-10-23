@@ -1,6 +1,5 @@
 package net.basov.retrace;
 
-import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.os.Bundle;
@@ -51,7 +50,7 @@ import net.basov.retrace.core.TrackPoint;
 //
 // After the stop, the screen keeps the last values. The stop button then
 // closes the screen.
-public final class RunActivity extends Activity {
+public final class RunActivity extends ThemedActivity {
 
     private static final long REFRESH_MS = 1000;
     private static final int MENU_SELECT = 1;

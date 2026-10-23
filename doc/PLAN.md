@@ -203,7 +203,11 @@ The OpenStreetMap tile usage policy for `tile.openstreetmap.org` has these rules
   - A long push on a track starts a trip on its route. A push on the notification, or on the status line of the list, opens the trip screen.
   - At the finish, the device vibrates. The recording continues until you push Stop.
   - A line above the panel shows the reference track and how the trip got it: temporary, selected, no saved track, or no comparison. The menu changes the reference track during the trip.
-- **SettingsActivity**: the limits of each profile, the tile URL, the size of the tile cache and the voice messages.
+- **SettingsActivity**: the vibration at the finish, and the color theme.
+  - The color theme is light, dark, or the same as the system. Android has the night mode of the system from Android 10. On an older device, the same as the system is light.
+  - `ThemedActivity` gives the light and the dark theme. It overrides the night mode of the configuration of each screen. Thus the theme and the colors of `values-night/` follow the setting.
+  - The map tiles stay light in the dark theme.
+  - Later: the limits of each profile, the tile URL, the size of the tile cache and the voice messages.
 - Alerts: vibration and optional `TextToSpeech` messages. Android has `TextToSpeech` in the framework.
 
 ## 6. Permissions

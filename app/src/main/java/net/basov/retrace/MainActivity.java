@@ -1,7 +1,6 @@
 package net.basov.retrace;
 
 import android.Manifest;
-import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
@@ -66,7 +65,7 @@ import net.basov.retrace.core.TrackImport;
 //
 // The activity reads TrackService.snapshot() once each second. A file task
 // runs on one background thread, and its result comes back on the UI thread.
-public final class MainActivity extends Activity {
+public final class MainActivity extends ThemedActivity {
 
     private static final int REQUEST_LOCATION = 1;
     private static final int REQUEST_IMPORT = 2;
@@ -85,6 +84,7 @@ public final class MainActivity extends Activity {
     private static final int MENU_IMPORT = 6;
     private static final int MENU_ABOUT = 7;
     private static final int MENU_REPLAY = 8;
+    private static final int MENU_SETTINGS = 9;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService files = Executors.newSingleThreadExecutor();
@@ -660,6 +660,7 @@ public final class MainActivity extends Activity {
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         menu.add(Menu.NONE, MENU_IMPORT, Menu.NONE, R.string.import_track);
+        menu.add(Menu.NONE, MENU_SETTINGS, Menu.NONE, R.string.settings);
         menu.add(Menu.NONE, MENU_PROBE, Menu.NONE, R.string.probe_button);
         menu.add(Menu.NONE, MENU_ABOUT, Menu.NONE, R.string.about);
         return true;
@@ -669,6 +670,10 @@ public final class MainActivity extends Activity {
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == MENU_IMPORT) {
             startImport();
+            return true;
+        }
+        if (item.getItemId() == MENU_SETTINGS) {
+            startActivity(new Intent(this, SettingsActivity.class));
             return true;
         }
         if (item.getItemId() == MENU_ABOUT) {

@@ -4,4 +4,9 @@
     <color name="trip_ahead">#FF66BB6A</color>
     <color name="trip_behind">#FFEF5350</color>
     <color name="trip_neutral">#DEFFFFFF</color>
+
+    <!-- The tiles stay light. The parts around them follow the theme. -->
+    <color name="map_background">#FF303030</color>
+    <color name="map_attribution_text">#FFE0E0E0</color>
+    <color name="map_attribution_background">#B3000000</color>
 </resources>

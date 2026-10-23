@@ -1,6 +1,5 @@
 package net.basov.retrace;
 
-import android.app.Activity;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Bundle;
@@ -22,7 +21,7 @@ import android.widget.TextView;
 //
 // The activity builds its views in Java. Thus the APK holds no layout file
 // for this screen.
-public final class TileProbeActivity extends Activity {
+public final class TileProbeActivity extends ThemedActivity {
 
     private TextView resultView;
     private ImageView tileView;
