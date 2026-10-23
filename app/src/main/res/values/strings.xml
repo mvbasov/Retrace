@@ -18,6 +18,18 @@
     <string name="error_rename">Retrace cannot rename the track.</string>
     <string name="error_delete">Retrace cannot delete the track.</string>
 
+    <!-- The ways -->
+    <string name="make_way">Make a way from this route</string>
+    <string name="change_way">Change the tracks of the way</string>
+    <string name="way_tracks_title">Select the tracks of the way</string>
+    <string name="way_name">Way: %1$s</string>
+    <string name="way_details">Way of %1$d tracks · %2$s · %3$s · %4$s</string>
+    <string name="way_no_route">No other saved track has this route. A way needs two tracks or more.</string>
+    <string name="way_select_two">Select two tracks or more.</string>
+    <string name="way_failed">These tracks do not follow one route. Retrace cannot make a way from them.</string>
+    <string name="way_done">The way has %1$d tracks.</string>
+    <string name="way_rejected">Retrace did not use %1$d of the selected tracks. They do not follow the route of the way.</string>
+
     <!-- Share and import -->
     <string name="share">Share</string>
     <string name="share_title">Share the track</string>

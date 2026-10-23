@@ -20,9 +20,10 @@ import java.util.List;
 // 10 percent of the shortest candidate if that is less. A candidate that is
 // not on the route then is not valid. From the valid candidates, the lowest mean
 // cross-track distance wins. Two tracks of the same route have almost the
-// same score. Thus candidates within TIE_M of the best score count as equal,
-// and the newest of them wins. The trip then races the last trip on that
-// route.
+// same score. Thus candidates within TIE_M of the best score count as equal.
+// A way among them wins, because it is the typical trip on the route. With
+// no way, the newest track wins. The trip then races the last trip on that
+// route. Of two equal ways, the newest wins.
 //
 // If no candidate is valid after GIVE_UP_FACTOR times the decision distance,
 // the trip has no reference track. Retrace then records a new route.
@@ -206,7 +207,8 @@ public final class ReferenceSelector {
     }
 
     // The valid candidate with the lowest score. Candidates within TIE_M of
-    // that score count as equal, and the newest of them wins.
+    // that score count as equal. A way wins over a track, then the newest
+    // wins.
     private Trial best() {
         List<Trial> valid = new ArrayList<>();
         double bestScore = Double.POSITIVE_INFINITY;
@@ -225,8 +227,14 @@ public final class ReferenceSelector {
                 equal.add(t);
             }
         }
-        return Collections.max(equal, (a, b) -> Long.compare(
-                a.candidate.track.startTimeMs(), b.candidate.track.startTimeMs()));
+        return Collections.max(equal, (a, b) -> {
+            boolean wayA = a.candidate.track.isWay();
+            boolean wayB = b.candidate.track.isWay();
+            if (wayA != wayB) {
+                return wayA ? 1 : -1;
+            }
+            return Long.compare(a.candidate.track.startTimeMs(), b.candidate.track.startTimeMs());
+        });
     }
 
     private Trial nearestStart() {

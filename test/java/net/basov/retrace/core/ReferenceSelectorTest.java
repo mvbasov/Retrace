@@ -34,6 +34,7 @@ public final class ReferenceSelectorTest {
         theNearestStartIsTheFirstTemporaryReference();
         aShortRouteDecidesEarly();
         theComparisonContinuesAfterTheChoice();
+        aWayWinsOverTheTracksOfItsRoute();
 
         if (failures > 0) {
             System.out.println("ReferenceSelectorTest: " + failures + " check(s) failed");
@@ -126,6 +127,26 @@ public final class ReferenceSelectorTest {
         check("continue: finished", TrackMatcher.State.FINISHED, last.state);
         double typical = SIGMA * Math.sqrt(2) / WALK;
         near("continue: time at finish", 0, last.deltaTimeMs / 1000.0, 3 * typical);
+    }
+
+    // The way of the two north tracks is older than the newest north track.
+    // It still wins, because a way is the typical trip on its route.
+    private static void aWayWinsOverTheTracksOfItsRoute() {
+        List<Track> north = new ArrayList<>();
+        north.add(walk(NORTH, 11, 1));
+        north.add(walk(NORTH, 12, 2));
+        Track built = WayBuilder.build("way", Profile.WALKING, north, 0).way;
+        List<String> members = new ArrayList<>();
+        members.add("a.gpx");
+        members.add("b.gpx");
+        List<ReferenceSelector.Candidate> all = saved();
+        all.add(new ReferenceSelector.Candidate("north-way", built.withMembers(members)));
+        List<TrackPoint> points = trip(NORTH, 109, 0);
+        ReferenceSelector s = new ReferenceSelector(
+                ReferenceSelector.nearStart(all, Profile.WALKING, points.get(0)),
+                Profile.WALKING, points.get(0));
+        Result r = feed(s, points);
+        check("way: selected", "north-way", r.selected);
     }
 
     // ------------------------------------------------------------------

@@ -157,7 +157,7 @@ Automatic selection:
 2. Each point of the trip goes to one TrackMatcher for each candidate.
 3. The temporary reference track is the valid candidate with the lowest mean cross-track distance. Before the first valid candidate, it is the candidate with the nearest start. A valid candidate is on the route, and it is at least half the decision distance along its route.
 4. The decision distance is 10 % of the shortest candidate, between 50 m and 300 m. When one candidate on the route reaches it, Retrace selects the temporary reference track. Its matcher has all the points, thus the comparison continues with no gap.
-5. Two tracks of the same route have almost the same score. Thus candidates within 3 m of the best mean cross-track distance count as equal. The newest of them wins, and the trip races the last trip on that route.
+5. Two tracks of the same route have almost the same score. Thus candidates within 3 m of the best mean cross-track distance count as equal. A way among them wins, because it is the typical trip on the route. With no way, the newest track wins, and the trip races the last trip on that route.
 6. If no candidate is valid after three decision distances, Retrace records a new route with no comparison.
 
 Limit: two routes with the same first part. The selection can come before the routes go apart. Then the newest track wins, also if the trip later follows the other route. A manual selection corrects this.
@@ -222,6 +222,9 @@ A way is the mean track of some tracks on one route. It has the mean position an
   - a track that stops before the finish
   - a track with more than 10 % of the route off the route
 - The time of the way starts at the start of its newest track.
+- The menu of a track has **Make a way from this route**. The dialog shows the tracks of the same route with a checkbox each. Such a track has the same profile and a length of 70 % to 140 % of the base. Its start and its finish are near the start and the finish of the base.
+- The menu of a way has **Change the tracks of the way**. Retrace then builds the way again in its file.
+- A way is never a member of a way. The removal of a member track does not change the way.
 
 Results of 100 seeds of five invented walks with a mean speed of 1.4 m/s. One walk waits two minutes at the start:
 

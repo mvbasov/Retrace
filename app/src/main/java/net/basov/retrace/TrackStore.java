@@ -35,7 +35,8 @@ import net.basov.retrace.core.TrackPoint;
 // example /storage/emulated/0/Android/media/net.basov.retrace/. This
 // directory needs no storage permission. The user can copy it for a backup.
 //
-// - tracks/ holds one GPX file for each saved track.
+// - tracks/ holds one GPX file for each saved track and for each way. The
+//   name of a way file starts with "way-".
 // - current.log holds the points of the current track. See PointLog.
 //
 // TrackService and MainActivity each make their own TrackStore. One lock
@@ -63,6 +64,9 @@ final class TrackStore {
         final long startTimeMs;
         final boolean readable;
 
+        // The file names of the tracks of a way. Empty for a track.
+        final List<String> members;
+
         Entry(File file, Track track) {
             this.file = file;
             this.name = track.name;
@@ -72,6 +76,7 @@ final class TrackStore {
             this.durationMs = track.durationMs();
             this.startTimeMs = track.startTimeMs();
             this.readable = true;
+            this.members = track.members;
         }
 
         Entry(File file) {
@@ -83,6 +88,11 @@ final class TrackStore {
             this.durationMs = 0;
             this.startTimeMs = TrackPoint.NO_TIME;
             this.readable = false;
+            this.members = new ArrayList<>();
+        }
+
+        boolean isWay() {
+            return !members.isEmpty();
         }
     }
 
@@ -187,6 +197,32 @@ final class TrackStore {
             writeGpx(track, file);
             return file;
         }
+    }
+
+    // Saves a way. A target of null makes a new file. A rebuild writes the
+    // way to its old file.
+    File saveWay(Track way, File target) throws IOException {
+        synchronized (LOCK) {
+            File file = target;
+            if (file == null) {
+                if (!trackDirectory.isDirectory() && !trackDirectory.mkdirs()) {
+                    throw new IOException("cannot make " + trackDirectory);
+                }
+                long start = way.startTimeMs();
+                String stem = "way-" + TimeText.fileStamp(start, offsetMs(start)) + "-" + way.profile.id;
+                file = new File(trackDirectory, stem + GPX);
+                for (int i = 2; file.exists(); i++) {
+                    file = new File(trackDirectory, stem + "-" + i + GPX);
+                }
+            }
+            writeGpx(way, file);
+            return file;
+        }
+    }
+
+    // The file of a track in the track directory, from its file name.
+    File trackFile(String name) {
+        return new File(trackDirectory, name);
     }
 
     void rename(File file, String newName) throws IOException {

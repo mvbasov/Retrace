@@ -17,7 +17,8 @@ import net.basov.retrace.core.TimeText;
 // ----------------------------------------------------------------------
 //
 // Each row uses the two-line layout of the framework. The first line is the
-// name. The second line is the profile, the distance and the duration.
+// name. The second line is the profile, the distance and the duration. For
+// a way, the second line also has the count of its tracks.
 final class TrackListAdapter extends BaseAdapter {
 
     private final Context context;
@@ -57,7 +58,12 @@ final class TrackListAdapter extends BaseAdapter {
         TextView first = row.findViewById(android.R.id.text1);
         TextView second = row.findViewById(android.R.id.text2);
         first.setText(e.name);
-        if (e.readable) {
+        if (e.readable && e.isWay()) {
+            second.setText(context.getString(R.string.way_details, e.members.size(),
+                    Labels.profile(context, e.profile),
+                    Labels.distance(context, e.distanceM),
+                    TimeText.duration(e.durationMs)));
+        } else if (e.readable) {
             second.setText(context.getString(R.string.track_details,
                     Labels.profile(context, e.profile),
                     Labels.distance(context, e.distanceM),

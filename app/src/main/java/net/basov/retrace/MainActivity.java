@@ -56,8 +56,8 @@ import net.basov.retrace.core.TrackImport;
 // The top row holds the profile and the start or stop button. Below it, a
 // line shows the state of the recording. The list of saved tracks fills the
 // rest of the screen. A push on a track shows it on the map. A long push on a
-// track opens a menu: start a trip on its route, replay it, share, rename or
-// delete.
+// track opens a menu: start a trip on its route, replay it, make a way from
+// its route, share, rename or delete. The menu of a way changes its tracks.
 // The options menu imports a GPX file from another application.
 //
 // A start opens the trip screen. While Retrace records, a push on the status
@@ -85,6 +85,8 @@ public final class MainActivity extends ThemedActivity {
     private static final int MENU_ABOUT = 7;
     private static final int MENU_REPLAY = 8;
     private static final int MENU_SETTINGS = 9;
+    private static final int MENU_MAKE_WAY = 10;
+    private static final int MENU_CHANGE_WAY = 11;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService files = Executors.newSingleThreadExecutor();
@@ -373,6 +375,11 @@ public final class MainActivity extends ThemedActivity {
             menu.add(Menu.NONE, MENU_TRIP, Menu.NONE, R.string.start_trip_on_route);
             menu.add(Menu.NONE, MENU_REPLAY, Menu.NONE, R.string.replay_track);
         }
+        if (e.readable && e.isWay()) {
+            menu.add(Menu.NONE, MENU_CHANGE_WAY, Menu.NONE, R.string.change_way);
+        } else if (e.readable && e.points >= 2 && e.profile != null) {
+            menu.add(Menu.NONE, MENU_MAKE_WAY, Menu.NONE, R.string.make_way);
+        }
         if (e.readable) {
             menu.add(Menu.NONE, MENU_SHARE, Menu.NONE, R.string.share);
             menu.add(Menu.NONE, MENU_RENAME, Menu.NONE, R.string.rename);
@@ -393,6 +400,14 @@ public final class MainActivity extends ThemedActivity {
             pendingProfile = e.profile != null ? e.profile : selected;
             pendingReference = e.file.getPath();
             startRecording();
+            return true;
+        }
+        if (item.getItemId() == MENU_MAKE_WAY) {
+            WayDialogs.make(this, files, e, () -> loadTracks(false));
+            return true;
+        }
+        if (item.getItemId() == MENU_CHANGE_WAY) {
+            WayDialogs.change(this, files, e, () -> loadTracks(false));
             return true;
         }
         if (item.getItemId() == MENU_REPLAY) {
