@@ -2,6 +2,7 @@ package net.basov.retrace;
 
 import android.os.Bundle;
 import android.util.TypedValue;
+import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
@@ -39,19 +40,12 @@ public final class SettingsActivity extends ThemedActivity {
         themeTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
         themeTitle.setPadding(0, pad, 0, 0);
 
-        RadioGroup themes = new RadioGroup(this);
-        int current = AppSettings.theme(this);
-        for (int i = 0; i < THEME_TEXT.length; i++) {
-            RadioButton b = new RadioButton(this);
-            b.setId(i + 1);
-            b.setText(THEME_TEXT[i]);
-            themes.addView(b);
-        }
-        themes.check(current + 1);
         // A new theme needs a new screen. See ThemedActivity.
-        themes.setOnCheckedChangeListener((g, id) -> {
-            AppSettings.setTheme(this, id - 1);
-            recreate();
+        RadioGroup themes = choices(THEME_TEXT, AppSettings.theme(this), index -> {
+            if (index != AppSettings.theme(this)) {
+                AppSettings.setTheme(this, index);
+                recreate();
+            }
         });
 
         TextView wayTitle = new TextView(this);
@@ -59,15 +53,8 @@ public final class SettingsActivity extends ThemedActivity {
         wayTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
         wayTitle.setPadding(0, pad, 0, 0);
 
-        RadioGroup ways = new RadioGroup(this);
-        for (int i = 0; i < WAY_TEXT.length; i++) {
-            RadioButton b = new RadioButton(this);
-            b.setId(i + 1);
-            b.setText(WAY_TEXT[i]);
-            ways.addView(b);
-        }
-        ways.check(AppSettings.wayUpdate(this) + 1);
-        ways.setOnCheckedChangeListener((g, id) -> AppSettings.setWayUpdate(this, id - 1));
+        RadioGroup ways = choices(WAY_TEXT, AppSettings.wayUpdate(this),
+                index -> AppSettings.setWayUpdate(this, index));
 
         LinearLayout column = new LinearLayout(this);
         column.setOrientation(LinearLayout.VERTICAL);
@@ -81,6 +68,38 @@ public final class SettingsActivity extends ThemedActivity {
         ScrollView scroll = new ScrollView(this);
         scroll.addView(column);
         setContentView(scroll);
+    }
+
+    // The index of the selected button in a group.
+    private interface Choice {
+        void onSelect(int index);
+    }
+
+    // A group with one button for each text. Each button gets its own id.
+    // Android keeps the state of a view by its id, and two groups with the
+    // same ids get each other's state after recreate(). The buttons also
+    // keep no state, because the screen reads each value from AppSettings.
+    private RadioGroup choices(int[] texts, int selected, Choice choice) {
+        RadioGroup group = new RadioGroup(this);
+        group.setSaveEnabled(false);
+        int[] ids = new int[texts.length];
+        for (int i = 0; i < texts.length; i++) {
+            RadioButton b = new RadioButton(this);
+            ids[i] = View.generateViewId();
+            b.setId(ids[i]);
+            b.setText(texts[i]);
+            b.setSaveEnabled(false);
+            group.addView(b);
+        }
+        group.check(ids[selected]);
+        group.setOnCheckedChangeListener((g, id) -> {
+            for (int i = 0; i < ids.length; i++) {
+                if (ids[i] == id) {
+                    choice.onSelect(i);
+                }
+            }
+        });
+        return group;
     }
 
     private int dp(int value) {
