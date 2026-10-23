@@ -115,6 +115,10 @@ final class TrackStore {
         return base;
     }
 
+    File trackDirectory() {
+        return trackDirectory;
+    }
+
     // Returns the saved tracks, the newest first.
     List<Entry> list() {
         synchronized (LOCK) {
@@ -156,6 +160,32 @@ final class TrackStore {
     Track load(File file) throws IOException {
         synchronized (LOCK) {
             return readGpx(file);
+        }
+    }
+
+    // Saves a track from another application. The track must have a profile.
+    // Returns null if a saved track has the same start time, profile and
+    // count of points. That is the same track, imported before.
+    File importTrack(Track track) throws IOException {
+        synchronized (LOCK) {
+            long start = track.startTimeMs();
+            String stem = TimeText.fileStamp(start, offsetMs(start)) + "-" + track.profile.id;
+            for (File f : trackFiles()) {
+                if (!f.getName().startsWith(stem)) {
+                    continue;
+                }
+                try {
+                    Track old = readGpx(f);
+                    if (old.points.size() == track.points.size() && old.startTimeMs() == start) {
+                        return null;
+                    }
+                } catch (IOException e) {
+                    // A file that Retrace cannot read is not the same track.
+                }
+            }
+            File file = newTrackFile(start, track.profile);
+            writeGpx(track, file);
+            return file;
         }
     }
 

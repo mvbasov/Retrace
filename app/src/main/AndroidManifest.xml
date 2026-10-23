@@ -51,6 +51,15 @@
             android:exported="false"
             android:label="@string/probe_button" />
 
+        <!-- The read access to a saved track for the share intent. The
+             provider is not exported. A share intent gives the permission
+             for one URI. -->
+        <provider
+            android:name=".TrackProvider"
+            android:authorities="${applicationId}.tracks"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
         <service
             android:name=".TrackService"
             android:exported="false"

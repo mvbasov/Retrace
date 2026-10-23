@@ -20,7 +20,8 @@ Retrace records tracks, shows them on a map, and compares a trip with a saved tr
 - To start a trip on the route of a track, do a long push on the track. Then push **Start a trip on this route**. That track becomes the reference track.
 - To change the reference track during the trip, open the menu of the trip screen and push **Select the reference track**. Select a track, **Automatic selection** or **No comparison**. The comparison then starts again from the start of the trip.
 - The trip screen shows if you are ahead or behind, and your distance from the ghost. It also shows your speed, and the distance and time to the finish. At the finish, the device vibrates.
-- A long push on a track opens the menu to rename or delete it.
+- A long push on a track opens the menu to share, rename or delete it. **Share** sends the GPX file to a different application.
+- To import a GPX file from a different application, open the menu and push **Import a GPX file**. The track needs a time for each point. If the file has no Retrace profile, Retrace shows a guess from the speed. Confirm it or select a different profile.
 - Retrace keeps the GPX files in `/storage/emulated/0/Android/media/net.basov.retrace/tracks/`. Copy this directory for a backup.
 
 ## Constraints

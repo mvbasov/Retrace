@@ -3,16 +3,20 @@ package net.basov.retrace;
 import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ActivityNotFoundException;
+import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.OpenableColumns;
 import android.provider.Settings;
 import android.util.TypedValue;
 import android.view.ContextMenu;
@@ -27,16 +31,23 @@ import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
+import android.widget.Toast;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import net.basov.retrace.core.GpxReader;
+import net.basov.retrace.core.LimitedInputStream;
 import net.basov.retrace.core.Profile;
 import net.basov.retrace.core.RecordingSnapshot;
 import net.basov.retrace.core.TimeText;
+import net.basov.retrace.core.Track;
+import net.basov.retrace.core.TrackImport;
 
 // ----------------------------------------------------------------------
 // The list of tracks and the control of the recording
@@ -45,7 +56,8 @@ import net.basov.retrace.core.TimeText;
 // The top row holds the profile and the start or stop button. Below it, a
 // line shows the state of the recording. The list of saved tracks fills the
 // rest of the screen. A push on a track shows it on the map. A long push on a
-// track opens a menu: start a trip on its route, rename or delete.
+// track opens a menu: start a trip on its route, share, rename or delete.
+// The options menu imports a GPX file from another application.
 //
 // A start opens the trip screen. While Retrace records, a push on the status
 // line opens it again.
@@ -55,6 +67,11 @@ import net.basov.retrace.core.TimeText;
 public final class MainActivity extends Activity {
 
     private static final int REQUEST_LOCATION = 1;
+    private static final int REQUEST_IMPORT = 2;
+
+    // A larger GPX file is not imported. The reader keeps all points in
+    // memory. 20 MB is more than 100000 points.
+    private static final long MAX_IMPORT_BYTES = 20L * 1024 * 1024;
     private static final long REFRESH_MS = 1000;
     private static final String PREF_PROFILE = "profile";
 
@@ -62,6 +79,8 @@ public final class MainActivity extends Activity {
     private static final int MENU_RENAME = 2;
     private static final int MENU_DELETE = 3;
     private static final int MENU_TRIP = 4;
+    private static final int MENU_SHARE = 5;
+    private static final int MENU_IMPORT = 6;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService files = Executors.newSingleThreadExecutor();
@@ -344,6 +363,7 @@ public final class MainActivity extends Activity {
             menu.add(Menu.NONE, MENU_TRIP, Menu.NONE, R.string.start_trip_on_route);
         }
         if (e.readable) {
+            menu.add(Menu.NONE, MENU_SHARE, Menu.NONE, R.string.share);
             menu.add(Menu.NONE, MENU_RENAME, Menu.NONE, R.string.rename);
         }
         menu.add(Menu.NONE, MENU_DELETE, Menu.NONE, R.string.delete);
@@ -362,6 +382,10 @@ public final class MainActivity extends Activity {
             pendingProfile = e.profile != null ? e.profile : selected;
             pendingReference = e.file.getPath();
             startRecording();
+            return true;
+        }
+        if (item.getItemId() == MENU_SHARE) {
+            share(e);
             return true;
         }
         if (item.getItemId() == MENU_RENAME) {
@@ -405,6 +429,169 @@ public final class MainActivity extends Activity {
                 .show();
     }
 
+    // ------------------------------------------------------------------
+    // Share and import
+    // ------------------------------------------------------------------
+
+    // The share intent gives the receiver the read permission for this one
+    // URI. The clip data carries the permission through the chooser.
+    private void share(TrackStore.Entry e) {
+        Uri uri = TrackProvider.uriFor(this, e.file);
+        Intent send = new Intent(Intent.ACTION_SEND)
+                .setType("application/gpx+xml")
+                .putExtra(Intent.EXTRA_STREAM, uri)
+                .putExtra(Intent.EXTRA_SUBJECT, e.name)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        send.setClipData(ClipData.newRawUri(e.name, uri));
+        try {
+            startActivity(Intent.createChooser(send, getString(R.string.share_title)));
+        } catch (ActivityNotFoundException ex) {
+            showMessage(getString(R.string.share_no_app));
+        }
+    }
+
+    // Many file managers do not know the GPX type. Thus the picker shows all
+    // files, and the GPX reader refuses a file of a different type.
+    private void startImport() {
+        Intent open = new Intent(Intent.ACTION_OPEN_DOCUMENT)
+                .addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("*/*");
+        try {
+            startActivityForResult(open, REQUEST_IMPORT);
+        } catch (ActivityNotFoundException ex) {
+            showMessage(getString(R.string.import_no_picker));
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_IMPORT && resultCode == RESULT_OK
+                && data != null && data.getData() != null) {
+            readImport(data.getData());
+        }
+    }
+
+    // Reads and checks the file on the background thread.
+    private void readImport(Uri uri) {
+        files.execute(() -> {
+            int error;
+            TrackImport.Result result = null;
+            try (InputStream in = new LimitedInputStream(new BufferedInputStream(
+                    openImport(uri)), MAX_IMPORT_BYTES)) {
+                Track raw = GpxReader.read(in, importName(uri));
+                result = TrackImport.check(raw);
+                error = result.error == TrackImport.OK ? 0
+                        : result.error == TrackImport.NO_TIME
+                        ? R.string.import_error_time : R.string.import_error_points;
+            } catch (LimitedInputStream.TooLargeException ex) {
+                error = R.string.import_error_size;
+            } catch (IOException | RuntimeException ex) {
+                // The picker can give a URI that Retrace cannot read, for
+                // example after the user removed the file.
+                error = R.string.import_error_read;
+            }
+            final int message = error;
+            final TrackImport.Result checked = result;
+            runOnUiThread(() -> {
+                if (destroyed) {
+                    return;
+                }
+                if (message != 0) {
+                    showMessage(getString(message));
+                } else if (checked.profileKnown) {
+                    saveImport(checked.track);
+                } else {
+                    askImportProfile(checked);
+                }
+            });
+        });
+    }
+
+    private InputStream openImport(Uri uri) throws IOException {
+        InputStream in = getContentResolver().openInputStream(uri);
+        if (in == null) {
+            throw new IOException("no stream: " + uri);
+        }
+        return in;
+    }
+
+    // The file name without ".gpx", for a GPX file with no name element.
+    private String importName(Uri uri) {
+        String name = null;
+        try (Cursor c = getContentResolver().query(uri,
+                new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (c != null && c.moveToFirst()) {
+                name = c.getString(0);
+            }
+        } catch (RuntimeException ex) {
+            name = null;
+        }
+        if (name == null || name.isEmpty()) {
+            name = uri.getLastPathSegment();
+        }
+        if (name == null) {
+            return "";
+        }
+        return name.toLowerCase(java.util.Locale.ROOT).endsWith(".gpx")
+                ? name.substring(0, name.length() - 4) : name;
+    }
+
+    // The GPX file has no Retrace profile. The dialog shows the guess from
+    // the speed, and the user confirms it or selects a different profile.
+    private void askImportProfile(TrackImport.Result checked) {
+        Profile[] profiles = Profile.values();
+        String[] labels = new String[profiles.length];
+        for (int i = 0; i < profiles.length; i++) {
+            labels[i] = Labels.profile(this, profiles[i]);
+        }
+        final int[] selected = {checked.profile.ordinal()};
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.import_profile_title)
+                .setSingleChoiceItems(labels, selected[0], (d, which) -> selected[0] = which)
+                .setPositiveButton(android.R.string.ok, (d, w) -> saveImport(new Track(
+                        checked.track.name, profiles[selected[0]], checked.track.points)))
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void saveImport(Track track) {
+        files.execute(() -> {
+            String message;
+            boolean done = false;
+            try {
+                if (store.importTrack(track) == null) {
+                    message = getString(R.string.import_duplicate);
+                } else {
+                    message = getString(R.string.import_done, track.name);
+                    done = true;
+                }
+            } catch (IOException ex) {
+                message = getString(R.string.import_error_storage);
+            }
+            final String text = message;
+            final boolean imported = done;
+            runOnUiThread(() -> {
+                if (destroyed) {
+                    return;
+                }
+                if (imported) {
+                    Toast.makeText(this, text, Toast.LENGTH_LONG).show();
+                } else {
+                    showMessage(text);
+                }
+                loadTracks(false);
+            });
+        });
+    }
+
+    private void showMessage(String text) {
+        new AlertDialog.Builder(this)
+                .setMessage(text)
+                .setPositiveButton(android.R.string.ok, null)
+                .show();
+    }
+
     // A file task that can fail. The list loads again after the task.
     private interface FileTask {
         void run() throws IOException;
@@ -441,12 +628,17 @@ public final class MainActivity extends Activity {
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
+        menu.add(Menu.NONE, MENU_IMPORT, Menu.NONE, R.string.import_track);
         menu.add(Menu.NONE, MENU_PROBE, Menu.NONE, R.string.probe_button);
         return true;
     }
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == MENU_IMPORT) {
+            startImport();
+            return true;
+        }
         if (item.getItemId() == MENU_PROBE) {
             startActivity(new Intent(this, TileProbeActivity.class));
             return true;

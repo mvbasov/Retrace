@@ -93,7 +93,16 @@ The `core` package imports no Android package. Thus the tests run on the JVM.
 
 - Retrace saves GPX 1.1 files in the media directory, the same as OMN-Go: `/storage/emulated/0/Android/media/net.basov.retrace/tracks/`. This makes a backup easy.
 - The GPX `<type>` element holds the profile.
-- Share intents import and export a track (`ACTION_SEND`, and `ACTION_VIEW` for a `.gpx` file).
+- Export: the share intent (`ACTION_SEND`) sends the GPX file. Android 7 and newer refuse a `file://` URI, and AndroidX `FileProvider` is a library. Thus `TrackProvider` gives read access to the saved tracks. It is not exported. The share intent gives the permission for one URI.
+- Import: the menu opens the file picker of Android (`ACTION_OPEN_DOCUMENT`). `TrackImport` keeps each point with a time later than the point before it. A track with fewer than two such points is refused, because a reference track needs a time for each point.
+- A GPX file with no Retrace profile gets a guess from the median speed of its moving parts. The user confirms the profile. The limits of the guess:
+  - up to 8 km/h: walking
+  - up to 16 km/h: running
+  - up to 40 km/h: cycling
+  - above 40 km/h: driving
+- A file larger than 20 MB is refused.
+- A saved track with the same start time, profile and count of points is the same track. Retrace does not import it again.
+- An `ACTION_VIEW` filter for `.gpx` files is not added yet. Many file managers send a GPX file as `application/octet-stream`. A filter for that type puts Retrace into the list for each unknown file.
 - At the end of a trip, you save the current track as a new track. If the trip was faster, you can also replace the reference track.
 
 ### 5.3 Profiles

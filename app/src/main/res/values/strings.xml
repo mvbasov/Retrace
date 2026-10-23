@@ -18,6 +18,21 @@
     <string name="error_rename">Retrace cannot rename the track.</string>
     <string name="error_delete">Retrace cannot delete the track.</string>
 
+    <!-- Share and import -->
+    <string name="share">Share</string>
+    <string name="share_title">Share the track</string>
+    <string name="share_no_app">No application on this device can receive the track.</string>
+    <string name="import_track">Import a GPX file</string>
+    <string name="import_no_picker">No application on this device can select a file.</string>
+    <string name="import_profile_title">Select the profile of the track</string>
+    <string name="import_done">Retrace imported the track \"%1$s\".</string>
+    <string name="import_duplicate">The list already has this track.</string>
+    <string name="import_error_read">Retrace cannot read this file as a GPX file.</string>
+    <string name="import_error_points">The file has fewer than two track points.</string>
+    <string name="import_error_time">The points of this track have no time. A reference track needs a time for each point.</string>
+    <string name="import_error_size">The file is too large. The limit is 20 MB.</string>
+    <string name="import_error_storage">Retrace cannot write the track file.</string>
+
     <!-- The trip screen and the notification -->
     <string name="start_trip_on_route">Start a trip on this route</string>
     <string name="status_open_trip">Push here to show the trip.</string>
