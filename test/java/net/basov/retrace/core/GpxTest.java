@@ -28,6 +28,8 @@ public final class GpxTest {
         aFileWithOnlyARoute();
         aBadFileIsAnError();
         anExternalEntityIsNotRead();
+        aWayKeepsItsMembers();
+        anElementWithTheSameNameInADifferentNamespaceIsNotAMember();
 
         if (failures > 0) {
             System.out.println("GpxTest: " + failures + " check(s) failed");
@@ -141,6 +143,36 @@ public final class GpxTest {
         } finally {
             Files.delete(secret);
         }
+    }
+
+    // A rebuild of a way needs the file names of its tracks. A rename writes
+    // the file again, thus the members must also survive withName.
+    private static void aWayKeepsItsMembers() throws IOException {
+        List<TrackPoint> points = new ArrayList<>();
+        points.add(new TrackPoint(45.0, 10.0, 1792753500000L, Double.NaN, Double.NaN));
+        points.add(new TrackPoint(45.001, 10.0, 1792753560000L, Double.NaN, Double.NaN));
+        List<String> members = new ArrayList<>();
+        members.add("20261023-140509-walking.gpx");
+        members.add("a & b.gpx");
+        Track way = new Track("Way", Profile.WALKING, points, members);
+        Track back = roundTrip(way.withName("Renamed way"));
+        check("way: is way", true, back.isWay());
+        check("way: members", members, back.members);
+        check("way: name", "Renamed way", back.name);
+        check("plain track: no members", false,
+                roundTrip(new Track("t", Profile.WALKING, points)).isWay());
+    }
+
+    // Another application can have its own "way" and "track" elements in
+    // its extensions. Only the namespace of Retrace makes a member.
+    private static void anElementWithTheSameNameInADifferentNamespaceIsNotAMember()
+            throws IOException {
+        String gpx = "<?xml version=\"1.0\"?>\n"
+                + "<gpx version=\"1.1\" xmlns=\"" + GpxWriter.NAMESPACE + "\">"
+                + "<metadata><extensions><x:way xmlns:x=\"urn:other\"><x:track>f.gpx</x:track>"
+                + "</x:way></extensions></metadata>"
+                + "<trk><trkseg><trkpt lat=\"45\" lon=\"10\"/></trkseg></trk></gpx>";
+        check("other namespace", false, GpxReader.read(stream(gpx), "f").isWay());
     }
 
     private static Track roundTrip(Track track) throws IOException {

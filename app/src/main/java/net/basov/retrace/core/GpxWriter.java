@@ -16,6 +16,10 @@ public final class GpxWriter {
 
     public static final String NAMESPACE = "http://www.topografix.com/GPX/1/1";
 
+    // The namespace of the extension for a way. Other applications ignore
+    // it, and read a way as a plain track.
+    public static final String WAY_NAMESPACE = "https://github.com/mvbasov/Retrace/gpx/1";
+
     // Seven decimals of a degree are about one centimeter.
     private static final int COORDINATE_DECIMALS = 7;
 
@@ -31,6 +35,15 @@ public final class GpxWriter {
         long start = track.startTimeMs();
         if (start != TrackPoint.NO_TIME) {
             out.write("    <time>" + TimeText.isoUtc(start) + "</time>\n");
+        }
+        if (track.isWay()) {
+            out.write("    <extensions>\n");
+            out.write("      <retrace:way xmlns:retrace=\"" + WAY_NAMESPACE + "\">\n");
+            for (String member : track.members) {
+                out.write("        <retrace:track>" + escape(member) + "</retrace:track>\n");
+            }
+            out.write("      </retrace:way>\n");
+            out.write("    </extensions>\n");
         }
         out.write("  </metadata>\n");
 

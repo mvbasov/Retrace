@@ -23,7 +23,8 @@ import org.xml.sax.helpers.DefaultHandler;
 //
 // The reader accepts GPX 1.0 and GPX 1.1 from other applications. It reads
 // the points of each track segment. A file with no track gives the points of
-// its routes. It ignores waypoints and each unknown element.
+// its routes. It ignores waypoints and each unknown element. It reads the
+// members of a way from the extension of GpxWriter.
 public final class GpxReader {
 
     private GpxReader() {
@@ -41,7 +42,7 @@ public final class GpxReader {
         List<TrackPoint> points = handler.trackPoints.isEmpty()
                 ? handler.routePoints : handler.trackPoints;
         String name = firstNonEmpty(handler.trackName, handler.metadataName, fallbackName);
-        return new Track(name, Profile.fromId(handler.trackType), points);
+        return new Track(name, Profile.fromId(handler.trackType), points, handler.members);
     }
 
     private static SAXParserFactory newFactory() {
@@ -81,6 +82,7 @@ public final class GpxReader {
         String metadataName;
         String trackName;
         String trackType;
+        final List<String> members = new ArrayList<>();
 
         private final List<String> path = new ArrayList<>();
         private final StringBuilder text = new StringBuilder();
@@ -132,6 +134,9 @@ public final class GpxReader {
                 trackName = value;
             } else if (name.equals("type") && parent.equals("trk") && trackType == null) {
                 trackType = value;
+            } else if (name.equals("track") && parent.equals("way")
+                    && GpxWriter.WAY_NAMESPACE.equals(uri) && !value.isEmpty()) {
+                members.add(value);
             }
 
             if (!path.isEmpty()) {

@@ -210,6 +210,28 @@ The OpenStreetMap tile usage policy for `tile.openstreetmap.org` has these rules
   - Later: the limits of each profile, the tile URL, the size of the tile cache and the voice messages.
 - Alerts: vibration and optional `TextToSpeech` messages. Android has `TextToSpeech` in the framework.
 
+### 5.8 Ways
+
+A way is the mean track of some tracks on one route. It has the mean position and the mean elapsed time of its tracks at each place. The GPS errors of different trips are not related. Thus a way is nearer to the real route than one track, and its time is a typical trip on the route.
+
+- `WayBuilder` makes the way. The banner comment of `WayBuilder.java` gives each step and the reason for it.
+- A way is a GPX file in the track directory. The `<metadata>` element holds an extension with the file names of its tracks. Other applications ignore the extension and read a way as a plain track.
+- A way works as a track: on the map, as a reference track, in a replay and in a share intent.
+- The way does not use these tracks:
+  - a track that starts far from the start
+  - a track that stops before the finish
+  - a track with more than 10 % of the route off the route
+- The time of the way starts at the start of its newest track.
+
+Results of 100 seeds of five invented walks with a mean speed of 1.4 m/s. One walk waits two minutes at the start:
+
+| GPS noise | Error of the way / error of one track | Error of the time of the way (rms) |
+| --- | --- | --- |
+| 4 m | 0.44 to 0.51 | 3 s |
+| 8 m | 0.44 to 0.51 | 6 s |
+
+The ratio 0.44 agrees with 1 / √5 for five tracks.
+
 ## 6. Permissions
 
 - `ACCESS_FINE_LOCATION` and `ACCESS_COARSE_LOCATION`

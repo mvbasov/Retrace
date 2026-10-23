@@ -10,6 +10,9 @@ import java.util.List;
 //
 // The constructor copies the list. Thus a track does not change after the
 // constructor, and two threads can read it.
+//
+// A way is a track with members: the file names of the tracks that
+// WayBuilder used for it. A recorded track has no members.
 public final class Track {
 
     public final String name;
@@ -20,18 +23,35 @@ public final class Track {
 
     public final List<TrackPoint> points;
 
+    // The file names of the tracks of a way. Empty for a recorded track.
+    public final List<String> members;
+
     private final double distanceM;
 
     public Track(String name, Profile profile, List<TrackPoint> points) {
+        this(name, profile, points, new ArrayList<String>());
+    }
+
+    public Track(String name, Profile profile, List<TrackPoint> points, List<String> members) {
         this.name = name == null ? "" : name;
         this.profile = profile;
         this.points = Collections.unmodifiableList(new ArrayList<>(points));
+        this.members = Collections.unmodifiableList(new ArrayList<>(members));
         this.distanceM = sumDistance(this.points);
+    }
+
+    public boolean isWay() {
+        return !members.isEmpty();
     }
 
     // Returns the same points with a different name.
     public Track withName(String newName) {
-        return new Track(newName, profile, points);
+        return new Track(newName, profile, points, members);
+    }
+
+    // Returns the same points with different members.
+    public Track withMembers(List<String> newMembers) {
+        return new Track(name, profile, points, newMembers);
     }
 
     // The length of the track along its points, in meters.

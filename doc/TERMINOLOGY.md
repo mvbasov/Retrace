@@ -26,6 +26,8 @@ Use one name for one thing. If a term is not in the table, use the plain word. A
 | ahead, behind | You are earlier or later than the reference track at the same distance along the route. Use these words for time only. | faster, slower (for time) |
 | faster, slower | Your speed is higher or lower than the speed of the reference track at the same place. Use these words for speed only. | ahead, behind (for speed) |
 | ghost | The position on the reference track at your elapsed time. | shadow, pacer |
+| way | The mean track of some tracks on one route. Retrace saves it as a GPX file and uses it as a track. | average track, route template |
+| member | A track that a way uses. | source track, child |
 | replay | A trip with the points of a saved track and not the fixes of the GPS. | simulation, playback |
 | trip screen | The screen with the comparison and the map during a trip. | run screen, live view, dashboard |
 | elapsed time | The time since the start of the trip. | duration, run time |
