@@ -1,2 +1,21 @@
-rootProject.name = "Retrace"
+// The repositories of the build plugins. The Android Gradle plugin comes
+// from the Google repository.
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+// The repositories of the project. A module cannot add a repository of its
+// own. Thus the list stays in one place.
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = 'Retrace'
 include ':app'

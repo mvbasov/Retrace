@@ -8,6 +8,9 @@
 # The script compiles the package net.basov.retrace.core together with the
 # tests. That package imports no Android package. An Android import there
 # stops the compilation, thus this script also checks that rule.
+#
+# The option --release 17 agrees with the language level of app/build.gradle.
+# A newer JDK then rejects a Java API that Java 17 does not have.
 set -e
 
 cd "$(dirname "$0")/.."
@@ -16,7 +19,7 @@ OUT=$(mktemp -d)
 trap 'rm -rf "$OUT"' EXIT
 
 find app/src/main/java/net/basov/retrace/core test/java -name '*.java' > "$OUT/sources.txt"
-javac -encoding UTF-8 -Xlint:all -Werror -d "$OUT/classes" @"$OUT/sources.txt"
+javac --release 17 -encoding UTF-8 -Xlint:all -Werror -d "$OUT/classes" @"$OUT/sources.txt"
 
 for file in $(cd test/java && find . -name '*Test.java' | sort); do
     class=$(echo "$file" | sed 's|^\./||; s|\.java$||; s|/|.|g')

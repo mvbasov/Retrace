@@ -28,7 +28,8 @@ Retrace is an Android application. It records a trip as a GPS track. On a later 
 | Language | Java with the Android framework API only |
 | UI | `android.app.Activity` with `android:Theme.Material` (API 21 and newer) |
 | Permissions | `Activity.requestPermissions()` (API 23 and newer) |
-| minSdk and targetSdk | 23 and 34 |
+| minSdk, targetSdk and compileSdk | 23, 34 and 36 |
+| Java language level | 17 |
 | Location | `LocationManager.GPS_PROVIDER` in a foreground service |
 | Map | A Canvas view of its own, with its own tile loader and tile cache |
 | Network | `HttpURLConnection` |
@@ -36,16 +37,18 @@ Retrace is an Android application. It records a trip as a GPS track. On a later 
 | Native code | None. Thus one APK works on each ABI. |
 | APK size target | Less than 150 KB with R8 and resource shrinking |
 
+`targetSdk` 35 and higher force the edge-to-edge layout. Retrace changes `targetSdk` after the screens handle the window insets.
+
 Newer APIs go behind a `Build.VERSION.SDK_INT` check. Examples: notification channels (API 26), `POST_NOTIFICATIONS` (API 33) and the `location` type of a foreground service (API 34).
 
 ## 3. Docker build
 
 The build follows the pattern of OMN-Go.
 
-- `Dockerfile.base` makes the toolchain image. It holds Debian, OpenJDK 17, the Android command-line tools, one SDK platform, one build-tools package and Gradle. It holds no Go and no NDK.
+- `Dockerfile.base` makes the toolchain image. It holds Debian trixie, OpenJDK 21, the Android command-line tools, SDK platform 36, build-tools 36 and Gradle 9. It holds no Go and no NDK.
 - `Dockerfile` runs the test gate. Then it runs `gradle assembleRelease`, and the signing configuration signs the APK.
 - `local/build.sh` builds the two images and copies the APK to `./output-binaries/`.
-- Gradle uses the Android Gradle plugin and **no dependency**. The release build sets `minifyEnabled true` and `shrinkResources true`.
+- Gradle uses the Android Gradle plugin 9 and **no dependency**. The release build sets `minifyEnabled true` and `shrinkResources true`.
 - Signing: the first build makes a keystore with the passwords from `.env`. A CI build can mount a keystore and give the passwords in environment variables.
 - The tests use no JUnit. `test/run.sh` compiles and runs them with `javac` and `java` in the same image.
 

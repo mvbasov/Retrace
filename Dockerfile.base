@@ -7,14 +7,18 @@
 # The image holds the JDK, the Android command-line tools, one SDK platform,
 # one build-tools package and Gradle. Retrace has no native code. Thus the
 # image holds no NDK.
-FROM debian:bookworm-slim
+#
+# The JDK runs Gradle and javac. The language level of the source stays at
+# 17, see app/build.gradle. The Debian trixie release has a package for
+# JDK 21.
+FROM debian:trixie-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
-    openjdk-17-jdk-headless ca-certificates wget unzip
+    openjdk-21-jdk-headless ca-certificates wget unzip
 
 # The Android command-line tools give sdkmanager.
 RUN --mount=type=cache,target=/tmp/dl,sharing=locked \
@@ -29,14 +33,15 @@ ENV PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
 # The platform agrees with compileSdk in app/build.gradle.
 # The build-tools package is the one that the Android Gradle plugin asks for.
 RUN yes | sdkmanager --licenses > /dev/null && \
-    sdkmanager "platforms;android-34" "build-tools;34.0.0"
+    sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
 # Gradle runs from this image. The repository holds no Gradle wrapper.
+# The plugin version in build.gradle and this Gradle version change together.
 RUN --mount=type=cache,target=/tmp/dl,sharing=locked \
-    wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip -O /tmp/dl/gradle.zip && \
+    wget -q https://services.gradle.org/distributions/gradle-9.6.1-bin.zip -O /tmp/dl/gradle.zip && \
     mkdir -p /opt/gradle && \
     unzip -q /tmp/dl/gradle.zip -d /opt/gradle
 
-ENV PATH=$PATH:/opt/gradle/gradle-8.5/bin
+ENV PATH=$PATH:/opt/gradle/gradle-9.6.1/bin
 
 WORKDIR /app

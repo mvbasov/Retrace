@@ -14,12 +14,13 @@ Do not remove a constraint without an instruction from the maintainer.
 
 1. **No AndroidX. No AppCompat. No other library.** Use the Android framework API only. The `dependencies` block of `app/build.gradle` stays empty.
 2. **The minimum is Android 6.0 (API 23).** Put each call above API 23 behind a `Build.VERSION.SDK_INT` check.
-3. **Use only the Java library that Android 6 has.** Do not use `java.time`, `java.util.stream`, `java.util.Optional` or `java.util.function`. Android adds them at API 24 or 26. Do not use `String.join`, `List.of`, `Map.of` or `Map.getOrDefault`. Lambdas are permitted, because D8 converts them.
-4. **Keep the APK small.** Do not add a PNG image. Use a vector drawable. Build a small screen in Java, or use a small layout file.
-5. **The package `net.basov.retrace.core` imports no Android package.** It holds the logic that the tests run on the JVM. `test/run.sh` compiles it with plain `javac`. Thus an Android import there stops the tests.
-6. **Obey the OpenStreetMap tile usage policy.** Send a User-Agent that names Retrace. Obey the cache headers. Do not download an area in advance. Show the attribution on the map. See section 5.6 of `doc/PLAN.md`.
-7. **Keep the storage in the media directory.** Tracks go to `/storage/emulated/0/Android/media/net.basov.retrace/`. This directory needs no storage permission.
-8. **Do network work and file work off the UI thread.** A background thread gives the result to the UI with `runOnUiThread` or a `Handler`.
+3. **The Java language level is 17.** `app/build.gradle` sets `sourceCompatibility` and `targetCompatibility` to 17. The JDK of the build image can be newer.
+4. **Use only the Java library that Android 6 has.** Do not use `java.time`, `java.util.stream`, `java.util.Optional` or `java.util.function`. Android adds them at API 24 or 26. Do not use `String.join`, `List.of`, `Map.of` or `Map.getOrDefault`. Lambdas are permitted, because D8 converts them.
+5. **Keep the APK small.** Do not add a PNG image. Use a vector drawable. Build a small screen in Java, or use a small layout file.
+6. **The package `net.basov.retrace.core` imports no Android package.** It holds the logic that the tests run on the JVM. `test/run.sh` compiles it with plain `javac`. Thus an Android import there stops the tests.
+7. **Obey the OpenStreetMap tile usage policy.** Send a User-Agent that names Retrace. Obey the cache headers. Do not download an area in advance. Show the attribution on the map. See section 5.6 of `doc/PLAN.md`.
+8. **Keep the storage in the media directory.** Tracks go to `/storage/emulated/0/Android/media/net.basov.retrace/`. This directory needs no storage permission.
+9. **Do network work and file work off the UI thread.** A background thread gives the result to the UI with `runOnUiThread` or a `Handler`.
 
 ---
 
@@ -92,7 +93,7 @@ feat(track): Record a track in a foreground service. v26.10.2
 ## 6. Tests
 
 - The tests use no JUnit and no Gradle. Each test class has a `main` method and its own `check` helper. A failed check sets the exit code to 1. Thus the project needs no test dependency.
-- `test/run.sh` compiles `app/src/main/java/net/basov/retrace/core/` and `test/java/` with `javac -Xlint:all -Werror`. Then it runs each class with a name that ends in `Test`.
+- `test/run.sh` compiles `app/src/main/java/net/basov/retrace/core/` and `test/java/` with `javac --release 17 -Xlint:all -Werror`. Then it runs each class with a name that ends in `Test`.
 - The `test` stage of `Dockerfile` runs `test/run.sh`. A failed test stops the build, and no APK comes out. To run the gate alone, use `docker buildx build --target test .`.
 - `--build-arg SKIP_TESTS=1` skips the gate. Use it only for an emergency build.
 - **Put the logic into `core`, and test it there.** A test that runs the code is better than a test that reads the source text.
@@ -105,10 +106,14 @@ feat(track): Record a track in a foreground service. v26.10.2
 
 - The Docker build is the reference build. The host needs no Java, no Android Studio and no Gradle.
 - `Dockerfile.base` makes the toolchain image `retrace-base:latest`. Docker keeps it in the cache.
-- `Dockerfile` has two stages. `test` runs the gate. `project_builder` runs `gradle assembleRelease` and copies the APK to `/app/bin/`.
+- The toolchain: Debian trixie, JDK 21, Gradle 9, the Android Gradle plugin 9, SDK platform 36 and build-tools 36.
+- The version of the Android Gradle plugin is in `build.gradle`. The version of Gradle is in `Dockerfile.base`. Change the two together.
+- The Gradle files use the `name = value` form for each property. Do not use the old `name value` form.
+- `Dockerfile` has two stages. `test` runs the gate. `project_builder` runs `gradle assembleRelease` and copies the APK to `/app/bin/`. It reads the version from `app/build.gradle` for the name of the APK file.
+- The build does not use the variant API of the Android Gradle plugin. The plugin removes the old variant API.
 - `local/build.sh` builds both images and copies the APK to `output-binaries/`.
 - The first run of `local/build.sh` makes `app/retrace.keystore` with the passwords from `.env`. The keytool of the toolchain image makes it. Without `.env`, the defaults of `.env.example` apply.
-- The release build uses R8 (`minifyEnabled true`) and `shrinkResources true`.
+- The release build uses R8 (`minifyEnabled = true`) and `shrinkResources = true`.
 - **Ask the maintainer before you add a build step, a tool or a dependency.**
 
 ---

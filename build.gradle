@@ -1,18 +1,6 @@
 // The Android Gradle plugin is the only build dependency.
 // The application itself has no dependency. See app/build.gradle.
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
-    }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:8.2.2'
-    }
-}
-
-allprojects {
-    repositories {
-        google()
-        mavenCentral()
-    }
+// The plugin version and the Gradle version in Dockerfile.base change together.
+plugins {
+    id 'com.android.application' version '9.4.0' apply false
 }

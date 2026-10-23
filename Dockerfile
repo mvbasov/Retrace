@@ -38,7 +38,12 @@ COPY --from=test /gate-passed /tmp/gate-passed
 COPY . .
 
 # The cache mount keeps the Gradle downloads between two builds.
+# The name of the APK file comes from the appVersion line of app/build.gradle.
+# If the signature is missing, Gradle writes app-release-unsigned.apk. The
+# copy then fails, and the build stops.
 RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
     gradle --no-daemon assembleRelease && \
+    VERSION=$(awk -F"'" '/^def appVersion/ {print $2}' app/build.gradle) && \
+    test -n "$VERSION" && \
     mkdir -p bin && \
-    cp app/build/outputs/apk/release/*.apk bin/
+    cp app/build/outputs/apk/release/app-release.apk "bin/retrace-v${VERSION}-release.apk"
