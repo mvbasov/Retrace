@@ -86,7 +86,7 @@ feat(track): Record a track in a foreground service. v26.10.2
 - Types: `feat`, `fix`, `build`, `refactor`, `test`, `doc`, `chore`, `release`.
 - Scopes: `android`, `build`, `core`, `track`, `match`, `map`, `ui`, `service`, `test`, `doc`.
 - Write the subject line and each bullet in Simplified Technical English. Use the terms of `doc/TERMINOLOGY.md`.
-- `master` is the working branch.
+- `main` is the working branch.
 
 ---
 
@@ -112,7 +112,8 @@ feat(track): Record a track in a foreground service. v26.10.2
 - The Gradle files use the `name = value` form for each property. Do not use the old `name value` form.
 - `Dockerfile` has two stages. `test` runs the gate. `project_builder` runs `gradle assembleRelease` and copies the APK to `/app/bin/`. It reads the version from `app/build.gradle` for the name of the APK file.
 - The build does not use the variant API of the Android Gradle plugin. The plugin removes the old variant API.
-- `local/build.sh` builds both images and copies the APK to `output-binaries/`.
+- `local/build.sh` builds both images and copies the APK to `output-binaries/`. It keeps the full output of each build in `local/logs/`. Git ignores that directory.
+- The toolchain image holds each SDK package that the build needs. If Gradle installs a package during the build, the build writes `output-binaries/sdk-downloads.txt`. Then add that package to `Dockerfile.base`.
 - The first run of `local/build.sh` makes `app/retrace.keystore` with the passwords from `.env`. The keytool of the toolchain image makes it. Without `.env`, the defaults of `.env.example` apply.
 - The release build uses R8 (`minifyEnabled = true`) and `shrinkResources = true`.
 - **Ask the maintainer before you add a build step, a tool or a dependency.**
@@ -146,3 +147,4 @@ Check your own text before you give a patch. A long sentence and a banned word a
 6. **Never commit. Never push. Never make a tag.** The maintainer applies each change.
 7. Give each change as a unified diff for `git apply`.
 8. Give a commit message file together with the patch. Use the format of section 5.
+9. Before each step, compare `main` on GitHub with the last patch. If the last patch is not on GitHub, remind the maintainer to push it.

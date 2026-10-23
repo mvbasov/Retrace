@@ -41,9 +41,23 @@ COPY . .
 # The name of the APK file comes from the appVersion line of app/build.gradle.
 # If the signature is missing, Gradle writes app-release-unsigned.apk. The
 # copy then fails, and the build stops.
+#
+# The Android Gradle plugin installs a missing SDK package by itself. That
+# package goes into this layer only, thus each build downloads it again.
+# The two lists of package.xml files find such a package. The build then
+# writes its path to bin/sdk-downloads.txt. Add the package to
+# Dockerfile.base, and the download stops.
 RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
+    find "$ANDROID_HOME" -name package.xml | sort > /tmp/sdk-before.txt && \
     gradle --no-daemon assembleRelease && \
+    find "$ANDROID_HOME" -name package.xml | sort > /tmp/sdk-after.txt && \
+    mkdir -p bin && \
+    comm -13 /tmp/sdk-before.txt /tmp/sdk-after.txt > /tmp/sdk-downloads.txt && \
+    if [ -s /tmp/sdk-downloads.txt ]; then \
+        echo "WARNING: Gradle installed these SDK packages:"; \
+        cat /tmp/sdk-downloads.txt; \
+        cp /tmp/sdk-downloads.txt bin/sdk-downloads.txt; \
+    fi && \
     VERSION=$(awk -F"'" '/^def appVersion/ {print $2}' app/build.gradle) && \
     test -n "$VERSION" && \
-    mkdir -p bin && \
     cp app/build/outputs/apk/release/app-release.apk "bin/retrace-v${VERSION}-release.apk"

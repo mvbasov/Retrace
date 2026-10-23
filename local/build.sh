@@ -4,9 +4,18 @@
 # The host needs Docker with BuildKit only. It needs no Java, no Gradle and
 # no Android SDK. Optional: the .env file gives the keystore passwords. See
 # .env.example.
+#
+# The script keeps the full output of each build in local/logs/. The output
+# of the terminal is often too long to read back.
 set -e
+set -o pipefail
 
 cd "$(dirname "$0")/.."
+
+mkdir -p local/logs
+LOG="local/logs/build-$(date +%Y%m%d-%H%M%S).log"
+exec > >(tee "$LOG") 2>&1
+echo "The log of this build is $LOG."
 
 # Read the .env file. Each line that is not empty and not a comment becomes
 # one build argument.
@@ -29,7 +38,7 @@ KEY_ALIAS="${KEY_ALIAS:-retrace}"
 KEY_PASSWORD="${KEY_PASSWORD:-retrace123}"
 
 echo "-------- STAGE 1: toolchain image -------"
-docker buildx build -f Dockerfile.base -t retrace-base:latest --load .
+docker buildx build --progress=plain -f Dockerfile.base -t retrace-base:latest --load .
 
 # The first build makes the release keystore. The keytool of the toolchain
 # image makes it, thus the host needs no JDK. Keep a copy of this file.
@@ -51,7 +60,7 @@ if [ ! -f app/retrace.keystore ]; then
 fi
 
 echo "-------- STAGE 2: test gate and APK -------"
-docker buildx build -t retrace-builder:latest --load "${BUILD_ARGS[@]}" .
+docker buildx build --progress=plain -t retrace-builder:latest --load "${BUILD_ARGS[@]}" .
 
 # Copy the APK out of the image into an empty directory.
 rm -rf ./output-binaries/
@@ -63,3 +72,7 @@ docker rm retrace-extract > /dev/null
 
 ls -l ./output-binaries/
 echo "The APK is in ./output-binaries/."
+if [ -f ./output-binaries/sdk-downloads.txt ]; then
+    echo "WARNING: Gradle downloaded SDK packages during the build."
+    echo "Add them to Dockerfile.base. The list is in output-binaries/sdk-downloads.txt."
+fi
