@@ -293,7 +293,13 @@ public final class MainActivity extends ThemedActivity {
                 .show();
     }
 
+    // The offer of a way comes here if the trip stopped from the
+    // notification.
     private void showSnapshot() {
+        WayUpdater.Offer offer = TrackService.takeWayOffer();
+        if (offer != null) {
+            WayDialogs.showOffer(this, files, offer, () -> loadTracks(false));
+        }
         RecordingSnapshot s = TrackService.snapshot();
         startStopButton.setText(s.recording ? R.string.stop_recording : R.string.start_recording);
         profileSpinner.setEnabled(!s.recording);

@@ -266,8 +266,13 @@ public final class RunActivity extends ThemedActivity {
                 .show();
     }
 
-    // Shows one snapshot: the panel, the new points and the markers.
+    // Shows one snapshot: the panel, the new points and the markers. After
+    // the stop, the offer of a way can come.
     private void show(RecordingSnapshot s) {
+        WayUpdater.Offer offer = TrackService.takeWayOffer();
+        if (offer != null) {
+            WayDialogs.showOffer(this, files, offer, () -> { });
+        }
         if (s.recording != shownRecording || s.replaySpeed != shownSpeed) {
             shownRecording = s.recording;
             shownSpeed = s.replaySpeed;

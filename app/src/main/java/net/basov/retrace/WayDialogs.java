@@ -205,6 +205,45 @@ final class WayDialogs {
         });
     }
 
+    // Shows the offer of TrackService: the question, or the result of an
+    // automatic addition.
+    static void showOffer(Activity activity, ExecutorService files, WayUpdater.Offer offer,
+                          Runnable done) {
+        if (offer.result != WayUpdater.QUESTION) {
+            showResult(activity, offer, offer.result);
+            done.run();
+            return;
+        }
+        new AlertDialog.Builder(activity)
+                .setMessage(activity.getString(R.string.way_offer, offer.wayName))
+                .setPositiveButton(R.string.way_add, (d, w) -> {
+                    TrackStore store = new TrackStore(activity);
+                    files.execute(() -> {
+                        int result = WayUpdater.add(store, new File(offer.wayPath),
+                                new File(offer.trackPath));
+                        activity.runOnUiThread(() -> {
+                            if (!activity.isFinishing() && !activity.isDestroyed()) {
+                                showResult(activity, offer, result);
+                                done.run();
+                            }
+                        });
+                    });
+                })
+                .setNegativeButton(R.string.way_skip, null)
+                .show();
+    }
+
+    private static void showResult(Activity activity, WayUpdater.Offer offer, int result) {
+        if (result == WayUpdater.ADDED) {
+            Toast.makeText(activity, activity.getString(R.string.way_added, offer.wayName),
+                    Toast.LENGTH_LONG).show();
+        } else if (result == WayUpdater.NOT_USED) {
+            message(activity, activity.getString(R.string.way_not_used, offer.wayName));
+        } else {
+            message(activity, activity.getString(R.string.way_update_error, offer.wayName));
+        }
+    }
+
     private static void message(Activity activity, String text) {
         new AlertDialog.Builder(activity)
                 .setMessage(text)

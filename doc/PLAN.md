@@ -203,7 +203,7 @@ The OpenStreetMap tile usage policy for `tile.openstreetmap.org` has these rules
   - A long push on a track starts a trip on its route. A push on the notification, or on the status line of the list, opens the trip screen.
   - At the finish, the device vibrates. The recording continues until you push Stop.
   - A line above the panel shows the reference track and how the trip got it: temporary, selected, no saved track, or no comparison. The menu changes the reference track during the trip.
-- **SettingsActivity**: the vibration at the finish, and the color theme.
+- **SettingsActivity**: the vibration at the finish, the color theme, and the addition of a finished trip to its way.
   - The color theme is light, dark, or the same as the system. Android has the night mode of the system from Android 10. On an older device, the same as the system is light.
   - `ThemedActivity` gives the light and the dark theme. It overrides the night mode of the configuration of each screen. Thus the theme and the colors of `values-night/` follow the setting.
   - The map tiles stay light in the dark theme.
@@ -225,6 +225,11 @@ A way is the mean track of some tracks on one route. It has the mean position an
 - The menu of a track has **Make a way from this route**. The dialog shows the tracks of the same route with a checkbox each. Such a track has the same profile and a length of 70 % to 140 % of the base. Its start and its finish are near the start and the finish of the base.
 - The menu of a way has **Change the tracks of the way**. Retrace then builds the way again in its file.
 - A way is never a member of a way. The removal of a member track does not change the way.
+- A trip with a way as the reference track can join the way after the finish. The setting **Add a finished trip to its way** has three values:
+  - **Ask each time**: after the stop, the visible screen asks. This is the default.
+  - **Automatically**: TrackService builds the way again when it saves the track.
+  - **Never**: the way does not change.
+- The trip must reach the finish. If `WayBuilder` does not use the new track, the way stays as it was.
 
 Results of 100 seeds of five invented walks with a mean speed of 1.4 m/s. One walk waits two minutes at the start:
 

@@ -28,6 +28,12 @@
     <string name="way_select_two">Select two tracks or more.</string>
     <string name="way_failed">These tracks do not follow one route. Retrace cannot make a way from them.</string>
     <string name="way_done">The way has %1$d tracks.</string>
+    <string name="way_offer">The trip reached the finish of the way \"%1$s\". Add this trip to the way?</string>
+    <string name="way_add">Add</string>
+    <string name="way_skip">Do not add</string>
+    <string name="way_added">Retrace added the trip to the way \"%1$s\".</string>
+    <string name="way_not_used">The trip does not follow the route of the way \"%1$s\". Retrace did not add it.</string>
+    <string name="way_update_error">Retrace cannot change the way \"%1$s\".</string>
     <string name="way_rejected">Retrace did not use %1$d of the selected tracks. They do not follow the route of the way.</string>
 
     <!-- Share and import -->
@@ -123,6 +129,10 @@
     <string name="theme_auto">Same as the system</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
+    <string name="settings_way">Add a finished trip to its way</string>
+    <string name="way_update_ask">Ask each time</string>
+    <string name="way_update_automatic">Automatically</string>
+    <string name="way_update_never">Never</string>
 
     <string name="version">Version %1$s</string>
     <string name="about">About Retrace</string>

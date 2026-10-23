@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.io.Writer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import net.basov.retrace.core.DeltaSmoother;
 import net.basov.retrace.core.MatchResult;
@@ -66,6 +67,10 @@ import net.basov.retrace.core.TrackPoint;
 // does not use the GPS, writes no log file and saves no track. It does not
 // use the foreground state, because it needs no location permission. Thus
 // Android can stop a replay soon after the user leaves Retrace.
+//
+// A trip with a way as the reference track can join the way after the
+// finish. See WayUpdater. The service keeps one offer, and the visible
+// screen takes it with takeWayOffer().
 //
 // One worker thread does all the work: the GPS fixes, the filter, the
 // matcher and the log file. Thus the fields of the recording need no lock.
@@ -118,6 +123,14 @@ public final class TrackService extends Service {
     // worker thread adds them. The activity reads a copy.
     private static final List<TrackPoint> POINTS = new ArrayList<>();
 
+    // The last finished trip that can join its way, or null.
+    private static final AtomicReference<WayUpdater.Offer> WAY_OFFER = new AtomicReference<>();
+
+    // Returns the offer once. The next call returns null.
+    static WayUpdater.Offer takeWayOffer() {
+        return WAY_OFFER.getAndSet(null);
+    }
+
     static RecordingSnapshot snapshot() {
         return snapshot;
     }
@@ -154,6 +167,8 @@ public final class TrackService extends Service {
     private int error = RecordingSnapshot.ERROR_NONE;
 
     private String referencePath;
+    // The name of the reference track if it is a way, or null.
+    private String referenceWayName;
     private int selection = RecordingSnapshot.SELECTION_OFF;
     private ReferenceSelector selector;
     private TrackMatcher matcher;
@@ -393,6 +408,7 @@ public final class TrackService extends Service {
     // Worker thread. Removes the reference track and the comparison.
     private void resetComparison(Profile p) {
         referencePath = null;
+        referenceWayName = null;
         selection = RecordingSnapshot.SELECTION_OFF;
         selector = null;
         matcher = null;
@@ -411,6 +427,7 @@ public final class TrackService extends Service {
             if (reference.points.size() >= 2) {
                 matcher = new TrackMatcher(reference, profile);
                 referencePath = path;
+                referenceWayName = reference.isWay() ? reference.name : null;
                 selection = RecordingSnapshot.SELECTION_MANUAL;
             }
         } catch (IOException | IllegalArgumentException e) {
@@ -546,6 +563,8 @@ public final class TrackService extends Service {
         String path = selector.current().id;
         if (!path.equals(referencePath)) {
             referencePath = path;
+            Track candidate = selector.current().track;
+            referenceWayName = candidate.isWay() ? candidate.name : null;
             match = null;
             smoother.reset();
             smoothedDeltaMs = MatchResult.UNKNOWN;
@@ -596,7 +615,11 @@ public final class TrackService extends Service {
                 locationManager.removeUpdates(listener);
                 closeLog();
                 try {
-                    saved = store.saveLog() != null;
+                    File savedFile = store.saveLog();
+                    saved = savedFile != null;
+                    if (saved && referenceWayName != null && finishSignaled) {
+                        offerWay(savedFile);
+                    }
                 } catch (IOException e) {
                     error = RecordingSnapshot.ERROR_STORAGE;
                 }
@@ -611,6 +634,21 @@ public final class TrackService extends Service {
             leaveForeground();
             stopSelf();
         }
+    }
+
+    // Worker thread. The trip reached the finish of a way. The setting tells
+    // if the trip joins the way now, after a question, or never.
+    private void offerWay(File savedFile) {
+        int mode = AppSettings.wayUpdate(this);
+        if (mode == AppSettings.WAY_NEVER) {
+            return;
+        }
+        int result = WayUpdater.QUESTION;
+        if (mode == AppSettings.WAY_AUTOMATIC) {
+            result = WayUpdater.add(store, new File(referencePath), savedFile);
+        }
+        WAY_OFFER.set(new WayUpdater.Offer(referencePath, referenceWayName,
+                savedFile.getPath(), result));
     }
 
     // Worker thread. The points that the log file holds are saved.
