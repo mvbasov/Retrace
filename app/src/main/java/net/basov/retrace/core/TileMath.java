@@ -40,6 +40,28 @@ public final class TileMath {
         return clampTile((int) Math.floor(fraction * n), n);
     }
 
+    // Returns the position of the longitude on the map at zoom level 0, from
+    // 0 at the left edge to 1 at the right edge.
+    public static double worldX(double longitude) {
+        return (normalizeLongitude(longitude) + 180.0) / 360.0;
+    }
+
+    // Returns the position of the latitude on the map at zoom level 0, from
+    // 0 at the top edge to 1 at the bottom edge.
+    public static double worldY(double latitude) {
+        double lat = Math.toRadians(clampLatitude(latitude));
+        return (1.0 - Math.log(Math.tan(lat) + 1.0 / Math.cos(lat)) / Math.PI) / 2.0;
+    }
+
+    public static double longitudeOf(double worldX) {
+        return worldX * 360.0 - 180.0;
+    }
+
+    public static double latitudeOf(double worldY) {
+        double n = Math.PI * (1.0 - 2.0 * worldY);
+        return Math.toDegrees(Math.atan(Math.sinh(n)));
+    }
+
     // Makes the URL of one tile from a template with three %d fields.
     // The fields are the zoom, the column and the row, in that order.
     public static String tileUrl(String template, int zoom, double latitude, double longitude) {

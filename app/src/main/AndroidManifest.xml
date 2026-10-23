@@ -35,6 +35,10 @@
         </activity>
 
         <activity
+            android:name=".TrackMapActivity"
+            android:exported="false" />
+
+        <activity
             android:name=".TileProbeActivity"
             android:exported="false"
             android:label="@string/probe_button" />

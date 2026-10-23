@@ -18,6 +18,12 @@
     <string name="error_rename">Retrace cannot rename the track.</string>
     <string name="error_delete">Retrace cannot delete the track.</string>
 
+    <!-- The map -->
+    <string name="map_loading">Retrace reads the track.</string>
+    <string name="map_zoom_in">+</string>
+    <string name="map_zoom_out">\u2212</string>
+    <string name="map_show_all">All</string>
+
     <!-- Permissions and the GPS -->
     <string name="gps_off">The location of the device is off. Turn on the location in the settings.</string>
     <string name="permission_needed">Retrace needs the location permission to record a track. You can give the permission in the settings of the application.</string>

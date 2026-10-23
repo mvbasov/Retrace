@@ -143,6 +143,12 @@ final class TrackStore {
         }
     }
 
+    Track load(File file) throws IOException {
+        synchronized (LOCK) {
+            return readGpx(file);
+        }
+    }
+
     void rename(File file, String newName) throws IOException {
         synchronized (LOCK) {
             Track track = readGpx(file);

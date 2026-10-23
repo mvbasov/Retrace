@@ -156,14 +156,18 @@ Manual selection:
 
 ### 5.6 Map
 
-- A `MapView` of its own, with the Web Mercator projection. It draws the tiles, the reference track, the current track, your position and the ghost.
-- Zoom: two-finger zoom, double tap and the + and − buttons. Zoom levels 3 to 19.
-- Two modes: the map follows your position, or you move the map yourself. A button shows the full route.
-- With no network: if the tile cache does not hold a tile, the map enlarges a tile of a lower zoom level from the tile cache.
+- A `MapView` of its own, with the Web Mercator projection. It draws the tiles, the reference track, the current track, your position and the ghost. `MapViewport` in `core` does the math, thus the tests run it on the JVM.
+- Zoom: two-finger zoom, double tap and the + and − buttons. Zoom levels 3 to 19. Between two levels, the map scales the tiles of the nearest level.
+- A screen with a high density shows each tile larger than 256 pixels. Otherwise the text of the map is too small to read.
+- Two modes: the map follows your position, or you move the map yourself. A button shows the whole track.
+- With no network: if the tile cache does not hold a tile, the map enlarges a part of a lower tile. It looks up to 4 zoom levels down.
 - Tile cache:
-  - memory: `android.util.LruCache` for the bitmaps
-  - disk: one file for each tile in the cache directory, with a size limit and LRU removal (Settings, default 100 MB)
-- Loading: a small thread pool with two connections. Retrace stops the request for a tile that is no longer on the screen.
+  - memory: `android.util.LruCache` for the bitmaps, one eighth of the memory of the application
+  - disk: one file for each tile in the cache directory, `tiles/z/x/y.tile`. The first 8 bytes hold the end time of the tile, and the PNG data follows.
+  - size limit: 100 MB. Above the limit, Retrace removes the oldest tiles down to 90 % of the limit. A later milestone moves the limit to Settings.
+  - A tile after its end time stays on the map until a new download replaces it.
+- Loading: a thread pool with two connections. The newest request comes first. A task for a tile that is no longer on the screen stops before its download. After a failed download, Retrace waits 30 s before it tries that tile again.
+- In the first map version, a push on a track in the list shows that track on the map.
 - You can change the tile URL in Settings. Thus you can use a different tile server.
 
 The OpenStreetMap tile usage policy for `tile.openstreetmap.org` has these rules. Retrace obeys each rule.

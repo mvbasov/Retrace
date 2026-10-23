@@ -3,4 +3,12 @@
     <color name="icon_background">#1E4D6B</color>
     <color name="icon_route">#CFE3EE</color>
     <color name="icon_progress">#FF9A3C</color>
+    <color name="map_background">#FFE8E4DC</color>
+    <color name="map_reference">#CC1E6FD9</color>
+    <color name="map_current">#E6FF7A00</color>
+    <color name="map_position">#FF1E6FD9</color>
+    <color name="map_ghost">#B3606060</color>
+    <color name="map_ring">#FFFFFFFF</color>
+    <color name="map_attribution_text">#FF333333</color>
+    <color name="map_attribution_background">#B3FFFFFF</color>
 </resources>

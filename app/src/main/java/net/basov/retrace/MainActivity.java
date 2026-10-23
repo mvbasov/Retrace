@@ -44,7 +44,8 @@ import net.basov.retrace.core.TimeText;
 //
 // The top row holds the profile and the start or stop button. Below it, a
 // line shows the state of the recording. The list of saved tracks fills the
-// rest of the screen. A long push on a track opens the rename and delete menu.
+// rest of the screen. A push on a track shows it on the map. A long push on a
+// track opens the rename and delete menu.
 //
 // The activity reads TrackService.snapshot() once each second. A file task
 // runs on one background thread, and its result comes back on the UI thread.
@@ -151,6 +152,13 @@ public final class MainActivity extends Activity {
         ListView list = new ListView(this);
         list.setAdapter(adapter);
         list.setEmptyView(empty);
+        list.setOnItemClickListener((parent, view, position, id) -> {
+            TrackStore.Entry e = adapter.getItem(position);
+            if (e.readable) {
+                startActivity(new Intent(this, TrackMapActivity.class)
+                        .putExtra(TrackMapActivity.EXTRA_FILE, e.file.getPath()));
+            }
+        });
         registerForContextMenu(list);
 
         LinearLayout root = new LinearLayout(this);
