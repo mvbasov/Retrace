@@ -1,0 +1,115 @@
+# The release build. A push of a tag vYY.MM.S starts it, for example
+# v26.10.25. The tag must agree with appVersion in app/build.gradle.
+#
+# The steps:
+# 1. Check the tag against appVersion.
+# 2. Write the keystore and the passwords from the secrets of the
+#    repository to RUNNER_TEMP. RUNNER_TEMP is outside the checkout, thus
+#    the Docker context does not hold them.
+# 3. Make one Dockerfile from Dockerfile.base and Dockerfile. See
+#    .github/ci-dockerfile.sh.
+# 4. Build it. The test stage runs the quality gate first. The keystore
+#    and the passwords go to the build as BuildKit secrets, not as build
+#    arguments. Thus no image layer holds them.
+# 5. Make a GitHub release with the APK.
+#
+# The release key must be the key of the local build. Android installs an
+# update only when the same key signs it. See the release section of
+# README.md for the secrets.
+#
+# The secrets are secrets of the environment "release", not of the
+# repository. The rules of that environment let only a tag v* use them.
+#
+# Each action has a fixed commit, because the job has the release key and
+# write access to the repository. A tag of an action can move to new code.
+# The comment after each commit names its release.
+name: Release Retrace
+
+on:
+  push:
+    tags: ['v[0-9][0-9].[0-9][0-9].[0-9]*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: release
+
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Check the tag against appVersion
+        id: version
+        run: |
+          VERSION=$(awk -F"'" '/^def appVersion/ {print $2}' app/build.gradle)
+          if [ "v${VERSION}" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::The tag ${GITHUB_REF_NAME} does not agree with appVersion ${VERSION} in app/build.gradle."
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      # The GitHub cache of Docker Buildx needs the runtime token. A run step
+      # does not get it without this action.
+      - name: Give the cache token to the build
+        uses: crazy-max/ghaction-github-runtime@3cb05d89e1f492524af3d41a1c98c83bc3025124 # v3.1.0
+
+      # The env file has the form of .env. The Dockerfile reads it with the
+      # shell. Thus each value goes between single quotes.
+      - name: Write the signing secrets
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          for name in KEYSTORE_BASE64 KEYSTORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "$(printenv "${name}")" ]; then
+              echo "::error::The environment release has no secret ${name}. See the release section of README.md."
+              exit 1
+            fi
+          done
+          printf '%s' "${KEYSTORE_BASE64}" | base64 -d > "${RUNNER_TEMP}/retrace.keystore"
+          quote() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
+          {
+            echo "KEYSTORE_PASSWORD=$(quote "${KEYSTORE_PASSWORD}")"
+            echo "KEY_ALIAS=$(quote "${KEY_ALIAS}")"
+            echo "KEY_PASSWORD=$(quote "${KEY_PASSWORD}")"
+          } > "${RUNNER_TEMP}/signing.env"
+
+      - name: Make the build file
+        run: sh .github/ci-dockerfile.sh "${RUNNER_TEMP}/Dockerfile.ci"
+
+      - name: Build the APK
+        run: |
+          docker buildx build \
+            -f "${RUNNER_TEMP}/Dockerfile.ci" \
+            --target export \
+            --output type=local,dest=artifacts \
+            --secret id=keystore,src="${RUNNER_TEMP}/retrace.keystore" \
+            --secret id=signing_env,src="${RUNNER_TEMP}/signing.env" \
+            --cache-from type=gha,scope=retrace \
+            --cache-to type=gha,mode=max,scope=retrace \
+            --progress plain \
+            .
+          ls -la artifacts/
+
+      - name: Remove the signing secrets
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/retrace.keystore" "${RUNNER_TEMP}/signing.env"
+
+      - name: Check the APK
+        run: test -f "artifacts/retrace-v${{ steps.version.outputs.version }}-release.apk"
+
+      - name: Make the release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          name: Retrace ${{ steps.version.outputs.version }}
+          files: artifacts/retrace-v${{ steps.version.outputs.version }}-release.apk
+          generate_release_notes: true

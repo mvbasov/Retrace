@@ -127,7 +127,8 @@ public final class CommentStyleTest {
             return Style.SLASH;
         }
         if (name.endsWith(".sh") || name.endsWith(".properties") || name.endsWith(".pro")
-                || name.startsWith("Dockerfile") || name.equals(".env.example")) {
+                || name.startsWith("Dockerfile") || name.equals(".env.example")
+                || name.endsWith(".yml")) {
             return Style.HASH;
         }
         return null;

@@ -38,6 +38,8 @@ Do not remove a constraint without an instruction from the maintainer.
 | `Dockerfile.base` | The toolchain image: JDK, Android SDK and Gradle. |
 | `Dockerfile` | The test gate and the APK build. |
 | `local/build.sh` | The maintainer build script. The Docker context excludes `local/`. |
+| `.github/workflows/release.yml` | The release workflow. A tag push starts it. |
+| `.github/ci-dockerfile.sh` | Makes one Dockerfile for the release workflow from `Dockerfile.base` and `Dockerfile`. |
 | `doc/` | Maintainer documents. The Docker context excludes `doc/`. |
 | `CLAUDE.md` | This document. |
 
@@ -63,6 +65,7 @@ The repository does not hold `output-binaries/`, `.env` or the keystore.
 - `app/build.gradle` calculates `versionCode` as `YY*100000 + MM*1000 + S`. Example: `26.10.1` gives `2610001`. Do not write the version code by hand.
 - **Bump the version in each commit.** A bump changes one line. The maintainer can ask for an exception.
 - **The maintainer makes each tag.** Do not make a tag.
+- A tag has the form `vYY.MM.S`, for example `v26.10.25`. It must agree with `appVersion`. A push of the tag starts `.github/workflows/release.yml`. The workflow builds the signed APK and makes a GitHub release with it. A tag that does not agree with `appVersion` stops the workflow.
 - Do not write a version number in a comment. The number goes out of date. `CommentStyleTest` finds it.
 
 ---
@@ -102,6 +105,7 @@ feat(track): Record a track in a foreground service. v26.10.2
 - Take each tolerance of a test from the noise model, not from one run. Check a change of TrackMatcher with many seeds, not only with the seeds of the tests.
 - `test/java/net/basov/retrace/repocheck/CommentStyleTest.java` reads each comment of the repository. It checks the rules of section 8. It demands zero faults.
 - `test/java/net/basov/retrace/repocheck/AndroidApiTest.java` reads the source of the application. It finds calls of the Java library that Android 6 does not have. See rule 4 of section 1.
+- `test/java/net/basov/retrace/repocheck/BuildFilesTest.java` checks `Dockerfile.base`, `Dockerfile`, `.env.example` and the release workflow against each other. See section 7.
 
 ---
 
@@ -123,6 +127,8 @@ feat(track): Record a track in a foreground service. v26.10.2
 - The first run of `local/build.sh` makes `app/retrace.keystore` with the passwords from `.env`. The keytool of the toolchain image makes it. Without `.env`, the defaults of `.env.example` apply.
 - A change of the keystore alone does not change the cache key of the build step. After a new keystore, build with `docker builder prune` first.
 - The release build uses R8 (`minifyEnabled = true`) and `shrinkResources = true`.
+- The release workflow uses the `docker-container` driver of Docker Buildx. That builder has its own image store, thus a second build cannot use `retrace-base:latest`. `.github/ci-dockerfile.sh` puts the stages of the two files into one file at each run. Keep each `FROM` line of `Dockerfile` in the form `FROM retrace-base:latest AS name`, and keep one `FROM` line in `Dockerfile.base`. `BuildFilesTest` checks this.
+- The workflow gives the keystore and the passwords as BuildKit secrets with the ids `keystore` and `signing_env`, the same as `local/build.sh`.
 - **Ask the maintainer before you add a build step, a tool or a dependency.**
 
 ---
