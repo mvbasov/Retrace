@@ -72,7 +72,3 @@ docker rm retrace-extract > /dev/null
 
 ls -l ./output-binaries/
 echo "The APK is in ./output-binaries/."
-if [ -f ./output-binaries/sdk-downloads.txt ]; then
-    echo "WARNING: Gradle downloaded SDK packages during the build."
-    echo "Add them to Dockerfile.base. The list is in output-binaries/sdk-downloads.txt."
-fi
