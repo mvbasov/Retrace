@@ -5,7 +5,7 @@
 # download the toolchain again.
 #
 # The image holds the JDK, the Android command-line tools, one SDK platform,
-# one build-tools package and Gradle. Retrace has no native code. Thus the
+# one build-tools package, the platform tools and Gradle. Retrace has no native code. Thus the
 # image holds no NDK.
 #
 # The JDK runs Gradle and javac. The language level of the source stays at
@@ -32,8 +32,10 @@ ENV PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
 
 # The platform agrees with compileSdk in app/build.gradle.
 # The build-tools package is the one that the Android Gradle plugin asks for.
+# The Android Gradle plugin also asks for the platform tools. Without them
+# here, each build downloads them again.
 RUN yes | sdkmanager --licenses > /dev/null && \
-    sdkmanager "platforms;android-36" "build-tools;36.0.0"
+    sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 
 # Gradle runs from this image. The repository holds no Gradle wrapper.
 # The plugin version in build.gradle and this Gradle version change together.
