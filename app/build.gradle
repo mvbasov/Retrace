@@ -5,7 +5,7 @@ plugins {
 // The version of the application, in the form YY.MM.S.
 // Change this one line in each commit. See section 4 of CLAUDE.md.
 // The Dockerfile reads this line for the name of the APK file.
-def appVersion = '26.10.15'
+def appVersion = '26.10.16'
 
 // The version code is YY * 100000 + MM * 1000 + S.
 def versionCodeOf(String name) {

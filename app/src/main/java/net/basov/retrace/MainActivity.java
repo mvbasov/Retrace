@@ -81,6 +81,7 @@ public final class MainActivity extends Activity {
     private static final int MENU_TRIP = 4;
     private static final int MENU_SHARE = 5;
     private static final int MENU_IMPORT = 6;
+    private static final int MENU_ABOUT = 7;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService files = Executors.newSingleThreadExecutor();
@@ -630,6 +631,7 @@ public final class MainActivity extends Activity {
     public boolean onCreateOptionsMenu(Menu menu) {
         menu.add(Menu.NONE, MENU_IMPORT, Menu.NONE, R.string.import_track);
         menu.add(Menu.NONE, MENU_PROBE, Menu.NONE, R.string.probe_button);
+        menu.add(Menu.NONE, MENU_ABOUT, Menu.NONE, R.string.about);
         return true;
     }
 
@@ -637,6 +639,14 @@ public final class MainActivity extends Activity {
     public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == MENU_IMPORT) {
             startImport();
+            return true;
+        }
+        if (item.getItemId() == MENU_ABOUT) {
+            new AlertDialog.Builder(this)
+                    .setTitle(R.string.app_name)
+                    .setMessage(getString(R.string.about_text, Labels.versionName(this)))
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show();
             return true;
         }
         if (item.getItemId() == MENU_PROBE) {

@@ -96,6 +96,8 @@
 
     <!-- The check of the map tile server -->
     <string name="version">Version %1$s</string>
+    <string name="about">About Retrace</string>
+    <string name="about_text">Version %1$s\n\nRetrace records a trip as a GPS track. On a later trip, it compares your position with the saved track.\n\nLicense: MIT\nMap data © OpenStreetMap contributors</string>
     <string name="intro">This screen checks the map tile server. Push the button to download one map tile.</string>
     <string name="probe_button">Check the map tile server</string>
     <string name="probe_running">The application connects to the tile server.</string>

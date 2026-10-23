@@ -1,7 +1,6 @@
 package net.basov.retrace;
 
 import android.app.Activity;
-import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Bundle;
@@ -58,7 +57,7 @@ public final class TileProbeActivity extends Activity {
         column.addView(title);
 
         TextView version = new TextView(this);
-        version.setText(getString(R.string.version, versionName()));
+        version.setText(getString(R.string.version, Labels.versionName(this)));
         column.addView(version);
 
         TextView intro = new TextView(this);
@@ -95,7 +94,7 @@ public final class TileProbeActivity extends Activity {
         resultView.setText(R.string.probe_running);
         tileView.setImageDrawable(null);
 
-        final String userAgent = TileProbe.userAgent(versionName());
+        final String userAgent = TileProbe.userAgent(Labels.versionName(this));
         Thread worker = new Thread(() -> {
             final TileProbe.Result result = TileProbe.run(userAgent);
             runOnUiThread(() -> {
@@ -143,14 +142,6 @@ public final class TileProbeActivity extends Activity {
         String message = e.getMessage();
         String name = e.getClass().getSimpleName();
         return message == null ? name : name + ": " + message;
-    }
-
-    private String versionName() {
-        try {
-            return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
-        } catch (PackageManager.NameNotFoundException e) {
-            return "unknown";
-        }
     }
 
     private int dp(int value) {

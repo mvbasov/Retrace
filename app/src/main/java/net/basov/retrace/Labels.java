@@ -1,6 +1,7 @@
 package net.basov.retrace;
 
 import android.content.Context;
+import android.content.pm.PackageManager;
 
 import net.basov.retrace.core.Profile;
 
@@ -9,7 +10,8 @@ import net.basov.retrace.core.Profile;
 // ----------------------------------------------------------------------
 //
 // The core package has no Android resources. This class gives the text of
-// strings.xml for a profile and for a distance.
+// strings.xml for a profile and for a distance. It also gives the version
+// name of the application.
 final class Labels {
 
     private Labels() {
@@ -29,6 +31,16 @@ final class Labels {
             case WALKING:
             default:
                 return context.getString(R.string.profile_walking);
+        }
+    }
+
+    // The version name comes from app/build.gradle through the manifest. A
+    // debug build adds "-debug".
+    static String versionName(Context context) {
+        try {
+            return context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName;
+        } catch (PackageManager.NameNotFoundException e) {
+            return context.getString(R.string.value_unknown);
         }
     }
 
