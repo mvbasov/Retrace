@@ -15,7 +15,7 @@ Do not remove a constraint without an instruction from the maintainer.
 1. **No AndroidX. No AppCompat. No other library.** Use the Android framework API only. The `dependencies` block of `app/build.gradle` stays empty.
 2. **The minimum is Android 6.0 (API 23).** Put each call above API 23 behind a `Build.VERSION.SDK_INT` check.
 3. **The Java language level is 17.** `app/build.gradle` sets `sourceCompatibility` and `targetCompatibility` to 17. The JDK of the build image can be newer.
-4. **Use only the Java library that Android 6 has.** Do not use `java.time`, `java.util.stream`, `java.util.Optional` or `java.util.function`. Android adds them at API 24 or 26. Do not use `String.join`, `List.of`, `Map.of` or `Map.getOrDefault`. Lambdas are permitted, because D8 converts them.
+4. **Use only the Java library that Android 6 has.** Do not use `java.time`, `java.util.stream`, `java.util.Optional` or `java.util.function`. Android adds them at API 24 or 26. Do not use `String.join`, `List.of`, `Map.of` or `Map.getOrDefault`. Lambdas are permitted, because D8 converts them. `AndroidApiTest` finds the most frequent faults.
 5. **Keep the APK small.** Do not add a PNG image. Use a vector drawable. Build a small screen in Java, or use a small layout file.
 6. **The package `net.basov.retrace.core` imports no Android package.** It holds the logic that the tests run on the JVM. `test/run.sh` compiles it with plain `javac`. Thus an Android import there stops the tests.
 7. **Obey the OpenStreetMap tile usage policy.** Send a User-Agent that names Retrace. Obey the cache headers. Do not download an area in advance. Show the attribution on the map. See section 5.6 of `doc/PLAN.md`.
@@ -99,6 +99,7 @@ feat(track): Record a track in a foreground service. v26.10.2
 - **Put the logic into `core`, and test it there.** A test that runs the code is better than a test that reads the source text.
 - Give each test method a comment that says why the test exists.
 - `test/java/net/basov/retrace/repocheck/CommentStyleTest.java` reads each comment of the repository. It checks the rules of section 8. It demands zero faults.
+- `test/java/net/basov/retrace/repocheck/AndroidApiTest.java` reads the source of the application. It finds calls of the Java library that Android 6 does not have. See rule 4 of section 1.
 
 ---
 

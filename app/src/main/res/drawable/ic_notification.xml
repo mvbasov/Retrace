@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The small icon of the notification. Android shows only the alpha
+     channel of this icon. Thus it is white. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M5,19 C5,12 11,14 12,10 C13,6 19,6 19,11"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeLineCap="round"
+        android:strokeWidth="2" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,7.5 A2.5,2.5 0 1,1 12,12.5 A2.5,2.5 0 1,1 12,7.5 Z" />
+</vector>

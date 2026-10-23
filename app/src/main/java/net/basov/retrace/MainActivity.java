@@ -1,155 +1,433 @@
 package net.basov.retrace;
 
+import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
+import android.location.LocationManager;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.provider.Settings;
 import android.util.TypedValue;
-import android.view.ViewGroup;
+import android.view.ContextMenu;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.view.View;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
-import android.widget.ImageView;
+import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
+import android.widget.ListView;
+import android.widget.Spinner;
 import android.widget.TextView;
 
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+import net.basov.retrace.core.Profile;
+import net.basov.retrace.core.RecordingSnapshot;
+import net.basov.retrace.core.TimeText;
+
 // ----------------------------------------------------------------------
-// The test screen of the first version
+// The list of tracks and the control of the recording
 // ----------------------------------------------------------------------
 //
-// This screen shows the version and runs TileProbe. Later milestones put
-// the track list here. See section 9 of doc/PLAN.md.
+// The top row holds the profile and the start or stop button. Below it, a
+// line shows the state of the recording. The list of saved tracks fills the
+// rest of the screen. A long push on a track opens the rename and delete menu.
 //
-// The activity builds its views in Java. Thus the APK holds no layout file
-// for this screen.
+// The activity reads TrackService.snapshot() once each second. A file task
+// runs on one background thread, and its result comes back on the UI thread.
 public final class MainActivity extends Activity {
 
-    private TextView resultView;
-    private ImageView tileView;
-    private Button probeButton;
+    private static final int REQUEST_LOCATION = 1;
+    private static final long REFRESH_MS = 1000;
+    private static final String PREF_PROFILE = "profile";
 
-    // The activity can close while the probe thread runs. The thread then
-    // does not touch the views.
+    private static final int MENU_PROBE = 1;
+    private static final int MENU_RENAME = 2;
+    private static final int MENU_DELETE = 3;
+
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private final ExecutorService files = Executors.newSingleThreadExecutor();
+
+    private TrackStore store;
+    private TrackListAdapter adapter;
+    private Spinner profileSpinner;
+    private Button startStopButton;
+    private TextView statusView;
+
+    // The savedCount of the last snapshot that the list shows.
+    private int shownSavedCount = -1;
     private volatile boolean destroyed;
+
+    private final Runnable refresh = new Runnable() {
+        @Override
+        public void run() {
+            showSnapshot();
+            handler.postDelayed(this, REFRESH_MS);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        store = new TrackStore(this);
+        adapter = new TrackListAdapter(this);
         setContentView(buildViews());
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        loadTracks(true);
+        handler.post(refresh);
+    }
+
+    @Override
+    protected void onPause() {
+        handler.removeCallbacks(refresh);
+        super.onPause();
     }
 
     @Override
     protected void onDestroy() {
         destroyed = true;
+        files.shutdown();
         super.onDestroy();
     }
 
-    private ScrollView buildViews() {
+    private View buildViews() {
         int pad = dp(16);
 
-        LinearLayout column = new LinearLayout(this);
-        column.setOrientation(LinearLayout.VERTICAL);
-        column.setPadding(pad, pad, pad, pad);
+        profileSpinner = new Spinner(this);
+        List<String> labels = new ArrayList<>();
+        for (Profile p : Profile.values()) {
+            labels.add(Labels.profile(this, p));
+        }
+        ArrayAdapter<String> profiles = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, labels);
+        profiles.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        profileSpinner.setAdapter(profiles);
+        profileSpinner.setSelection(savedProfile().ordinal());
+        profileSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
+                saveProfile(Profile.values()[position]);
+            }
 
-        TextView title = new TextView(this);
-        title.setText(R.string.app_name);
-        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 28);
-        column.addView(title);
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+            }
+        });
 
-        TextView version = new TextView(this);
-        version.setText(getString(R.string.version, versionName()));
-        column.addView(version);
+        startStopButton = new Button(this);
+        startStopButton.setOnClickListener(v -> onStartStop());
 
-        TextView intro = new TextView(this);
-        intro.setText(R.string.intro);
-        intro.setPadding(0, pad, 0, pad);
-        column.addView(intro);
+        LinearLayout top = new LinearLayout(this);
+        top.setOrientation(LinearLayout.HORIZONTAL);
+        top.addView(profileSpinner, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        top.addView(startStopButton, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        probeButton = new Button(this);
-        probeButton.setText(R.string.probe_button);
-        probeButton.setOnClickListener(v -> startProbe());
-        column.addView(probeButton);
+        statusView = new TextView(this);
+        statusView.setPadding(0, pad / 2, 0, pad / 2);
 
-        resultView = new TextView(this);
-        resultView.setPadding(0, pad, 0, pad);
-        resultView.setTextIsSelectable(true);
-        column.addView(resultView);
+        TextView empty = new TextView(this);
+        empty.setText(R.string.no_tracks);
+        empty.setPadding(0, pad, 0, pad);
 
-        tileView = new ImageView(this);
-        column.addView(tileView, new LinearLayout.LayoutParams(dp(256), dp(256)));
+        ListView list = new ListView(this);
+        list.setAdapter(adapter);
+        list.setEmptyView(empty);
+        registerForContextMenu(list);
 
-        TextView attribution = new TextView(this);
-        attribution.setText(R.string.osm_attribution);
-        attribution.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        column.addView(attribution);
-
-        ScrollView scroll = new ScrollView(this);
-        scroll.addView(column, new ViewGroup.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        return scroll;
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(pad, pad / 2, pad, 0);
+        root.addView(top);
+        root.addView(statusView);
+        root.addView(empty, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        root.addView(list, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+        return root;
     }
 
-    private void startProbe() {
-        probeButton.setEnabled(false);
-        resultView.setText(R.string.probe_running);
-        tileView.setImageDrawable(null);
+    // ------------------------------------------------------------------
+    // Recording
+    // ------------------------------------------------------------------
 
-        final String userAgent = TileProbe.userAgent(versionName());
-        Thread worker = new Thread(() -> {
-            final TileProbe.Result result = TileProbe.run(userAgent);
+    private void onStartStop() {
+        if (TrackService.snapshot().recording) {
+            startService(new Intent(this, TrackService.class).setAction(TrackService.ACTION_STOP));
+        } else {
+            startRecording();
+        }
+        startStopButton.setEnabled(false);
+        handler.postDelayed(() -> startStopButton.setEnabled(true), REFRESH_MS);
+    }
+
+    private void startRecording() {
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(permissions(), REQUEST_LOCATION);
+            return;
+        }
+        LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        if (lm == null || !lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            new AlertDialog.Builder(this)
+                    .setMessage(R.string.gps_off)
+                    .setPositiveButton(R.string.open_settings, (d, w) ->
+                            startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)))
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show();
+            return;
+        }
+        Profile profile = Profile.values()[profileSpinner.getSelectedItemPosition()];
+        Intent start = new Intent(this, TrackService.class)
+                .setAction(TrackService.ACTION_START)
+                .putExtra(TrackService.EXTRA_PROFILE, profile.id);
+        if (Build.VERSION.SDK_INT >= 26) {
+            startForegroundService(start);
+        } else {
+            startService(start);
+        }
+    }
+
+    private static String[] permissions() {
+        if (Build.VERSION.SDK_INT >= 33) {
+            return new String[]{
+                    Manifest.permission.ACCESS_FINE_LOCATION,
+                    Manifest.permission.ACCESS_COARSE_LOCATION,
+                    Manifest.permission.POST_NOTIFICATIONS};
+        }
+        return new String[]{
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION};
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(requestCode, permissions, results);
+        if (requestCode != REQUEST_LOCATION) {
+            return;
+        }
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                == PackageManager.PERMISSION_GRANTED) {
+            startRecording();
+            return;
+        }
+        // Android does not show the request again after the user selects
+        // "do not ask again". The settings of the application are then the
+        // only way to give the permission.
+        new AlertDialog.Builder(this)
+                .setMessage(R.string.permission_needed)
+                .setPositiveButton(R.string.open_settings, (d, w) -> startActivity(
+                        new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                                Uri.fromParts("package", getPackageName(), null))))
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void showSnapshot() {
+        RecordingSnapshot s = TrackService.snapshot();
+        startStopButton.setText(s.recording ? R.string.stop_recording : R.string.start_recording);
+        profileSpinner.setEnabled(!s.recording);
+        if (s.recording && s.profile != null) {
+            profileSpinner.setSelection(s.profile.ordinal());
+        }
+        statusView.setText(statusText(s));
+        if (s.savedCount != shownSavedCount) {
+            loadTracks(false);
+        }
+    }
+
+    private String statusText(RecordingSnapshot s) {
+        if (s.recording) {
+            String elapsed = TimeText.duration(System.currentTimeMillis() - s.startTimeMs);
+            String progress = getString(R.string.status_recording,
+                    Labels.profile(this, s.profile), s.points,
+                    Labels.distance(this, s.distanceM), elapsed);
+            if (!s.hasFix()) {
+                return progress + "\n" + getString(R.string.waiting_for_gps);
+            }
+            if (Double.isNaN(s.lastAccuracyM)) {
+                return progress;
+            }
+            return progress + "\n" + getString(R.string.gps_accuracy,
+                    (int) Math.round(s.lastAccuracyM));
+        }
+        switch (s.error) {
+            case RecordingSnapshot.ERROR_NO_PERMISSION:
+                return getString(R.string.error_no_permission);
+            case RecordingSnapshot.ERROR_STORAGE:
+                return getString(R.string.error_storage);
+            case RecordingSnapshot.ERROR_NO_GPS:
+                return getString(R.string.error_no_gps);
+            default:
+                return getString(R.string.status_idle);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // The list of tracks
+    // ------------------------------------------------------------------
+
+    // Reads the list on the background thread. On the first load, a log file
+    // of a stopped process becomes a track first.
+    private void loadTracks(boolean recover) {
+        final int savedCount = TrackService.snapshot().savedCount;
+        shownSavedCount = savedCount;
+        files.execute(() -> {
+            if (recover) {
+                try {
+                    store.recoverLog();
+                } catch (IOException e) {
+                    // The log file stays. The next load tries again.
+                }
+            }
+            List<TrackStore.Entry> entries = store.list();
             runOnUiThread(() -> {
                 if (!destroyed) {
-                    showResult(result);
+                    adapter.setEntries(entries);
                 }
             });
-        }, "tile-probe");
-        worker.start();
+        });
     }
 
-    private void showResult(TileProbe.Result result) {
-        probeButton.setEnabled(true);
+    @Override
+    public void onCreateContextMenu(ContextMenu menu, View v, ContextMenu.ContextMenuInfo info) {
+        super.onCreateContextMenu(menu, v, info);
+        TrackStore.Entry e = adapter.getItem(((AdapterView.AdapterContextMenuInfo) info).position);
+        menu.setHeaderTitle(e.name);
+        if (e.readable) {
+            menu.add(Menu.NONE, MENU_RENAME, Menu.NONE, R.string.rename);
+        }
+        menu.add(Menu.NONE, MENU_DELETE, Menu.NONE, R.string.delete);
+    }
 
-        StringBuilder text = new StringBuilder();
-        if (result.error != null) {
-            text.append(getString(R.string.probe_fail, describe(result.error)));
-            if (result.isTlsFailure()) {
-                text.append("\n\n").append(getString(R.string.probe_tls_fail));
+    @Override
+    public boolean onContextItemSelected(MenuItem item) {
+        AdapterView.AdapterContextMenuInfo info =
+                (AdapterView.AdapterContextMenuInfo) item.getMenuInfo();
+        TrackStore.Entry e = adapter.getItem(info.position);
+        if (item.getItemId() == MENU_RENAME) {
+            askRename(e);
+            return true;
+        }
+        if (item.getItemId() == MENU_DELETE) {
+            askDelete(e);
+            return true;
+        }
+        return super.onContextItemSelected(item);
+    }
+
+    private void askRename(TrackStore.Entry e) {
+        EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setText(e.name);
+        input.setSelectAllOnFocus(true);
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.rename)
+                .setView(input)
+                .setPositiveButton(android.R.string.ok, (d, w) -> {
+                    String name = input.getText().toString().trim();
+                    if (!name.isEmpty() && !name.equals(e.name)) {
+                        runFileTask(() -> store.rename(e.file, name), R.string.error_rename);
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    private void askDelete(TrackStore.Entry e) {
+        new AlertDialog.Builder(this)
+                .setMessage(getString(R.string.delete_question, e.name))
+                .setPositiveButton(R.string.delete, (d, w) -> runFileTask(() -> {
+                    if (!store.delete(e.file)) {
+                        throw new IOException("cannot delete " + e.file);
+                    }
+                }, R.string.error_delete))
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    // A file task that can fail. The list loads again after the task.
+    private interface FileTask {
+        void run() throws IOException;
+    }
+
+    private void runFileTask(FileTask task, int errorText) {
+        files.execute(() -> {
+            boolean ok;
+            try {
+                task.run();
+                ok = true;
+            } catch (IOException ex) {
+                ok = false;
             }
-        } else if (result.httpCode >= 200 && result.httpCode < 300) {
-            text.append(getString(R.string.probe_ok,
-                    result.httpCode, result.body.length, result.millis));
-            showTile(result.body, text);
-        } else {
-            text.append(getString(R.string.probe_http_error, result.httpCode, result.millis));
-        }
-        if (result.rootIssuer != null) {
-            text.append("\n").append(getString(R.string.probe_issuer, result.rootIssuer));
-        }
-        text.append("\n").append(result.url);
-        resultView.setText(text);
+            final boolean done = ok;
+            runOnUiThread(() -> {
+                if (destroyed) {
+                    return;
+                }
+                if (!done) {
+                    new AlertDialog.Builder(this)
+                            .setMessage(errorText)
+                            .setPositiveButton(android.R.string.ok, null)
+                            .show();
+                }
+                loadTracks(false);
+            });
+        });
     }
 
-    private void showTile(byte[] body, StringBuilder text) {
-        Bitmap bitmap = BitmapFactory.decodeByteArray(body, 0, body.length);
-        if (bitmap == null) {
-            text.append("\n").append(getString(R.string.probe_no_image));
-        } else {
-            tileView.setImageBitmap(bitmap);
-        }
+    // ------------------------------------------------------------------
+    // The options menu
+    // ------------------------------------------------------------------
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        menu.add(Menu.NONE, MENU_PROBE, Menu.NONE, R.string.probe_button);
+        return true;
     }
 
-    private static String describe(Exception e) {
-        String message = e.getMessage();
-        String name = e.getClass().getSimpleName();
-        return message == null ? name : name + ": " + message;
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == MENU_PROBE) {
+            startActivity(new Intent(this, TileProbeActivity.class));
+            return true;
+        }
+        return super.onOptionsItemSelected(item);
     }
 
-    private String versionName() {
-        try {
-            return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
-        } catch (PackageManager.NameNotFoundException e) {
-            return "unknown";
-        }
+    // ------------------------------------------------------------------
+    // Helpers
+    // ------------------------------------------------------------------
+
+    private Profile savedProfile() {
+        Profile p = Profile.fromId(prefs().getString(PREF_PROFILE, null));
+        return p == null ? Profile.WALKING : p;
+    }
+
+    private void saveProfile(Profile p) {
+        prefs().edit().putString(PREF_PROFILE, p.id).apply();
+    }
+
+    private SharedPreferences prefs() {
+        return getPreferences(Context.MODE_PRIVATE);
     }
 
     private int dp(int value) {

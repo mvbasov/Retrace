@@ -85,7 +85,8 @@ The `core` package imports no Android package. Thus the tests run on the JVM.
 - A foreground service with a notification. It continues to record when the screen is off.
 - It asks for a GPS fix each second. The minimum distance between two points comes from the profile.
 - It drops a fix with bad accuracy and smooths the speed. The profile table gives the limits.
-- It writes each point to a temporary file during the trip. Thus a crash loses no data.
+- It writes each point to the log file during the trip. Thus a crash loses no data.
+- The service does not restart after Android stops the process. The next start of MainActivity saves the log file as a track.
 - The notification shows the live result, for example "0:42 ahead · 3.2 km to the finish".
 
 ### 5.2 TrackStore

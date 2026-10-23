@@ -1,8 +1,48 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Retrace</string>
+
+    <!-- The list of tracks and the recording -->
+    <string name="start_recording">Start</string>
+    <string name="stop_recording">Stop</string>
+    <string name="status_idle">Select a profile and push Start.</string>
+    <string name="status_recording">Retrace records: %1$s\n%2$d points · %3$s · %4$s</string>
+    <string name="waiting_for_gps">No GPS fix yet.</string>
+    <string name="gps_accuracy">GPS accuracy: %1$d m</string>
+    <string name="no_tracks">No saved tracks. Select a profile and push Start to record a track.</string>
+    <string name="track_details">%1$s · %2$s · %3$s</string>
+    <string name="track_unreadable">Retrace cannot read this file.</string>
+    <string name="rename">Rename</string>
+    <string name="delete">Delete</string>
+    <string name="delete_question">Delete the track \"%1$s\"?</string>
+    <string name="error_rename">Retrace cannot rename the track.</string>
+    <string name="error_delete">Retrace cannot delete the track.</string>
+
+    <!-- Permissions and the GPS -->
+    <string name="gps_off">The location of the device is off. Turn on the location in the settings.</string>
+    <string name="permission_needed">Retrace needs the location permission to record a track. You can give the permission in the settings of the application.</string>
+    <string name="open_settings">Open the settings</string>
+    <string name="error_no_permission">The last trip stopped. Retrace has no location permission.</string>
+    <string name="error_storage">The last trip stopped. Retrace cannot write the track file.</string>
+    <string name="error_no_gps">The last trip stopped. This device has no GPS receiver.</string>
+
+    <!-- The notification of the recording -->
+    <string name="channel_recording">Current track</string>
+    <string name="notification_title">Retrace records: %1$s</string>
+    <string name="notification_progress">%1$d points · %2$s</string>
+
+    <!-- Profiles and units -->
+    <string name="profile_walking">Walking</string>
+    <string name="profile_running">Running</string>
+    <string name="profile_cycling">Cycling</string>
+    <string name="profile_driving">Driving</string>
+    <string name="profile_unknown">Other</string>
+    <string name="distance_m">%1$d m</string>
+    <string name="distance_km">%1$.2f km</string>
+
+    <!-- The check of the map tile server -->
     <string name="version">Version %1$s</string>
-    <string name="intro">This version is a test of the build and of the map tile server. Push the button to download one map tile.</string>
+    <string name="intro">This screen checks the map tile server. Push the button to download one map tile.</string>
     <string name="probe_button">Check the map tile server</string>
     <string name="probe_running">The application connects to the tile server.</string>
     <string name="probe_ok">The tile server sends the tile.\nHTTP status: %1$d\nSize: %2$d bytes\nTime: %3$d ms</string>

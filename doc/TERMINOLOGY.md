@@ -7,6 +7,7 @@ Use one name for one thing. If a term is not in the table, use the plain word. A
 | Term | Meaning | Do not use |
 | --- | --- | --- |
 | track | A list of points with a time each. Retrace saves one track as one GPX file. | path, log, recording |
+| log file | The file `current.log` that holds the points of the current track during a trip. | temporary file, journal |
 | point | One stored position of a track: latitude, longitude, time and accuracy. | sample, waypoint |
 | fix | One position that the GPS receiver gives. A fix becomes a point after the filter. | reading, location update |
 | trip | The movement from the start to the finish. One trip gives one track. | journey, ride, session |
@@ -27,3 +28,4 @@ Use one name for one thing. If a term is not in the table, use the plain word. A
 | tile server | The web server that sends the tiles. | map server, tile provider |
 | tile cache | The tiles that Retrace keeps in memory and on the disk. | offline map, store |
 | push | To operate a button on the screen. | click, press, tap, hit |
+| long push | To push and hold an item of a list. | long press, long click |

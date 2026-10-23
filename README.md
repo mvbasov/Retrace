@@ -11,7 +11,12 @@ Retrace has profiles for walking, running, cycling and driving. It finds the sav
 
 ## Status
 
-This is the first version. It holds the build environment and one test screen. The test screen downloads one map tile and shows the result. The plan and the milestones are in [doc/PLAN.md](doc/PLAN.md).
+Retrace records tracks now. It does not compare them yet. The plan and the milestones are in [doc/PLAN.md](doc/PLAN.md).
+
+- Select a profile and push **Start**. A notification shows the recording while the screen is off.
+- Push **Stop** in the application or in the notification. Retrace saves the track as a GPX file.
+- A long push on a track opens the menu to rename or delete it.
+- Retrace keeps the GPX files in `/storage/emulated/0/Android/media/net.basov.retrace/tracks/`. Copy this directory for a backup.
 
 ## Constraints
 
@@ -40,12 +45,11 @@ docker buildx build -f Dockerfile.base -t retrace-base:latest --load .
 docker buildx build --target test .
 ```
 
-## Test the first version
+## Check the map tile server
 
-1. Install the APK on your device.
-2. Start Retrace.
-3. Push **Check the map tile server**.
-4. Read the result. It shows the HTTP status, the size of the tile, the time and the name of the root certificate.
+1. Start Retrace.
+2. Open the menu and push **Check the map tile server**.
+3. Read the result. It shows the HTTP status, the size of the tile, the time and the name of the root certificate.
 
 On Android 6, the result shows if the device trusts the certificate of the tile server. The result decides if the map needs its own trust store. See section 7 of [doc/PLAN.md](doc/PLAN.md).
 
