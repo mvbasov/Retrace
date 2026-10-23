@@ -110,6 +110,7 @@ feat(track): Record a track in a foreground service. v26.10.2
 - The toolchain: Debian trixie, JDK 21, Gradle 9, the Android Gradle plugin 9, SDK platform 36 and build-tools 36.
 - The version of the Android Gradle plugin is in `build.gradle`. The version of Gradle is in `Dockerfile.base`. Change the two together.
 - The Gradle files use the `name = value` form for each property. Do not use the old `name value` form.
+- `app/build.gradle` sets `enableKotlin = false`. Without it, the plugin adds the Kotlin standard library to the APK. Do not use the deprecated `android.builtInKotlin` option.
 - `Dockerfile` has two stages. `test` runs the gate. `project_builder` runs `gradle assembleRelease` and copies the APK to `/app/bin/`. It reads the version from `app/build.gradle` for the name of the APK file.
 - The build does not use the variant API of the Android Gradle plugin. The plugin removes the old variant API.
 - `local/build.sh` builds both images and copies the APK to `output-binaries/`. It keeps the full output of each build in `local/logs/`. Git ignores that directory.

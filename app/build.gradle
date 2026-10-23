@@ -5,7 +5,7 @@ plugins {
 // The version of the application, in the form YY.MM.S.
 // Change this one line in each commit. See section 4 of CLAUDE.md.
 // The Dockerfile reads this line for the name of the APK file.
-def appVersion = '26.10.6'
+def appVersion = '26.10.7'
 
 // The version code is YY * 100000 + MM * 1000 + S.
 def versionCodeOf(String name) {
@@ -21,6 +21,11 @@ def versionCodeOf(String name) {
 android {
     namespace = 'net.basov.retrace'
     compileSdk = 36
+
+    // Retrace has no Kotlin source. Without this line, the plugin adds the
+    // Kotlin standard library. R8 removes its classes, but its builtins
+    // files stay in the APK.
+    enableKotlin = false
 
     defaultConfig {
         applicationId = 'net.basov.retrace'
