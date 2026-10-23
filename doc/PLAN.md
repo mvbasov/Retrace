@@ -207,6 +207,8 @@ The OpenStreetMap tile usage policy for `tile.openstreetmap.org` has these rules
   - The color theme is light, dark, or the same as the system. Android has the night mode of the system from Android 10. On an older device, the same as the system is light.
   - `ThemedActivity` gives the light and the dark theme. It overrides the night mode of the configuration of each screen. Thus the theme and the colors of `values-night/` follow the setting.
   - The map tiles stay light in the dark theme.
+  - The menu of a track is a dialog. From Android 7, a context menu is a popup at the place of the push. Some systems draw that popup with the night mode of the system, not with the theme of Retrace.
+  - The themes set `android:forceDarkAllowed` to false on Android 10 and newer. Retrace has its own dark theme. A forced dark look on a light theme can give dark text on a dark background.
   - Later: the limits of each profile, the tile URL, the size of the tile cache and the voice messages.
 - Alerts: vibration and optional `TextToSpeech` messages. Android has `TextToSpeech` in the framework.
 

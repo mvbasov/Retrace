@@ -18,7 +18,6 @@ import android.os.Looper;
 import android.provider.OpenableColumns;
 import android.provider.Settings;
 import android.util.TypedValue;
-import android.view.ContextMenu;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -198,7 +197,10 @@ public final class MainActivity extends ThemedActivity {
                         .putExtra(TrackMapActivity.EXTRA_FILE, e.file.getPath()));
             }
         });
-        registerForContextMenu(list);
+        list.setOnItemLongClickListener((parent, view, position, id) -> {
+            showTrackMenu(adapter.getItem(position));
+            return true;
+        });
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -372,33 +374,40 @@ public final class MainActivity extends ThemedActivity {
         });
     }
 
-    @Override
-    public void onCreateContextMenu(ContextMenu menu, View v, ContextMenu.ContextMenuInfo info) {
-        super.onCreateContextMenu(menu, v, info);
-        TrackStore.Entry e = adapter.getItem(((AdapterView.AdapterContextMenuInfo) info).position);
-        menu.setHeaderTitle(e.name);
+    // The menu of a track is a dialog of this screen, not a context menu.
+    // From Android 7, a context menu is a popup at the place of the push.
+    // Some systems draw that popup with the night mode of the system, not
+    // with the color theme of Retrace.
+    private void showTrackMenu(TrackStore.Entry e) {
+        List<Integer> ids = new ArrayList<>();
+        List<String> labels = new ArrayList<>();
         if (e.readable && e.points >= 2 && !TrackService.snapshot().recording) {
-            menu.add(Menu.NONE, MENU_TRIP, Menu.NONE, R.string.start_trip_on_route);
-            menu.add(Menu.NONE, MENU_REPLAY, Menu.NONE, R.string.replay_track);
+            addItem(ids, labels, MENU_TRIP, R.string.start_trip_on_route);
+            addItem(ids, labels, MENU_REPLAY, R.string.replay_track);
         }
         if (e.readable && e.isWay()) {
-            menu.add(Menu.NONE, MENU_CHANGE_WAY, Menu.NONE, R.string.change_way);
+            addItem(ids, labels, MENU_CHANGE_WAY, R.string.change_way);
         } else if (e.readable && e.points >= 2 && e.profile != null) {
-            menu.add(Menu.NONE, MENU_MAKE_WAY, Menu.NONE, R.string.make_way);
+            addItem(ids, labels, MENU_MAKE_WAY, R.string.make_way);
         }
         if (e.readable) {
-            menu.add(Menu.NONE, MENU_SHARE, Menu.NONE, R.string.share);
-            menu.add(Menu.NONE, MENU_RENAME, Menu.NONE, R.string.rename);
+            addItem(ids, labels, MENU_SHARE, R.string.share);
+            addItem(ids, labels, MENU_RENAME, R.string.rename);
         }
-        menu.add(Menu.NONE, MENU_DELETE, Menu.NONE, R.string.delete);
+        addItem(ids, labels, MENU_DELETE, R.string.delete);
+        new AlertDialog.Builder(this)
+                .setTitle(e.name)
+                .setItems(labels.toArray(new String[0]), (d, which) -> onTrackAction(ids.get(which), e))
+                .show();
     }
 
-    @Override
-    public boolean onContextItemSelected(MenuItem item) {
-        AdapterView.AdapterContextMenuInfo info =
-                (AdapterView.AdapterContextMenuInfo) item.getMenuInfo();
-        TrackStore.Entry e = adapter.getItem(info.position);
-        if (item.getItemId() == MENU_TRIP) {
+    private void addItem(List<Integer> ids, List<String> labels, int id, int textId) {
+        ids.add(id);
+        labels.add(getString(textId));
+    }
+
+    private void onTrackAction(int id, TrackStore.Entry e) {
+        if (id == MENU_TRIP) {
             // The trip uses the profile of the reference track. A track from
             // another application can have no profile. The selected profile
             // then applies.
@@ -406,33 +415,19 @@ public final class MainActivity extends ThemedActivity {
             pendingProfile = e.profile != null ? e.profile : selected;
             pendingReference = e.file.getPath();
             startRecording();
-            return true;
-        }
-        if (item.getItemId() == MENU_MAKE_WAY) {
+        } else if (id == MENU_MAKE_WAY) {
             WayDialogs.make(this, files, e, () -> loadTracks(false));
-            return true;
-        }
-        if (item.getItemId() == MENU_CHANGE_WAY) {
+        } else if (id == MENU_CHANGE_WAY) {
             WayDialogs.change(this, files, e, () -> loadTracks(false));
-            return true;
-        }
-        if (item.getItemId() == MENU_REPLAY) {
+        } else if (id == MENU_REPLAY) {
             askReplay(e);
-            return true;
-        }
-        if (item.getItemId() == MENU_SHARE) {
+        } else if (id == MENU_SHARE) {
             share(e);
-            return true;
-        }
-        if (item.getItemId() == MENU_RENAME) {
+        } else if (id == MENU_RENAME) {
             askRename(e);
-            return true;
-        }
-        if (item.getItemId() == MENU_DELETE) {
+        } else if (id == MENU_DELETE) {
             askDelete(e);
-            return true;
         }
-        return super.onContextItemSelected(item);
     }
 
     private void askRename(TrackStore.Entry e) {

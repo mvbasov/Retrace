@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Retrace has its own dark theme. Some systems force a dark look on
+         a light application, and then a window can get a dark background
+         with dark text. Android 10 and newer obey this item. -->
+    <style name="AppTheme" parent="android:Theme.Material.Light.DarkActionBar">
+        <item name="android:forceDarkAllowed">false</item>
+    </style>
+</resources>

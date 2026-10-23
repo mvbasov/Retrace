@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The dark theme, when the system uses the night mode. See
+         values-v29/styles.xml for the item. -->
+    <style name="AppTheme" parent="android:Theme.Material">
+        <item name="android:forceDarkAllowed">false</item>
+    </style>
+</resources>
