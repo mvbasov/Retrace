@@ -194,7 +194,7 @@ The OpenStreetMap tile usage policy for `tile.openstreetmap.org` has these rules
 
 ### 5.7 User interface
 
-- **MainActivity**: the list of tracks, with name, profile, distance, time and date. Actions: record a new track, select the reference track, rename, delete, share and import.
+- **MainActivity**: the list of tracks, with name, profile, distance, time and date. Two tabs show the saved tracks or the ways. The tabs show the count of each, and the preference keeps the selected tab. Actions: record a new track, select the reference track, rename, delete, share and import.
 - **RunActivity**, the trip screen: the map and a panel with large numbers. The panel shows Δt, Δs, and on route or off route. It also shows the speed compared with the reference track, the distance to the finish and the time to the finish.
   - The large Δt is smoothed by `DeltaSmoother`, with a time constant of two times the speed smoothing window of the profile. At the finish, the panel shows the exact result.
   - The text is green while you are ahead, and red while you are behind or off route.

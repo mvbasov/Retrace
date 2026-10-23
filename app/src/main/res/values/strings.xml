@@ -10,6 +10,9 @@
     <string name="waiting_for_gps">No GPS fix yet.</string>
     <string name="gps_accuracy">GPS accuracy: %1$d m</string>
     <string name="no_tracks">No saved tracks. Select a profile and push Start to record a track.</string>
+    <string name="no_ways">No ways. Do a long push on a track and push \"Make a way from this route\".</string>
+    <string name="tab_tracks">Tracks (%1$d)</string>
+    <string name="tab_ways">Ways (%1$d)</string>
     <string name="track_details">%1$s · %2$s · %3$s</string>
     <string name="track_unreadable">Retrace cannot read this file.</string>
     <string name="rename">Rename</string>

@@ -27,6 +27,8 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -53,8 +55,8 @@ import net.basov.retrace.core.TrackImport;
 // ----------------------------------------------------------------------
 //
 // The top row holds the profile and the start or stop button. Below it, a
-// line shows the state of the recording. The list of saved tracks fills the
-// rest of the screen. A push on a track shows it on the map. A long push on a
+// line shows the state of the recording. Two tabs select the list of saved
+// tracks or the list of ways. The list fills the rest of the screen. A push on a track shows it on the map. A long push on a
 // track opens a menu: start a trip on its route, replay it, make a way from
 // its route, share, rename or delete. The menu of a way changes its tracks.
 // The options menu imports a GPX file from another application.
@@ -74,6 +76,7 @@ public final class MainActivity extends ThemedActivity {
     private static final long MAX_IMPORT_BYTES = 20L * 1024 * 1024;
     private static final long REFRESH_MS = 1000;
     private static final String PREF_PROFILE = "profile";
+    private static final String PREF_SHOW_WAYS = "show_ways";
 
     private static final int MENU_PROBE = 1;
     private static final int MENU_RENAME = 2;
@@ -95,6 +98,14 @@ public final class MainActivity extends ThemedActivity {
     private Spinner profileSpinner;
     private Button startStopButton;
     private TextView statusView;
+    private TextView emptyView;
+    private RadioButton tracksTab;
+    private RadioButton waysTab;
+    private RadioGroup tabs;
+
+    // All saved tracks and ways. The adapter gets one kind of them.
+    private List<TrackStore.Entry> allEntries = new ArrayList<>();
+    private boolean showWays;
 
     // The trip that waits for the permission dialog. The reference track is
     // null for a trip without a comparison.
@@ -183,9 +194,25 @@ public final class MainActivity extends ThemedActivity {
             }
         });
 
+        // The tabs keep no view state. The preference holds the selection.
+        showWays = prefs().getBoolean(PREF_SHOW_WAYS, false);
+        tracksTab = new RadioButton(this);
+        waysTab = new RadioButton(this);
+        tabs = new RadioGroup(this);
+        tabs.setOrientation(LinearLayout.HORIZONTAL);
+        tabs.setSaveEnabled(false);
+        for (RadioButton tab : new RadioButton[]{tracksTab, waysTab}) {
+            tab.setId(View.generateViewId());
+            tab.setSaveEnabled(false);
+            tabs.addView(tab, new RadioGroup.LayoutParams(0,
+                    RadioGroup.LayoutParams.WRAP_CONTENT, 1f));
+        }
+        tabs.check(showWays ? waysTab.getId() : tracksTab.getId());
+        tabs.setOnCheckedChangeListener((g, id) -> setShowWays(id == waysTab.getId()));
+
         TextView empty = new TextView(this);
-        empty.setText(R.string.no_tracks);
         empty.setPadding(0, pad, 0, pad);
+        emptyView = empty;
 
         ListView list = new ListView(this);
         list.setAdapter(adapter);
@@ -207,6 +234,7 @@ public final class MainActivity extends ThemedActivity {
         root.setPadding(pad, pad / 2, pad, 0);
         root.addView(top);
         root.addView(statusView);
+        root.addView(tabs);
         root.addView(empty, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         root.addView(list, new LinearLayout.LayoutParams(
@@ -368,7 +396,8 @@ public final class MainActivity extends ThemedActivity {
             List<TrackStore.Entry> entries = store.list();
             runOnUiThread(() -> {
                 if (!destroyed) {
-                    adapter.setEntries(entries);
+                    allEntries = entries;
+                    showEntries();
                 }
             });
         });
@@ -416,7 +445,10 @@ public final class MainActivity extends ThemedActivity {
             pendingReference = e.file.getPath();
             startRecording();
         } else if (id == MENU_MAKE_WAY) {
-            WayDialogs.make(this, files, e, () -> loadTracks(false));
+            WayDialogs.make(this, files, e, () -> {
+                setShowWays(true);
+                loadTracks(false);
+            });
         } else if (id == MENU_CHANGE_WAY) {
             WayDialogs.change(this, files, e, () -> loadTracks(false));
         } else if (id == MENU_REPLAY) {
@@ -710,6 +742,32 @@ public final class MainActivity extends ThemedActivity {
     // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
+
+    private void setShowWays(boolean ways) {
+        if (ways == showWays) {
+            return;
+        }
+        showWays = ways;
+        prefs().edit().putBoolean(PREF_SHOW_WAYS, ways).apply();
+        // check() does nothing for the button that is checked already. Thus
+        // the call from the listener of the tabs is safe.
+        tabs.check(ways ? waysTab.getId() : tracksTab.getId());
+        showEntries();
+    }
+
+    // Gives the adapter the entries of the selected tab. An entry that
+    // Retrace cannot read is in the list of tracks.
+    private void showEntries() {
+        List<TrackStore.Entry> tracks = new ArrayList<>();
+        List<TrackStore.Entry> ways = new ArrayList<>();
+        for (TrackStore.Entry e : allEntries) {
+            (e.isWay() ? ways : tracks).add(e);
+        }
+        tracksTab.setText(getString(R.string.tab_tracks, tracks.size()));
+        waysTab.setText(getString(R.string.tab_ways, ways.size()));
+        emptyView.setText(showWays ? R.string.no_ways : R.string.no_tracks);
+        adapter.setEntries(showWays ? ways : tracks);
+    }
 
     private Profile savedProfile() {
         Profile p = Profile.fromId(prefs().getString(PREF_PROFILE, null));
