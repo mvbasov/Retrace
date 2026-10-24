@@ -657,6 +657,25 @@ public final class WayBuilder {
             firstNear(track.x[join], track.y[join], st, limit, dir0[0], dir0[1], hit);
             joinAlong = hit.along;
 
+            // A loop ends where it starts, often in the same direction. The
+            // first points of a track are then near the start and near the
+            // finish of the route. A GPS error at the start can turn the
+            // direction of the route there by some degrees. Then the rule of
+            // direction selects the finish, and the track covers almost
+            // nothing. A track that begins at the start of a loop runs it
+            // from the start. Thus a join in the finish zone, near the first
+            // point of the track and near the start of the route, is at the
+            // start. A join in the middle of the route stays. It can follow
+            // a GPS error that the way must not get.
+            double zone = Math.min(radius + profile.offRouteM, total / 4);
+            if (joinAlong >= total - zone && Math.hypot(track.x[join] - track.x[0],
+                    track.y[join] - track.y[0]) <= zone) {
+                nearest(track.x[join], track.y[join], st, 0, zone, Double.NaN, Double.NaN, hit);
+                if (hit.distance <= limit) {
+                    joinAlong = hit.along;
+                }
+            }
+
             // The distance along the route of each point after the join.
             // The value never goes down, thus the first pass of a station is
             // clear.
@@ -692,7 +711,6 @@ public final class WayBuilder {
             // A track that joins in the start zone starts at the start. A
             // track that ends near the finish gives its end to the cut of the
             // way. See Mean.cutAtEnd().
-            double zone = Math.min(radius + profile.offRouteM, total / 4);
             boolean atStart = joinAlong <= zone;
             boolean atFinish = s[m - 1] >= total - 2 * radius - limit;
             c.atFinish = atFinish;

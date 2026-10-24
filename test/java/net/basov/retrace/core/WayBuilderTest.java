@@ -32,6 +32,13 @@ public final class WayBuilderTest {
     private static final double[][] FROM_MIDDLE = {{500, 0}, {800, 0}, {800, 600}};
     private static final double[][] STREET_WEST = {{250, 0}, {0, 0}};
     private static final double[][] STREET_EAST = {{0, 0}, {250, 0}, {250, 40}};
+    // A loop that starts at a corner, and the same loop from 25 m before the
+    // corner. The loop ends 30 m before the corner, in the direction of the
+    // first 25 m.
+    private static final double[][] LOOP_AT_CORNER = {{0, 0}, {300, 0}, {300, -250},
+            {0, -250}, {0, -30}};
+    private static final double[][] LOOP_BEFORE_CORNER = {{0, -25}, {0, 0}, {300, 0},
+            {300, -250}, {0, -250}, {0, -30}};
 
     public static void main(String[] args) {
         theWayIsNearerToTheRouteThanOneTrack();
@@ -50,6 +57,7 @@ public final class WayBuilderTest {
         aTrackFromTheMiddleGivesItsPart();
         twoTracksInOppositeDirections();
         theMatchTellsTheCoverAndTheDirection();
+        eachTrackOfALoopJoinsAtTheStart();
 
         if (failures > 0) {
             System.out.println("WayBuilderTest: " + failures + " check(s) failed");
@@ -319,6 +327,33 @@ public final class WayBuilderTest {
         }
         check("match far: no join", WayBuilder.REJECT_NO_JOIN, WayBuilder.match(base,
                 new Track("far", Profile.WALKING, moved), Profile.WALKING).reject);
+    }
+
+    // The case of the maintainer: three walks on a loop. They start at
+    // different places near a corner, and the loop ends where it starts.
+    // The first points of each walk are near the start and near the finish
+    // of the route. At the finish, the route has the direction of the first
+    // part of the walks. At the start of the walk from the corner, it has a
+    // different direction. With that walk as the base, the rule of direction
+    // joined the other walks at the finish, and no way came out. Each base
+    // must give a way of all three walks. The dialog that changes the way
+    // then finds each walk with a match against the way.
+    private static void eachTrackOfALoopJoinsAtTheStart() {
+        List<Track> tracks = new ArrayList<>();
+        tracks.add(walk(LOOP_AT_CORNER, 1.3, 1701, 1, 0));
+        tracks.add(walk(LOOP_BEFORE_CORNER, 1.4, 1702, 2, 0));
+        tracks.add(walk(LOOP_BEFORE_CORNER, 1.2, 1703, 3, 0));
+        for (int base = 0; base < tracks.size(); base++) {
+            WayBuilder.Result r = WayBuilder.build("way", Profile.WALKING, tracks, base);
+            check("loop base " + base + ": all used", "[0, 1, 2]", r.used.toString());
+            if (r.way == null) {
+                continue;
+            }
+            for (int i = 0; i < tracks.size(); i++) {
+                check("loop base " + base + ": match " + i, 0,
+                        WayBuilder.match(r.way, tracks.get(i), Profile.WALKING).reject);
+            }
+        }
     }
 
     // ------------------------------------------------------------------

@@ -238,6 +238,7 @@ A way is the mean track of some tracks on one route. It has the mean position an
 - A way works as a track: on the map, as a reference track, in a replay and in a share intent.
 - The track screen of a way can also show its tracks. A check box shows or hides them. They are hidden at first, because the line of the way is the main content. Each track has its own color on the map, below the line of the way. A list below the values names the tracks with the same colors. A push on a name opens the track screen of that track. A track that the user removed shows "not found".
 - A track can join the route away from its start, after a GPS error or a start in the middle. It gives its place and its time for the part that it covers.
+- A loop ends where it starts. The first points of a track are then near the start and near the finish. A join in the finish zone, near the first point of the track and near the start of the route, is at the start. Without this rule, a GPS error at the start of the base track could turn the direction of the route there. Then each track joined at the finish, and no way came out.
 - A track in the opposite direction is turned around. Its time is correct only on a flat route. Uphill and downhill, the speed in the two directions is different.
 - A step faster than two times the top speed of the profile, in the first or the last 10 points, is a GPS jump. The points before or after the jump are not used.
 - The way keeps the longest part of the route that two tracks or more cover. A part that only one track covers can be a GPS error.
