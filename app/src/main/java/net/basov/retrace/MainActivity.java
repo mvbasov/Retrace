@@ -3,7 +3,6 @@ package net.basov.retrace;
 import android.Manifest;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
-import android.content.ClipData;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -24,7 +23,6 @@ import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.RadioButton;
@@ -56,9 +54,10 @@ import net.basov.retrace.core.TrackImport;
 // The top row holds the profile and the start or stop button. Below it, a
 // line shows the state of the recording. Two tabs select the list of saved
 // tracks or the list of ways. The list fills the rest of the screen. A push
-// on a track shows it on the map, and that screen starts a replay. A long
-// push on a track opens a menu: start a trip on its route, make a way from
-// its route, share, rename or delete. The menu of a way changes its tracks.
+// on a track opens the track screen. That screen has the Replay button and
+// the full menu of the track: start a trip on its route, make or change a
+// way, share, rename and delete. A long push on a track in the list opens
+// a shorter menu: share, rename and delete. See TrackActions.
 // The options menu imports a GPX file from another application.
 //
 // A start opens the trip screen. While Retrace records, a push on the status
@@ -79,16 +78,9 @@ public final class MainActivity extends ThemedActivity {
     private static final String PREF_SHOW_WAYS = "show_ways";
 
     private static final int MENU_PROBE = 1;
-    private static final int MENU_RENAME = 2;
-    private static final int MENU_DELETE = 3;
-    private static final int MENU_TRIP = 4;
-    private static final int MENU_SHARE = 5;
     private static final int MENU_IMPORT = 6;
     private static final int MENU_ABOUT = 7;
     private static final int MENU_SETTINGS = 9;
-    private static final int MENU_MAKE_WAY = 10;
-    private static final int MENU_CHANGE_WAY = 11;
-    private static final int MENU_TRIP_OPPOSITE = 12;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService files = Executors.newSingleThreadExecutor();
@@ -131,6 +123,15 @@ public final class MainActivity extends ThemedActivity {
         store = new TrackStore(this);
         adapter = new TrackListAdapter(this);
         setContentView(buildViews());
+        if (savedInstanceState == null) {
+            startTripFrom(getIntent());
+        }
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        startTripFrom(intent);
     }
 
     @Override
@@ -406,126 +407,40 @@ public final class MainActivity extends ThemedActivity {
         });
     }
 
-    // The menu of a track is a dialog of this screen, not a context menu.
-    // From Android 7, a context menu is a popup at the place of the push.
-    // Some systems draw that popup with the night mode of the system, not
-    // with the color theme of Retrace.
+    // The long push shows the file items of TrackActions. The track screen
+    // has the full menu.
     private void showTrackMenu(TrackStore.Entry e) {
-        List<Integer> ids = new ArrayList<>();
-        List<String> labels = new ArrayList<>();
-        if (e.readable && e.points >= 2 && !TrackService.snapshot().recording) {
-            addItem(ids, labels, MENU_TRIP, R.string.start_trip_on_route);
-            addItem(ids, labels, MENU_TRIP_OPPOSITE, R.string.start_trip_opposite);
-        }
-        if (e.readable && e.isWay()) {
-            addItem(ids, labels, MENU_CHANGE_WAY, R.string.change_way);
-        } else if (e.readable && e.points >= 2 && e.profile != null) {
-            addItem(ids, labels, MENU_MAKE_WAY, R.string.make_way);
-        }
-        if (e.readable) {
-            addItem(ids, labels, MENU_SHARE, R.string.share);
-            addItem(ids, labels, MENU_RENAME, R.string.rename);
-        }
-        addItem(ids, labels, MENU_DELETE, R.string.delete);
-        new AlertDialog.Builder(this)
-                .setTitle(e.name)
-                .setItems(labels.toArray(new String[0]), (d, which) -> onTrackAction(ids.get(which), e))
-                .show();
+        TrackActions.showFileItems(this, files, e, this::onTrackChanged);
     }
 
-    // The trip uses the profile of the reference track. A track from another
-    // application can have no profile. The selected profile then applies.
-    private void startTripOn(TrackStore.Entry e, boolean reversed) {
-        Profile selected = Profile.values()[profileSpinner.getSelectedItemPosition()];
-        pendingProfile = e.profile != null ? e.profile : selected;
-        pendingReference = e.file.getPath();
-        pendingReversed = reversed;
+    private void onTrackChanged(int change) {
+        if (change == TrackActions.WAY_MADE) {
+            setShowWays(true);
+        }
+        loadTracks(false);
+    }
+
+    // A trip on the route of a track comes from the menu of the track
+    // screen. See TrackActions. The trip uses the profile of the reference
+    // track. A track from another application can have no profile. The
+    // selected profile then applies.
+    private void startTripFrom(Intent intent) {
+        String reference = intent.getStringExtra(TrackActions.EXTRA_TRIP_REFERENCE);
+        if (reference == null || TrackService.snapshot().recording) {
+            return;
+        }
+        // A second delivery of the same intent must not start a second trip.
+        intent.removeExtra(TrackActions.EXTRA_TRIP_REFERENCE);
+        Profile p = Profile.fromId(intent.getStringExtra(TrackActions.EXTRA_TRIP_PROFILE));
+        pendingProfile = p != null ? p : Profile.values()[profileSpinner.getSelectedItemPosition()];
+        pendingReference = reference;
+        pendingReversed = intent.getBooleanExtra(TrackActions.EXTRA_TRIP_REVERSED, false);
         startRecording();
     }
 
-    private void addItem(List<Integer> ids, List<String> labels, int id, int textId) {
-        ids.add(id);
-        labels.add(getString(textId));
-    }
-
-    private void onTrackAction(int id, TrackStore.Entry e) {
-        if (id == MENU_TRIP) {
-            startTripOn(e, false);
-        } else if (id == MENU_TRIP_OPPOSITE) {
-            // The time in the opposite direction is correct only on a flat
-            // route. The user reads this before the start.
-            new AlertDialog.Builder(this)
-                    .setTitle(R.string.start_trip_opposite)
-                    .setMessage(R.string.opposite_warning_long)
-                    .setPositiveButton(R.string.start_recording, (d, w) -> startTripOn(e, true))
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .show();
-        } else if (id == MENU_MAKE_WAY) {
-            WayDialogs.make(this, files, e, () -> {
-                setShowWays(true);
-                loadTracks(false);
-            });
-        } else if (id == MENU_CHANGE_WAY) {
-            WayDialogs.change(this, files, e, () -> loadTracks(false));
-        } else if (id == MENU_SHARE) {
-            share(e);
-        } else if (id == MENU_RENAME) {
-            askRename(e);
-        } else if (id == MENU_DELETE) {
-            askDelete(e);
-        }
-    }
-
-    private void askRename(TrackStore.Entry e) {
-        EditText input = new EditText(this);
-        input.setSingleLine(true);
-        input.setText(e.name);
-        input.setSelectAllOnFocus(true);
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.rename)
-                .setView(input)
-                .setPositiveButton(android.R.string.ok, (d, w) -> {
-                    String name = input.getText().toString().trim();
-                    if (!name.isEmpty() && !name.equals(e.name)) {
-                        runFileTask(() -> store.rename(e.file, name), R.string.error_rename);
-                    }
-                })
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
-    }
-
-    private void askDelete(TrackStore.Entry e) {
-        new AlertDialog.Builder(this)
-                .setMessage(getString(R.string.delete_question, e.name))
-                .setPositiveButton(R.string.delete, (d, w) -> runFileTask(() -> {
-                    if (!store.delete(e.file)) {
-                        throw new IOException("cannot delete " + e.file);
-                    }
-                }, R.string.error_delete))
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
-    }
-
     // ------------------------------------------------------------------
-    // Share and import
+    // Import
     // ------------------------------------------------------------------
-
-    // The share intent gives the receiver the read permission for this one
-    // URI. The clip data carries the permission through the chooser.
-    private void share(TrackStore.Entry e) {
-        Uri uri = TrackProvider.uriFor(this, e.file);
-        Intent send = new Intent(Intent.ACTION_SEND)
-                .setType("application/gpx+xml")
-                .putExtra(Intent.EXTRA_STREAM, uri)
-                .putExtra(Intent.EXTRA_SUBJECT, e.name)
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        send.setClipData(ClipData.newRawUri(e.name, uri));
-        try {
-            startActivity(Intent.createChooser(send, getString(R.string.share_title)));
-        } catch (ActivityNotFoundException ex) {
-            showMessage(getString(R.string.share_no_app));
-        }
-    }
 
     // Many file managers do not know the GPX type. Thus the picker shows all
     // files, and the GPX reader refuses a file of a different type.
@@ -667,36 +582,6 @@ public final class MainActivity extends ThemedActivity {
                 .setMessage(text)
                 .setPositiveButton(android.R.string.ok, null)
                 .show();
-    }
-
-    // A file task that can fail. The list loads again after the task.
-    private interface FileTask {
-        void run() throws IOException;
-    }
-
-    private void runFileTask(FileTask task, int errorText) {
-        files.execute(() -> {
-            boolean ok;
-            try {
-                task.run();
-                ok = true;
-            } catch (IOException ex) {
-                ok = false;
-            }
-            final boolean done = ok;
-            runOnUiThread(() -> {
-                if (destroyed) {
-                    return;
-                }
-                if (!done) {
-                    new AlertDialog.Builder(this)
-                            .setMessage(errorText)
-                            .setPositiveButton(android.R.string.ok, null)
-                            .show();
-                }
-                loadTracks(false);
-            });
-        });
     }
 
     // ------------------------------------------------------------------

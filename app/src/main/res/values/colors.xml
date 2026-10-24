@@ -8,6 +8,9 @@
     <color name="map_current">#E6FF7A00</color>
     <color name="map_position">#FF1E6FD9</color>
     <color name="map_ghost">#B3606060</color>
+    <!-- The start mark and the finish mark of the track screen. -->
+    <color name="map_start">#FF2E7D32</color>
+    <color name="map_finish">#FFC62828</color>
     <!-- The tracks of a way. They differ from the blue line of the way and
          from the orange current track. -->
     <color name="map_member_1">#B3D81B60</color>

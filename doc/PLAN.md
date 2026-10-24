@@ -169,7 +169,7 @@ Limit: two routes with the same first part. The selection can come before the ro
 
 Manual selection:
 
-- A long push on a track starts a trip with that track as the reference track, in its direction or in the opposite direction.
+- The menu of the track screen starts a trip with that track as the reference track, in its direction or in the opposite direction.
 - During the trip, the menu of the trip screen selects a track of the same profile, the automatic selection or no comparison. A second dialog asks for the direction of the track.
 - The time in the opposite direction comes from `Track.reversed()`. It is correct only on a flat route. The menu item, the dialog and the trip screen tell this.
 - After a change, TrackService gives all the points of the trip to the new matcher. A finish in these points gives no vibration.
@@ -188,7 +188,10 @@ Manual selection:
   - size limit: 100 MB. Above the limit, Retrace removes the oldest tiles down to 90 % of the limit. A later milestone moves the limit to Settings.
   - A tile after its end time stays on the map until a new download replaces it.
 - Loading: a thread pool with two connections. The newest request comes first. A task for a tile that is no longer on the screen stops before its download. After a failed download, Retrace waits 30 s before it tries that tile again.
-- In the first map version, a push on a track in the list shows that track on the map.
+- A push on a track in the list opens the track screen. It shows the track on the map. A green arrow marks the start and points in the direction of travel. A red square marks the finish.
+  - The direction of the arrow comes from the first point at least 16 dp from the start on the screen. The points of a wait at the start do not turn the arrow.
+  - The bottom of the track screen has the **Replay** button and the **Menu** button. The menu has the trip items, the way item, and share, rename and delete.
+  - A long push on a track in the list shows a short menu: share, rename and delete.
 - You can change the tile URL in Settings. Thus you can use a different tile server.
 
 The OpenStreetMap tile usage policy for `tile.openstreetmap.org` has these rules. Retrace obeys each rule.
@@ -210,14 +213,14 @@ The OpenStreetMap tile usage policy for `tile.openstreetmap.org` has these rules
   - At the start of a replay, the map shows the whole replayed track and the reference track, as after a push on **All**.
   - After a rotation of the screen, the camera of the user stays.
   - A scale bar at the bottom left shows a round length: 1, 2 or 5 times a power of 10, in meters. `ScaleBar` calculates it for the latitude of the center of the map.
-  - A long push on a track starts a trip on its route. A push on the notification, or on the status line of the list, opens the trip screen.
+  - The menu of the track screen starts a trip on the route of the track. The trip starts on the list screen, because that screen asks for the location permission and checks the GPS. A push on the notification, or on the status line of the list, opens the trip screen.
   - At the finish, the device vibrates. The recording continues until you push Stop.
   - A line above the panel shows the reference track and how the trip got it: temporary, selected, no saved track, or no comparison. The menu changes the reference track during the trip.
 - **SettingsActivity**: the vibration at the finish, the color theme, and the addition of a finished trip to its way.
   - The color theme is light, dark, or the same as the system. Android has the night mode of the system from Android 10. On an older device, the same as the system is light.
   - `ThemedActivity` gives the light and the dark theme. It overrides the night mode of the configuration of each screen. Thus the theme and the colors of `values-night/` follow the setting.
   - The map tiles stay light in the dark theme.
-  - The menu of a track is a dialog. From Android 7, a context menu is a popup at the place of the push. Some systems draw that popup with the night mode of the system, not with the theme of Retrace.
+  - Each menu of a track is a dialog. From Android 7, a context menu is a popup at the place of the push. Some systems draw that popup with the night mode of the system, not with the theme of Retrace.
   - The themes set `android:forceDarkAllowed` to false on Android 10 and newer. Retrace has its own dark theme. A forced dark look on a light theme can give dark text on a dark background.
   - Each button has round corners. The themes set `android:buttonStyle` to the style `RoundButton`. Its drawable takes the colors from the theme, thus one drawable serves the two themes. The buttons of a dialog have no background and stay as they are.
   - Later: the limits of each profile, the tile URL, the size of the tile cache and the voice messages.

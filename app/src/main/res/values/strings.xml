@@ -100,6 +100,7 @@
 
     <!-- The replay -->
     <string name="replay">Replay</string>
+    <string name="track_menu">Menu</string>
     <string name="replay_line">Replay of %1$s at %2$d× speed</string>
     <string name="replay_speed">Replay speed</string>
     <string name="replay_speed_value">%1$d×</string>

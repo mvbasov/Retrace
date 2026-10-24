@@ -18,6 +18,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import net.basov.retrace.core.EndMarks;
 import net.basov.retrace.core.MapViewport;
 import net.basov.retrace.core.ScaleBar;
 import net.basov.retrace.core.TileMath;
@@ -29,7 +30,9 @@ import net.basov.retrace.core.TrackPoint;
 //
 // The view draws the tiles, the reference track, the current track, the
 // position, the ghost and a scale bar. For a way, it also draws the tracks
-// of the way below the reference track, each in its own color. MapViewport does the math. TileLoader
+// of the way below the reference track, each in its own color. The track
+// screen also marks the start of the reference track with an arrow and its
+// finish with a square. EndMarks gives the shapes. MapViewport does the math. TileLoader
 // gives the tiles. ScaleBar gives the length of the scale bar.
 //
 // Gestures: move with one finger, zoom with two fingers, and zoom in with a
@@ -49,6 +52,11 @@ public final class MapView extends View {
     // Two points of a track nearer than this on the screen give one point of
     // the path. A long track then draws fast.
     private static final float MIN_PATH_STEP_PX = 1.5f;
+
+    // The size of the start mark and the finish mark. The direction of the
+    // arrow comes from the first point at least ARROW_AHEAD_DP away.
+    private static final float MARK_SIZE_DP = 18;
+    private static final float ARROW_AHEAD_DP = 16;
 
     // The colors of the tracks of a way, in sequence. The list of the tracks
     // shows the same colors. After the last color, the first comes again.
@@ -70,6 +78,8 @@ public final class MapView extends View {
     private final Paint currentPaint = strokePaint(R.color.map_current, 4);
     private final Paint memberPaint = strokePaint(R.color.map_member_1, 3);
     private final int[] memberColors = colors(MEMBER_COLORS);
+    private final Paint startPaint = fillPaint(R.color.map_start);
+    private final Paint finishPaint = fillPaint(R.color.map_finish);
     private final Paint positionPaint = fillPaint(R.color.map_position);
     private final Paint ghostPaint = fillPaint(R.color.map_ghost);
     private final Paint ringPaint = strokePaint(R.color.map_ring, 2);
@@ -104,6 +114,7 @@ public final class MapView extends View {
     private double ghostLon = Double.NaN;
 
     private boolean follow;
+    private boolean endMarks;
     private boolean fitPending;
     private FollowListener followListener;
 
@@ -170,6 +181,12 @@ public final class MapView extends View {
             referenceX[i] = TileMath.worldX(points.get(i).longitude);
             referenceY[i] = TileMath.worldY(points.get(i).latitude);
         }
+        invalidate();
+    }
+
+    // True: the view marks the start and the finish of the reference track.
+    void setEndMarks(boolean on) {
+        endMarks = on;
         invalidate();
     }
 
@@ -384,6 +401,9 @@ public final class MapView extends View {
             drawTrack(canvas, memberX[t], memberY[t], memberX[t].length, memberPaint);
         }
         drawTrack(canvas, referenceX, referenceY, referenceX.length, referencePaint);
+        if (endMarks) {
+            drawEndMarks(canvas);
+        }
         drawTrack(canvas, currentX, currentY, currentCount, currentPaint);
         drawMarker(canvas, ghostLat, ghostLon, ghostPaint, 6);
         drawMarker(canvas, positionLat, positionLon, positionPaint, 7);
@@ -460,6 +480,35 @@ public final class MapView extends View {
             }
         }
         canvas.drawPath(path, paint);
+    }
+
+    // The finish comes first. On a loop, the start arrow then stays on top.
+    private void drawEndMarks(Canvas canvas) {
+        int count = referenceX.length;
+        int ahead = EndMarks.aheadIndex(referenceX, referenceY, count,
+                ARROW_AHEAD_DP * density / viewport.worldSizePx());
+        if (ahead < 0) {
+            return;
+        }
+        float size = MARK_SIZE_DP * density;
+        float fx = (float) viewport.screenX(referenceX[count - 1]);
+        float fy = (float) viewport.screenY(referenceY[count - 1]);
+        float half = size * 0.35f;
+        target.set(fx - half, fy - half, fx + half, fy + half);
+        canvas.drawRect(target, finishPaint);
+        canvas.drawRect(target, ringPaint);
+
+        double sx = viewport.screenX(referenceX[0]);
+        double sy = viewport.screenY(referenceY[0]);
+        float[] a = EndMarks.arrow(sx, sy, viewport.screenX(referenceX[ahead]) - sx,
+                viewport.screenY(referenceY[ahead]) - sy, size);
+        path.rewind();
+        path.moveTo(a[0], a[1]);
+        path.lineTo(a[2], a[3]);
+        path.lineTo(a[4], a[5]);
+        path.close();
+        canvas.drawPath(path, startPaint);
+        canvas.drawPath(path, ringPaint);
     }
 
     private void drawMarker(Canvas canvas, double lat, double lon, Paint fill, int radiusDp) {

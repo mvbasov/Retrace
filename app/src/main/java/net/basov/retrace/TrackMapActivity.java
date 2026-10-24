@@ -24,11 +24,15 @@ import net.basov.retrace.core.Track;
 // ----------------------------------------------------------------------
 //
 // A push on a track in the list opens this screen. It shows the track on
-// the map, and its profile, distance and duration. The buttons zoom in, zoom
-// out and show the whole track.
+// the map, and its profile, distance and duration. An arrow marks the
+// start and points in the direction of travel. A square marks the finish.
+// The buttons zoom in, zoom out and show the whole track.
 //
 // The Replay button at the bottom starts a replay of the track. It is
-// available after the read of the track, and not during a trip.
+// available after the read of the track, and not during a trip. The Menu
+// button beside it shows the full menu of the track. See TrackActions.
+// After a change, the screen reads the track again. After a delete, the
+// screen closes.
 //
 // For a way, the map also shows the tracks of the way. A list below the
 // line of values names them, and a push on a name opens that track. See
@@ -50,7 +54,10 @@ public final class TrackMapActivity extends ThemedActivity {
     private TextView info;
     private FrameLayout memberFrame;
     private Button replayButton;
+    private Button menuButton;
     private String path;
+    // The line of the track in the menu, after the read.
+    private TrackStore.Entry entry;
     // The profile of the track, after the read. Null before the read or
     // for a track from another application with no profile.
     private Profile trackProfile;
@@ -62,6 +69,7 @@ public final class TrackMapActivity extends ThemedActivity {
         super.onCreate(savedInstanceState);
         loader = new TileLoader(this);
         map = new MapView(this, loader);
+        map.setEndMarks(true);
         setContentView(buildViews());
 
         if (savedInstanceState != null) {
@@ -75,6 +83,16 @@ public final class TrackMapActivity extends ThemedActivity {
             return;
         }
         load(new File(path), savedInstanceState == null);
+    }
+
+    // A track of a way can change on its own screen. Thus the screen of the
+    // way reads the files again when it comes back.
+    @Override
+    protected void onRestart() {
+        super.onRestart();
+        if (path != null) {
+            load(new File(path), false);
+        }
     }
 
     // A trip can start or stop while this screen is in the background.
@@ -132,6 +150,21 @@ public final class TrackMapActivity extends ThemedActivity {
         replayButton = new Button(this);
         replayButton.setText(R.string.replay);
         replayButton.setOnClickListener(v -> onReplay());
+        menuButton = new Button(this);
+        menuButton.setText(R.string.track_menu);
+        menuButton.setEnabled(false);
+        menuButton.setOnClickListener(v -> {
+            if (entry != null) {
+                TrackActions.showFull(this, files, entry, this::onTrackChanged);
+            }
+        });
+
+        LinearLayout bottom = new LinearLayout(this);
+        bottom.setOrientation(LinearLayout.HORIZONTAL);
+        bottom.addView(replayButton, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        bottom.addView(menuButton, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -141,10 +174,18 @@ public final class TrackMapActivity extends ThemedActivity {
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         root.addView(mapFrame, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
-        root.addView(replayButton, new LinearLayout.LayoutParams(
+        root.addView(bottom, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         updateReplayButton();
         return root;
+    }
+
+    private void onTrackChanged(int change) {
+        if (change == TrackActions.DELETED) {
+            finish();
+        } else {
+            load(new File(path), false);
+        }
     }
 
     // The service starts no replay during a trip. Thus the button checks
@@ -183,6 +224,8 @@ public final class TrackMapActivity extends ThemedActivity {
                     return;
                 }
                 setTitle(result.name);
+                entry = new TrackStore.Entry(file, result);
+                menuButton.setEnabled(true);
                 trackProfile = result.profile;
                 replayable = result.points.size() >= TrackStore.MIN_POINTS;
                 updateReplayButton();
