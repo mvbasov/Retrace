@@ -238,7 +238,8 @@ A way is the mean track of some tracks on one route. It has the mean position an
   - a track that covers less than half of the route
   - a track with more than 10 % of its part off the route
 - The time of the way starts at the start of its newest track.
-- The menu of a track has **Make a way from this route**. The dialog shows the tracks of the same route with a checkbox each. Such a track has the same profile and a length of 70 % to 140 % of the base. Its start and its finish are near the start and the finish of the base.
+- The menu of a track has **Make a way from this route**. The dialog shows the tracks of the same route with a checkbox each. Such a track has the same profile, and `WayBuilder.match()` accepts it. It covers at least half of the route, in one of the two directions. The dialog marks a track in the opposite direction.
+- After the build, a message tells the count of the tracks in the opposite direction. The times of the way are then correct only on a flat route.
 - The menu of a way has **Change the tracks of the way**. Retrace then builds the way again in its file.
 - A way is never a member of a way. The removal of a member track does not change the way.
 - A trip with a way as the reference track can join the way after the finish. The setting **Add a finished trip to its way** has three values:

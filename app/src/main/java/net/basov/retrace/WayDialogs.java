@@ -10,12 +10,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 
-import net.basov.retrace.core.Geo;
 import net.basov.retrace.core.Profile;
-import net.basov.retrace.core.ReferenceSelector;
 import net.basov.retrace.core.TimeText;
 import net.basov.retrace.core.Track;
-import net.basov.retrace.core.TrackPoint;
 import net.basov.retrace.core.WayBuilder;
 
 // ----------------------------------------------------------------------
@@ -24,19 +21,18 @@ import net.basov.retrace.core.WayBuilder;
 //
 // The list of tracks opens them from the menu of a track or of a way. The
 // dialog shows the saved tracks of the same route, with a checkbox each. A
-// track of the same route has the profile of the base and about its
-// length. Its start and its finish are near the start and the finish of the
-// base. For a new way, each such track is checked. For a way, its members
-// are checked.
+// track of the same route has the profile of the base. It covers at least
+// half of the route of the base, in one of the two directions. See
+// WayBuilder.match().
+// The dialog marks a track in the opposite direction. For a new way, each
+// such track is checked. For a way, its members are checked.
+//
+// The time of a track in the opposite direction is correct only on a flat
+// route. The message after the build tells it.
 //
 // The file work and WayBuilder run on the background thread. The dialogs
 // and the messages are on the UI thread.
 final class WayDialogs {
-
-    // A track of the same route has a length between these parts of the
-    // length of the base.
-    private static final double MIN_LENGTH_PART = 0.7;
-    private static final double MAX_LENGTH_PART = 1.4;
 
     private WayDialogs() {
     }
@@ -59,13 +55,13 @@ final class WayDialogs {
                              TrackStore.Entry way, Runnable done) {
         TrackStore store = new TrackStore(activity);
         files.execute(() -> {
-            List<TrackStore.Entry> route = new ArrayList<>();
+            List<Found> route = new ArrayList<>();
             try {
                 route = sameRoute(store, store.load(base.file), base);
             } catch (IOException | IllegalArgumentException e) {
                 route.clear();
             }
-            final List<TrackStore.Entry> found = route;
+            final List<Found> found = route;
             activity.runOnUiThread(() -> {
                 if (activity.isFinishing() || activity.isDestroyed()) {
                     return;
@@ -79,21 +75,30 @@ final class WayDialogs {
         });
     }
 
+    // A track of the route of the base, and its direction.
+    private static final class Found {
+        final TrackStore.Entry entry;
+        final boolean reversed;
+
+        Found(TrackStore.Entry entry, boolean reversed) {
+            this.entry = entry;
+            this.reversed = reversed;
+        }
+    }
+
     // The tracks of the route of the base, the base first if it is a track.
-    // A way is never a member of a way.
-    private static List<TrackStore.Entry> sameRoute(TrackStore store, Track base,
-                                                    TrackStore.Entry baseEntry) {
+    // WayBuilder.match() tells which tracks follow the route, and their
+    // direction. A way is never a member of a way.
+    private static List<Found> sameRoute(TrackStore store, Track base,
+                                         TrackStore.Entry baseEntry) {
         Profile profile = base.profile;
-        TrackPoint start = base.points.get(0);
-        TrackPoint finish = base.points.get(base.points.size() - 1);
-        double limit = ReferenceSelector.START_FACTOR * profile.radiusM;
-        List<TrackStore.Entry> out = new ArrayList<>();
+        List<Found> out = new ArrayList<>();
         for (TrackStore.Entry e : store.list()) {
             if (!e.readable || e.isWay() || e.profile != profile || e.points < 2) {
                 continue;
             }
-            double part = e.distanceM / Math.max(1, base.distanceM());
-            if (part < MIN_LENGTH_PART || part > MAX_LENGTH_PART) {
+            if (e.file.equals(baseEntry.file)) {
+                out.add(0, new Found(e, false));
                 continue;
             }
             Track t;
@@ -102,28 +107,28 @@ final class WayDialogs {
             } catch (IOException | IllegalArgumentException ex) {
                 continue;
             }
-            if (Geo.distanceM(t.points.get(0), start) > limit
-                    || Geo.distanceM(t.points.get(t.points.size() - 1), finish) > limit) {
-                continue;
-            }
-            if (e.file.equals(baseEntry.file)) {
-                out.add(0, e);
-            } else {
-                out.add(e);
+            WayBuilder.Match m = WayBuilder.match(base, t, profile);
+            if (m.reject == 0) {
+                out.add(new Found(e, m.reversed));
             }
         }
         return out;
     }
 
     private static void showChoice(Activity activity, ExecutorService files,
-                                   List<TrackStore.Entry> tracks, TrackStore.Entry base,
+                                   List<Found> found, TrackStore.Entry base,
                                    TrackStore.Entry way, Runnable done) {
-        String[] items = new String[tracks.size()];
-        boolean[] checked = new boolean[tracks.size()];
-        for (int i = 0; i < tracks.size(); i++) {
-            TrackStore.Entry e = tracks.get(i);
+        List<TrackStore.Entry> tracks = new ArrayList<>();
+        String[] items = new String[found.size()];
+        boolean[] checked = new boolean[found.size()];
+        for (int i = 0; i < found.size(); i++) {
+            TrackStore.Entry e = found.get(i).entry;
+            tracks.add(e);
             items[i] = activity.getString(R.string.track_details, e.name,
                     Labels.distance(activity, e.distanceM), TimeText.duration(e.durationMs));
+            if (found.get(i).reversed) {
+                items[i] = activity.getString(R.string.way_item_opposite, items[i]);
+            }
             checked[i] = way == null || way.members.contains(e.file.getName());
         }
         new AlertDialog.Builder(activity)
@@ -181,6 +186,12 @@ final class WayDialogs {
                     ok = true;
                     if (!r.rejected.isEmpty()) {
                         rejectedText = activity.getString(R.string.way_rejected, r.rejected.size());
+                    }
+                    if (!r.reversed.isEmpty()) {
+                        String opposite = activity.getString(R.string.way_opposite_used,
+                                r.reversed.size());
+                        rejectedText = rejectedText == null ? opposite
+                                : rejectedText + "\n\n" + opposite;
                     }
                 }
             } catch (IOException | IllegalArgumentException e) {
