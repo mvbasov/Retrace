@@ -189,6 +189,11 @@ Manual selection:
   - A tile after its end time stays on the map until a new download replaces it.
 - Loading: a thread pool with two connections. The newest request comes first. A task for a tile that is no longer on the screen stops before its download. After a failed download, Retrace waits 30 s before it tries that tile again.
 - A push on a track in the list opens the track screen. It shows the track on the map. A green arrow marks the start and points in the direction of travel. A red square marks the finish.
+  - The action bar shows the name of the track, and the file name below it in small text.
+  - The line of values shows the profile, the distance, the duration, and the lowest, the mean and the highest speed. `TrackSpeeds` calculates the speeds:
+    - A step slower than 0.5 m/s is a stop. A step faster than two times the top speed of the profile is a GPS jump. Stops and jumps do not count.
+    - The mean speed is the distance of the moving steps divided by their time.
+    - The lowest and the highest speed come from windows of the smoothing time of the profile, with no stop or jump in them.
   - The direction of the arrow comes from the first point at least 16 dp from the start on the screen. The points of a wait at the start do not turn the arrow.
   - The bottom of the track screen has the **Replay** button and the **Menu** button. The menu has the trip items, the way item, and share, rename and delete.
   - A long push on a track in the list shows a short menu: share, rename and delete.

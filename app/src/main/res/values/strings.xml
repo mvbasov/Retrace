@@ -23,6 +23,7 @@
     <string name="tab_tracks">Tracks (%1$d)</string>
     <string name="tab_ways">Ways (%1$d)</string>
     <string name="track_details">%1$s · %2$s · %3$s</string>
+    <string name="track_details_speeds">%1$s · %2$s</string>
     <string name="track_unreadable">Retrace cannot read this file.</string>
     <string name="rename">Rename</string>
     <string name="delete">Delete</string>
@@ -92,6 +93,7 @@
     <string name="ghost_ahead">%1$s ahead of the ghost</string>
     <string name="ghost_behind">%1$s behind the ghost</string>
     <string name="speed_value">%1$.1f km/h</string>
+    <string name="speed_range">%1$.1f / %2$.1f / %3$.1f km/h</string>
     <string name="speed_compare">Speed %1$s · reference %2$s</string>
     <string name="to_finish">%1$s to the finish · %2$s</string>
     <string name="value_unknown">\u2013</string>

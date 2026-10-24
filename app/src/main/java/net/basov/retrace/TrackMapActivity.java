@@ -1,6 +1,10 @@
 package net.basov.retrace;
 
+import android.app.ActionBar;
 import android.os.Bundle;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.RelativeSizeSpan;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -18,13 +22,17 @@ import java.util.concurrent.Executors;
 import net.basov.retrace.core.Profile;
 import net.basov.retrace.core.TimeText;
 import net.basov.retrace.core.Track;
+import net.basov.retrace.core.TrackSpeeds;
 
 // ----------------------------------------------------------------------
 // A saved track on the map
 // ----------------------------------------------------------------------
 //
 // A push on a track in the list opens this screen. It shows the track on
-// the map, and its profile, distance and duration. An arrow marks the
+// the map. The line of values has its profile, distance and duration, and
+// its lowest, mean and highest speed. See TrackSpeeds. The action bar shows
+// the name of the track and, in small text below it, the file name. An
+// arrow marks the
 // start and points in the direction of travel. A square marks the finish.
 // The buttons zoom in, zoom out and show the whole track.
 //
@@ -48,6 +56,9 @@ public final class TrackMapActivity extends ThemedActivity {
     private static final String STATE_LON = "lon";
     private static final String STATE_ZOOM = "zoom";
     private static final String STATE_MEMBERS = "members";
+
+    // The size of the file name, as a part of the size of the subtitle.
+    private static final float FILE_NAME_SCALE = 0.75f;
 
     private final ExecutorService files = Executors.newSingleThreadExecutor();
     private TileLoader loader;
@@ -206,6 +217,38 @@ public final class TrackMapActivity extends ThemedActivity {
         replayButton.setEnabled(replayable && !TrackService.snapshot().recording);
     }
 
+    // The profile, the distance, the duration and the speeds in one line.
+    // A track with no times has no speeds.
+    private String details(Track track, TrackSpeeds speeds) {
+        String text = getString(R.string.track_details,
+                Labels.profile(this, track.profile),
+                Labels.distance(this, track.distanceM()),
+                TimeText.duration(track.durationMs()));
+        if (speeds.hasRange()) {
+            return getString(R.string.track_details_speeds, text, getString(
+                    R.string.speed_range, speeds.minMps * 3.6, speeds.meanMps * 3.6,
+                    speeds.maxMps * 3.6));
+        }
+        if (speeds.hasMean()) {
+            return getString(R.string.track_details_speeds, text,
+                    getString(R.string.speed_value, speeds.meanMps * 3.6));
+        }
+        return text;
+    }
+
+    // The file name tells the file of a track for a share or a copy. The
+    // name of the track can be the same for two files.
+    private void showFileName(String name) {
+        ActionBar bar = getActionBar();
+        if (bar == null) {
+            return;
+        }
+        SpannableString small = new SpannableString(name);
+        small.setSpan(new RelativeSizeSpan(FILE_NAME_SCALE), 0, name.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        bar.setSubtitle(small);
+    }
+
     // Reads the track on the background thread, and for a way also its
     // tracks. At the first start, the map then shows the whole track.
     private void load(File file, boolean fit) {
@@ -218,6 +261,8 @@ public final class TrackMapActivity extends ThemedActivity {
                 track = null;
             }
             final Track result = track;
+            final TrackSpeeds speeds = track == null ? null : TrackSpeeds.of(track,
+                    track.profile != null ? track.profile : Profile.WALKING);
             final List<WayMemberList.Member> members = track != null && track.isWay()
                     ? WayMemberList.read(store, track) : null;
             runOnUiThread(() -> {
@@ -229,15 +274,13 @@ public final class TrackMapActivity extends ThemedActivity {
                     return;
                 }
                 setTitle(result.name);
+                showFileName(file.getName());
                 entry = new TrackStore.Entry(file, result);
                 menuButton.setEnabled(true);
                 trackProfile = result.profile;
                 replayable = result.points.size() >= TrackStore.MIN_POINTS;
                 updateReplayButton();
-                info.setText(getString(R.string.track_details,
-                        Labels.profile(this, result.profile),
-                        Labels.distance(this, result.distanceM()),
-                        TimeText.duration(result.durationMs())));
+                info.setText(details(result, speeds));
                 if (members != null) {
                     memberFrame.removeAllViews();
                     memberFrame.addView(WayMemberList.build(this, members, map, membersShown,

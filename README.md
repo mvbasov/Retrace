@@ -19,7 +19,7 @@ Retrace records tracks, shows them on a map, and compares a trip with a saved tr
 - Push **Stop** in the application or in the notification. Retrace saves the track as a GPX file.
 - Two tabs above the list show the saved tracks or the ways.
 - Each map has a scale bar at the bottom left. On the trip screen, the map follows your position from the first GPS point. A replay starts with the whole route on the screen.
-- A push on a track opens the track screen. It shows the track on the map, with a green arrow at the start and a red square at the finish. The map uses OpenStreetMap tiles and keeps them in a cache. The **Menu** button at the bottom of the track screen opens the menu of the track.
+- A push on a track opens the track screen. It shows the track on the map, with a green arrow at the start and a red square at the finish. The line of values has the lowest, the mean and the highest speed. A wait and a GPS jump do not count. The file name is below the name of the track. The map uses OpenStreetMap tiles and keeps them in a cache. The **Menu** button at the bottom of the track screen opens the menu of the track.
 - To start a trip on the route of a track, open the track and push **Menu**. Then push **Start a trip on this route**. That track becomes the reference track.
 - To follow the route in the opposite direction, push **Start a trip on this route in the opposite direction**. The times are then correct only on a flat route.
 - The automatic selection also finds a route that you join in the middle, and a route in the opposite direction.
