@@ -7,25 +7,28 @@ import android.widget.Toast;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 
-import net.basov.retrace.core.Profile;
 import net.basov.retrace.core.TimeText;
 import net.basov.retrace.core.Track;
+import net.basov.retrace.core.WayCandidates;
 import net.basov.retrace.core.WayBuilder;
 
 // ----------------------------------------------------------------------
 // The dialogs that make a way and change the tracks of a way
 // ----------------------------------------------------------------------
 //
-// The list of tracks opens them from the menu of a track or of a way. The
-// dialog shows the saved tracks of the same route, with a checkbox each. A
-// track of the same route has the profile of the base. It covers at least
-// half of the route of the base, in one of the two directions. See
-// WayBuilder.match().
+// The menu of a track or of a way opens them. The dialog shows the saved
+// tracks of the same route, with a checkbox each. WayCandidates selects
+// them. For a new way, a track of the same route has the profile of the
+// base. It also covers at least half of the route of the base, in one of
+// the two directions. For a way, its members are always in the list. The
+// other tracks need the same test against the way.
 // The dialog marks a track in the opposite direction. For a new way, each
-// such track is checked. For a way, its members are checked.
+// track is checked. For a way, its members are checked.
 //
 // The time of a track in the opposite direction is correct only on a flat
 // route. The message after the build tells it.
@@ -75,30 +78,29 @@ final class WayDialogs {
         });
     }
 
-    // A track of the route of the base, and its direction.
+    // A track of the route of the base, its direction, and its first state
+    // in the dialog.
     private static final class Found {
         final TrackStore.Entry entry;
         final boolean reversed;
+        final boolean checked;
 
-        Found(TrackStore.Entry entry, boolean reversed) {
+        Found(TrackStore.Entry entry, boolean reversed, boolean checked) {
             this.entry = entry;
             this.reversed = reversed;
+            this.checked = checked;
         }
     }
 
-    // The tracks of the route of the base, the base first if it is a track.
-    // WayBuilder.match() tells which tracks follow the route, and their
-    // direction. A way is never a member of a way.
+    // The tracks of the route of the base. See WayCandidates. The quick
+    // check of the line of the list comes first. Thus Retrace reads only the
+    // files of the profile.
     private static List<Found> sameRoute(TrackStore store, Track base,
                                          TrackStore.Entry baseEntry) {
-        Profile profile = base.profile;
-        List<Found> out = new ArrayList<>();
+        WayCandidates candidates = new WayCandidates(base, baseEntry.file.getName());
+        Map<String, TrackStore.Entry> byName = new HashMap<>();
         for (TrackStore.Entry e : store.list()) {
-            if (!e.readable || e.isWay() || e.profile != profile || e.points < 2) {
-                continue;
-            }
-            if (e.file.equals(baseEntry.file)) {
-                out.add(0, new Found(e, false));
+            if (!e.readable || e.isWay() || e.profile != base.profile || e.points < 2) {
                 continue;
             }
             Track t;
@@ -107,10 +109,13 @@ final class WayDialogs {
             } catch (IOException | IllegalArgumentException ex) {
                 continue;
             }
-            WayBuilder.Match m = WayBuilder.match(base, t, profile);
-            if (m.reject == 0) {
-                out.add(new Found(e, m.reversed));
+            if (candidates.offer(e.file.getName(), t)) {
+                byName.put(e.file.getName(), e);
             }
+        }
+        List<Found> out = new ArrayList<>();
+        for (WayCandidates.Item item : candidates.items()) {
+            out.add(new Found(byName.get(item.name), item.reversed, item.checked));
         }
         return out;
     }
@@ -129,7 +134,7 @@ final class WayDialogs {
             if (found.get(i).reversed) {
                 items[i] = activity.getString(R.string.way_item_opposite, items[i]);
             }
-            checked[i] = way == null || way.members.contains(e.file.getName());
+            checked[i] = found.get(i).checked;
         }
         new AlertDialog.Builder(activity)
                 .setTitle(R.string.way_tracks_title)
