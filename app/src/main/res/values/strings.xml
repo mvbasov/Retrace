@@ -9,6 +9,15 @@
     <string name="status_recording">Retrace records: %1$s\n%2$d points · %3$s · %4$s</string>
     <string name="waiting_for_gps">No GPS fix yet.</string>
     <string name="gps_accuracy">GPS accuracy: %1$d m</string>
+    <string name="gps_start">Start GPS</string>
+    <string name="gps_stop">Stop GPS</string>
+    <string name="gps_hint">Start the GPS before the trip. Then the trip starts with a good fix.</string>
+    <string name="gps_location_off">The location of the device is off.</string>
+    <string name="gps_ready">The GPS is ready.</string>
+    <string name="gps_ready_accuracy">The GPS is ready. Accuracy: %1$d m.</string>
+    <string name="gps_too_low">Accuracy: %1$d m. This profile needs %2$d m or better.</string>
+    <string name="gps_satellites">%1$d of %2$d satellites in use.</string>
+    <string name="gps_no_receiver">This device has no GPS receiver, or Retrace has no permission for it.</string>
     <string name="no_tracks">No saved tracks. Select a profile and push Start to record a track.</string>
     <string name="no_ways">No ways. Do a long push on a track and push \"Make a way from this route\".</string>
     <string name="tab_tracks">Tracks (%1$d)</string>
@@ -37,7 +46,7 @@
     <string name="way_added">Retrace added the trip to the way \"%1$s\".</string>
     <string name="way_not_used">The trip does not follow the route of the way \"%1$s\". Retrace did not add it.</string>
     <string name="way_update_error">Retrace cannot change the way \"%1$s\".</string>
-    <string name="way_members_title">Tracks of this way (%1$d)</string>
+    <string name="way_members_title">Show the tracks of this way (%1$d)</string>
     <string name="way_member_item">%1$s · %2$s · %3$s</string>
     <string name="way_member_missing">%1$s · not found</string>
     <string name="way_item_opposite">%1$s · opposite direction</string>

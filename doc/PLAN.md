@@ -204,6 +204,9 @@ The OpenStreetMap tile usage policy for `tile.openstreetmap.org` has these rules
 ### 5.7 User interface
 
 - **MainActivity**: the list of tracks, with name, profile, distance, time and date. Two tabs show the saved tracks or the ways. The tabs show the count of each, and the preference keeps the selected tab. Actions: record a new track, select the reference track, rename, delete, share and import.
+  - The button **Start GPS** starts the GPS receiver before a trip. Then the trip starts with a good fix. The row shows the state of the receiver: the location is off, no fix yet, or the accuracy. From Android 7, it also shows the satellites in use and in view.
+  - `GpsReadiness` compares the accuracy with the limit of the selected profile. The rule agrees with `RecordFilter`.
+  - The receiver stops after a push on **Stop GPS**, at the start of a trip, when the list screen closes, and after 10 minutes. It uses much power.
 - **RunActivity**, the trip screen: the map and a panel with large numbers. The panel shows Δt, Δs, and on route or off route. It also shows the speed compared with the reference track, the distance to the finish and the time to the finish.
   - The large Δt is smoothed by `DeltaSmoother`, with a time constant of two times the speed smoothing window of the profile. At the finish, the panel shows the exact result.
   - The text is green while you are ahead, and red while you are behind or off route.
@@ -233,7 +236,7 @@ A way is the mean track of some tracks on one route. It has the mean position an
 - `WayBuilder` makes the way. The banner comment of `WayBuilder.java` gives each step and the reason for it.
 - A way is a GPX file in the track directory. The `<metadata>` element holds an extension with the file names of its tracks. Other applications ignore the extension and read a way as a plain track.
 - A way works as a track: on the map, as a reference track, in a replay and in a share intent.
-- The track screen of a way also shows its tracks. Each track has its own color on the map, below the line of the way. A list below the values names the tracks with the same colors. A push on a name opens the track screen of that track. A track that the user removed shows "not found".
+- The track screen of a way can also show its tracks. A check box shows or hides them. They are hidden at first, because the line of the way is the main content. Each track has its own color on the map, below the line of the way. A list below the values names the tracks with the same colors. A push on a name opens the track screen of that track. A track that the user removed shows "not found".
 - A track can join the route away from its start, after a GPS error or a start in the middle. It gives its place and its time for the part that it covers.
 - A track in the opposite direction is turned around. Its time is correct only on a flat route. Uphill and downhill, the speed in the two directions is different.
 - A step faster than two times the top speed of the profile, in the first or the last 10 points, is a GPS jump. The points before or after the jump are not used.

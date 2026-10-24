@@ -17,6 +17,7 @@ import android.os.Looper;
 import android.provider.OpenableColumns;
 import android.provider.Settings;
 import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -39,6 +40,7 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import net.basov.retrace.core.GpsReadiness;
 import net.basov.retrace.core.GpxReader;
 import net.basov.retrace.core.LimitedInputStream;
 import net.basov.retrace.core.Profile;
@@ -63,12 +65,16 @@ import net.basov.retrace.core.TrackImport;
 // A start opens the trip screen. While Retrace records, a push on the status
 // line opens it again.
 //
+// Before a trip, the GPS button starts the receiver. Its row shows the state
+// of the receiver and the accuracy. See GpsWarmup and GpsReadiness.
+//
 // The activity reads TrackService.snapshot() once each second. A file task
 // runs on one background thread, and its result comes back on the UI thread.
 public final class MainActivity extends ThemedActivity {
 
     private static final int REQUEST_LOCATION = 1;
     private static final int REQUEST_IMPORT = 2;
+    private static final int REQUEST_GPS = 3;
 
     // A larger GPX file is not imported. The reader keeps all points in
     // memory. 20 MB is more than 100000 points.
@@ -90,6 +96,9 @@ public final class MainActivity extends ThemedActivity {
     private Spinner profileSpinner;
     private Button startStopButton;
     private TextView statusView;
+    private LinearLayout gpsRow;
+    private Button gpsButton;
+    private TextView gpsView;
     private TextView emptyView;
     private RadioButton tracksTab;
     private RadioButton waysTab;
@@ -150,6 +159,11 @@ public final class MainActivity extends ThemedActivity {
     @Override
     protected void onDestroy() {
         destroyed = true;
+        // A turn of the device also destroys the activity. The receiver
+        // continues then, because the new activity shows it again.
+        if (isFinishing()) {
+            GpsWarmup.stop();
+        }
         files.shutdown();
         super.onDestroy();
     }
@@ -187,6 +201,18 @@ public final class MainActivity extends ThemedActivity {
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         top.addView(startStopButton, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        gpsButton = new Button(this);
+        gpsButton.setOnClickListener(v -> onGps());
+        gpsView = new TextView(this);
+        gpsView.setPadding(pad / 2, 0, 0, 0);
+        gpsRow = new LinearLayout(this);
+        gpsRow.setOrientation(LinearLayout.HORIZONTAL);
+        gpsRow.setGravity(Gravity.CENTER_VERTICAL);
+        gpsRow.addView(gpsButton, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        gpsRow.addView(gpsView, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
         statusView = new TextView(this);
         statusView.setPadding(0, pad / 2, 0, pad / 2);
@@ -235,6 +261,7 @@ public final class MainActivity extends ThemedActivity {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(pad, pad / 2, pad, 0);
         root.addView(top);
+        root.addView(gpsRow);
         root.addView(statusView);
         root.addView(tabs);
         root.addView(empty, new LinearLayout.LayoutParams(
@@ -267,14 +294,8 @@ public final class MainActivity extends ThemedActivity {
             requestPermissions(permissions(), REQUEST_LOCATION);
             return;
         }
-        LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        if (lm == null || !lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-            new AlertDialog.Builder(this)
-                    .setMessage(R.string.gps_off)
-                    .setPositiveButton(R.string.open_settings, (d, w) ->
-                            startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)))
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .show();
+        if (!locationOn()) {
+            showLocationOff();
             return;
         }
         Intent start = new Intent(this, TrackService.class)
@@ -289,7 +310,91 @@ public final class MainActivity extends ThemedActivity {
         } else {
             startService(start);
         }
+        // TrackService now has the receiver. The receiver keeps its fix.
+        GpsWarmup.stop();
         startActivity(new Intent(this, RunActivity.class));
+    }
+
+    private boolean locationOn() {
+        LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+        return lm != null && lm.isProviderEnabled(LocationManager.GPS_PROVIDER);
+    }
+
+    private void showLocationOff() {
+        new AlertDialog.Builder(this)
+                .setMessage(R.string.gps_off)
+                .setPositiveButton(R.string.open_settings, (d, w) ->
+                        startActivity(new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)))
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    // ------------------------------------------------------------------
+    // The GPS before a trip
+    // ------------------------------------------------------------------
+
+    private void onGps() {
+        if (GpsWarmup.isRunning()) {
+            GpsWarmup.stop();
+        } else {
+            startGps();
+        }
+        showGps(TrackService.snapshot());
+    }
+
+    // With the location off, the receiver starts too. It gives its first fix
+    // when the user turns the location on.
+    private void startGps() {
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+                != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(permissions(), REQUEST_GPS);
+            return;
+        }
+        if (!GpsWarmup.start(this)) {
+            showMessage(getString(R.string.gps_no_receiver));
+            return;
+        }
+        if (!locationOn()) {
+            showLocationOff();
+        }
+    }
+
+    // During a trip, the status line shows the GPS. Thus the screen hides
+    // the row.
+    private void showGps(RecordingSnapshot s) {
+        gpsRow.setVisibility(s.recording ? View.GONE : View.VISIBLE);
+        gpsButton.setText(GpsWarmup.isRunning() ? R.string.gps_stop : R.string.gps_start);
+        gpsView.setText(gpsText());
+    }
+
+    private String gpsText() {
+        GpsWarmup.Status g = GpsWarmup.status();
+        if (!g.running) {
+            return getString(R.string.gps_hint);
+        }
+        Profile profile = Profile.values()[profileSpinner.getSelectedItemPosition()];
+        String text;
+        switch (GpsReadiness.of(g.locationOn, g.fixAgeMs, g.accuracyM, profile)) {
+            case OFF:
+                return getString(R.string.gps_location_off);
+            case SEARCHING:
+                text = getString(R.string.waiting_for_gps);
+                break;
+            case TOO_LOW:
+                text = getString(R.string.gps_too_low, (int) Math.round(g.accuracyM),
+                        (int) Math.round(profile.accuracyLimitM));
+                break;
+            case READY:
+            default:
+                text = Double.isNaN(g.accuracyM) ? getString(R.string.gps_ready)
+                        : getString(R.string.gps_ready_accuracy, (int) Math.round(g.accuracyM));
+                break;
+        }
+        if (g.satellitesVisible >= 0) {
+            text += "\n" + getString(R.string.gps_satellites,
+                    g.satellitesUsed, g.satellitesVisible);
+        }
+        return text;
     }
 
     private static String[] permissions() {
@@ -307,12 +412,17 @@ public final class MainActivity extends ThemedActivity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(requestCode, permissions, results);
-        if (requestCode != REQUEST_LOCATION) {
+        if (requestCode != REQUEST_LOCATION && requestCode != REQUEST_GPS) {
             return;
         }
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
                 == PackageManager.PERMISSION_GRANTED) {
-            startRecording();
+            if (requestCode == REQUEST_LOCATION) {
+                startRecording();
+            } else {
+                startGps();
+                showGps(TrackService.snapshot());
+            }
             return;
         }
         // Android does not show the request again after the user selects
@@ -341,6 +451,7 @@ public final class MainActivity extends ThemedActivity {
             profileSpinner.setSelection(s.profile.ordinal());
         }
         statusView.setText(statusText(s));
+        showGps(s);
         if (s.savedCount != shownSavedCount) {
             loadTracks(false);
         }

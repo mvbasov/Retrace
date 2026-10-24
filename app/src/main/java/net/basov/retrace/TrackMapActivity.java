@@ -34,9 +34,9 @@ import net.basov.retrace.core.Track;
 // After a change, the screen reads the track again. After a delete, the
 // screen closes.
 //
-// For a way, the map also shows the tracks of the way. A list below the
-// line of values names them, and a push on a name opens that track. See
-// WayMemberList.
+// For a way, a check box below the line of values shows the tracks of the
+// way. The map then draws them, and a list names them. A push on a name
+// opens that track. The tracks are hidden at first. See WayMemberList.
 //
 // The screen keeps the center and the zoom of the map when Android makes the
 // activity again, for example after a turn of the device.
@@ -47,12 +47,15 @@ public final class TrackMapActivity extends ThemedActivity {
     private static final String STATE_LAT = "lat";
     private static final String STATE_LON = "lon";
     private static final String STATE_ZOOM = "zoom";
+    private static final String STATE_MEMBERS = "members";
 
     private final ExecutorService files = Executors.newSingleThreadExecutor();
     private TileLoader loader;
     private MapView map;
     private TextView info;
     private FrameLayout memberFrame;
+    // True if the map shows the tracks of the way. They are hidden at first.
+    private boolean membersShown;
     private Button replayButton;
     private Button menuButton;
     private String path;
@@ -73,6 +76,7 @@ public final class TrackMapActivity extends ThemedActivity {
         setContentView(buildViews());
 
         if (savedInstanceState != null) {
+            membersShown = savedInstanceState.getBoolean(STATE_MEMBERS, false);
             map.setCamera(savedInstanceState.getDouble(STATE_LAT),
                     savedInstanceState.getDouble(STATE_LON),
                     savedInstanceState.getDouble(STATE_ZOOM));
@@ -108,6 +112,7 @@ public final class TrackMapActivity extends ThemedActivity {
         out.putDouble(STATE_LAT, map.centerLatitude());
         out.putDouble(STATE_LON, map.centerLongitude());
         out.putDouble(STATE_ZOOM, map.zoom());
+        out.putBoolean(STATE_MEMBERS, membersShown);
     }
 
     @Override
@@ -234,9 +239,9 @@ public final class TrackMapActivity extends ThemedActivity {
                         Labels.distance(this, result.distanceM()),
                         TimeText.duration(result.durationMs())));
                 if (members != null) {
-                    map.setMembers(WayMemberList.points(members));
                     memberFrame.removeAllViews();
-                    memberFrame.addView(WayMemberList.build(this, members, map));
+                    memberFrame.addView(WayMemberList.build(this, members, map, membersShown,
+                            shown -> membersShown = shown));
                 }
                 map.setReference(result.points);
                 if (fit) {

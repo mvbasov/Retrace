@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.CheckBox;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -31,9 +32,18 @@ import net.basov.retrace.core.TrackPoint;
 // user removed after the build of the way shows "not found", and a push on
 // it does nothing.
 //
+// The tracks are hidden at first: the lines on the map and the list. The
+// check box above the list shows them. The map of a way with many tracks is
+// hard to read, and the line of the way is the main content.
+//
 // The list is at most MAX_HEIGHT_DP high, and at most 30 percent of the
 // screen. A longer list scrolls. Thus the map stays large.
 final class WayMemberList {
+
+    // Tells the screen that the user showed or hid the tracks.
+    interface ShownListener {
+        void onShown(boolean shown);
+    }
 
     private static final int MAX_HEIGHT_DP = 168;
 
@@ -82,13 +92,18 @@ final class WayMemberList {
         return points;
     }
 
-    // The title and the lines, with the colors of the map.
-    static View build(Activity activity, List<Member> members, MapView map) {
+    // The check box and the lines, with the colors of the map. The check
+    // box also sets the tracks of the map.
+    static View build(Activity activity, List<Member> members, MapView map, boolean shown,
+                      ShownListener listener) {
         int pad = dp(activity, 16);
 
-        TextView title = new TextView(activity);
+        CheckBox title = new CheckBox(activity);
         title.setText(activity.getString(R.string.way_members_title, members.size()));
-        title.setPadding(pad, 0, pad, dp(activity, 4));
+        title.setSaveEnabled(false);
+        LinearLayout.LayoutParams titleMargin = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        titleMargin.setMargins(pad / 2, 0, pad, 0);
 
         LinearLayout lines = new LinearLayout(activity);
         lines.setOrientation(LinearLayout.VERTICAL);
@@ -108,9 +123,23 @@ final class WayMemberList {
 
         LinearLayout box = new LinearLayout(activity);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.addView(title);
+        box.addView(title, titleMargin);
         box.addView(scroll);
+
+        List<List<TrackPoint>> points = points(members);
+        title.setChecked(shown);
+        show(scroll, map, points, shown);
+        title.setOnCheckedChangeListener((b, checked) -> {
+            show(scroll, map, points, checked);
+            listener.onShown(checked);
+        });
         return box;
+    }
+
+    private static void show(View list, MapView map, List<List<TrackPoint>> points,
+                             boolean shown) {
+        list.setVisibility(shown ? View.VISIBLE : View.GONE);
+        map.setMembers(shown ? points : new ArrayList<List<TrackPoint>>());
     }
 
     private static View line(Activity activity, Member m, int color) {
