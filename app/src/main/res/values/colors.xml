@@ -8,6 +8,14 @@
     <color name="map_current">#E6FF7A00</color>
     <color name="map_position">#FF1E6FD9</color>
     <color name="map_ghost">#B3606060</color>
+    <!-- The tracks of a way. They differ from the blue line of the way and
+         from the orange current track. -->
+    <color name="map_member_1">#B3D81B60</color>
+    <color name="map_member_2">#B38E24AA</color>
+    <color name="map_member_3">#B343A047</color>
+    <color name="map_member_4">#B3F4511E</color>
+    <color name="map_member_5">#B300897B</color>
+    <color name="map_member_6">#B36D4C41</color>
     <color name="map_ring">#FFFFFFFF</color>
     <color name="map_attribution_text">#FF333333</color>
     <color name="map_attribution_background">#B3FFFFFF</color>

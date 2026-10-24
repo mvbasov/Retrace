@@ -37,6 +37,9 @@
     <string name="way_added">Retrace added the trip to the way \"%1$s\".</string>
     <string name="way_not_used">The trip does not follow the route of the way \"%1$s\". Retrace did not add it.</string>
     <string name="way_update_error">Retrace cannot change the way \"%1$s\".</string>
+    <string name="way_members_title">Tracks of this way (%1$d)</string>
+    <string name="way_member_item">%1$s · %2$s · %3$s</string>
+    <string name="way_member_missing">%1$s · not found</string>
     <string name="way_item_opposite">%1$s · opposite direction</string>
     <string name="way_opposite_used">%1$d of the tracks go in the opposite direction. The times of the way are correct only on a flat route.</string>
     <string name="way_rejected">Retrace did not use %1$d of the selected tracks. They do not follow the route of the way.</string>

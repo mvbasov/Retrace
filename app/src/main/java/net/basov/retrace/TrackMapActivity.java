@@ -11,6 +11,7 @@ import android.widget.TextView;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -29,6 +30,10 @@ import net.basov.retrace.core.Track;
 // The Replay button at the bottom starts a replay of the track. It is
 // available after the read of the track, and not during a trip.
 //
+// For a way, the map also shows the tracks of the way. A list below the
+// line of values names them, and a push on a name opens that track. See
+// WayMemberList.
+//
 // The screen keeps the center and the zoom of the map when Android makes the
 // activity again, for example after a turn of the device.
 public final class TrackMapActivity extends ThemedActivity {
@@ -43,6 +48,7 @@ public final class TrackMapActivity extends ThemedActivity {
     private TileLoader loader;
     private MapView map;
     private TextView info;
+    private FrameLayout memberFrame;
     private Button replayButton;
     private String path;
     // The profile of the track, after the read. Null before the read or
@@ -129,7 +135,10 @@ public final class TrackMapActivity extends ThemedActivity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
+        memberFrame = new FrameLayout(this);
         root.addView(info);
+        root.addView(memberFrame, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         root.addView(mapFrame, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
         root.addView(replayButton, new LinearLayout.LayoutParams(
@@ -151,8 +160,8 @@ public final class TrackMapActivity extends ThemedActivity {
         replayButton.setEnabled(replayable && !TrackService.snapshot().recording);
     }
 
-    // Reads the track on the background thread. At the first start, the map
-    // then shows the whole track.
+    // Reads the track on the background thread, and for a way also its
+    // tracks. At the first start, the map then shows the whole track.
     private void load(File file, boolean fit) {
         TrackStore store = new TrackStore(this);
         files.execute(() -> {
@@ -163,6 +172,8 @@ public final class TrackMapActivity extends ThemedActivity {
                 track = null;
             }
             final Track result = track;
+            final List<WayMemberList.Member> members = track != null && track.isWay()
+                    ? WayMemberList.read(store, track) : null;
             runOnUiThread(() -> {
                 if (destroyed) {
                     return;
@@ -179,6 +190,11 @@ public final class TrackMapActivity extends ThemedActivity {
                         Labels.profile(this, result.profile),
                         Labels.distance(this, result.distanceM()),
                         TimeText.duration(result.durationMs())));
+                if (members != null) {
+                    map.setMembers(WayMemberList.points(members));
+                    memberFrame.removeAllViews();
+                    memberFrame.addView(WayMemberList.build(this, members, map));
+                }
                 map.setReference(result.points);
                 if (fit) {
                     map.showAll();

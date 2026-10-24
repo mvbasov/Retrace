@@ -230,6 +230,7 @@ A way is the mean track of some tracks on one route. It has the mean position an
 - `WayBuilder` makes the way. The banner comment of `WayBuilder.java` gives each step and the reason for it.
 - A way is a GPX file in the track directory. The `<metadata>` element holds an extension with the file names of its tracks. Other applications ignore the extension and read a way as a plain track.
 - A way works as a track: on the map, as a reference track, in a replay and in a share intent.
+- The track screen of a way also shows its tracks. Each track has its own color on the map, below the line of the way. A list below the values names the tracks with the same colors. A push on a name opens the track screen of that track. A track that the user removed shows "not found".
 - A track can join the route away from its start, after a GPS error or a start in the middle. It gives its place and its time for the part that it covers.
 - A track in the opposite direction is turned around. Its time is correct only on a flat route. Uphill and downhill, the speed in the two directions is different.
 - A step faster than two times the top speed of the profile, in the first or the last 10 points, is a GPS jump. The points before or after the jump are not used.

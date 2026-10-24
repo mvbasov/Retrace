@@ -28,7 +28,8 @@ import net.basov.retrace.core.TrackPoint;
 // ----------------------------------------------------------------------
 //
 // The view draws the tiles, the reference track, the current track, the
-// position, the ghost and a scale bar. MapViewport does the math. TileLoader
+// position, the ghost and a scale bar. For a way, it also draws the tracks
+// of the way below the reference track, each in its own color. MapViewport does the math. TileLoader
 // gives the tiles. ScaleBar gives the length of the scale bar.
 //
 // Gestures: move with one finger, zoom with two fingers, and zoom in with a
@@ -49,6 +50,12 @@ public final class MapView extends View {
     // the path. A long track then draws fast.
     private static final float MIN_PATH_STEP_PX = 1.5f;
 
+    // The colors of the tracks of a way, in sequence. The list of the tracks
+    // shows the same colors. After the last color, the first comes again.
+    private static final int[] MEMBER_COLORS = {
+            R.color.map_member_1, R.color.map_member_2, R.color.map_member_3,
+            R.color.map_member_4, R.color.map_member_5, R.color.map_member_6};
+
     // Tells the activity that the follow mode changed.
     interface FollowListener {
         void onFollowChanged(boolean follow);
@@ -61,6 +68,8 @@ public final class MapView extends View {
     private final Paint tilePaint = new Paint(Paint.FILTER_BITMAP_FLAG);
     private final Paint referencePaint = strokePaint(R.color.map_reference, 5);
     private final Paint currentPaint = strokePaint(R.color.map_current, 4);
+    private final Paint memberPaint = strokePaint(R.color.map_member_1, 3);
+    private final int[] memberColors = colors(MEMBER_COLORS);
     private final Paint positionPaint = fillPaint(R.color.map_position);
     private final Paint ghostPaint = fillPaint(R.color.map_ghost);
     private final Paint ringPaint = strokePaint(R.color.map_ring, 2);
@@ -86,6 +95,8 @@ public final class MapView extends View {
     private double[] currentX = new double[0];
     private double[] currentY = new double[0];
     private int currentCount;
+    private double[][] memberX = new double[0][];
+    private double[][] memberY = new double[0][];
 
     private double positionLat = Double.NaN;
     private double positionLon = Double.NaN;
@@ -160,6 +171,36 @@ public final class MapView extends View {
             referenceY[i] = TileMath.worldY(points.get(i).latitude);
         }
         invalidate();
+    }
+
+    // The tracks of a way. An empty list keeps the place and the color of a
+    // track that Retrace cannot read.
+    void setMembers(List<List<TrackPoint>> tracks) {
+        memberX = new double[tracks.size()][];
+        memberY = new double[tracks.size()][];
+        for (int t = 0; t < tracks.size(); t++) {
+            List<TrackPoint> points = tracks.get(t);
+            memberX[t] = new double[points.size()];
+            memberY[t] = new double[points.size()];
+            for (int i = 0; i < points.size(); i++) {
+                memberX[t][i] = TileMath.worldX(points.get(i).longitude);
+                memberY[t][i] = TileMath.worldY(points.get(i).latitude);
+            }
+        }
+        invalidate();
+    }
+
+    // The color of the track of a way with this index.
+    int memberColor(int index) {
+        return memberColors[index % memberColors.length];
+    }
+
+    private int[] colors(int[] ids) {
+        int[] values = new int[ids.length];
+        for (int i = 0; i < ids.length; i++) {
+            values[i] = getResources().getColor(ids[i], null);
+        }
+        return values;
     }
 
     void setFitPoints(List<TrackPoint> points) {
@@ -251,8 +292,8 @@ public final class MapView extends View {
         invalidate();
     }
 
-    // Shows the whole reference track, the current track and the fit
-    // points. Before the first layout, the view has no size. The fit then
+    // Shows the whole reference track, the current track, the tracks of a
+    // way and the fit points. Before the first layout, the view has no size. The fit then
     // waits for it.
     void showAll() {
         setFollow(false);
@@ -275,6 +316,14 @@ public final class MapView extends View {
             maxX = Math.max(maxX, currentX[i]);
             minY = Math.min(minY, currentY[i]);
             maxY = Math.max(maxY, currentY[i]);
+        }
+        for (int t = 0; t < memberX.length; t++) {
+            for (int i = 0; i < memberX[t].length; i++) {
+                minX = Math.min(minX, memberX[t][i]);
+                maxX = Math.max(maxX, memberX[t][i]);
+                minY = Math.min(minY, memberY[t][i]);
+                maxY = Math.max(maxY, memberY[t][i]);
+            }
         }
         for (int i = 0; i < fitX.length; i++) {
             minX = Math.min(minX, fitX[i]);
@@ -330,6 +379,10 @@ public final class MapView extends View {
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         drawTiles(canvas);
+        for (int t = 0; t < memberX.length; t++) {
+            memberPaint.setColor(memberColor(t));
+            drawTrack(canvas, memberX[t], memberY[t], memberX[t].length, memberPaint);
+        }
         drawTrack(canvas, referenceX, referenceY, referenceX.length, referencePaint);
         drawTrack(canvas, currentX, currentY, currentCount, currentPaint);
         drawMarker(canvas, ghostLat, ghostLon, ghostPaint, 6);
