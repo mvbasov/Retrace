@@ -121,7 +121,7 @@ TrackMatcher adds twice the accuracy of each fix to the off-route limit and to t
 
 ### 5.4 TrackMatcher
 
-TrackMatcher is the core of Retrace. It is plain Java with no Android import. Thus the tests run it on the JVM. The banner comment of `TrackMatcher.java` gives the reason for each rule.
+TrackMatcher is the core of Retrace. It is plain Java with no Android import. Thus the tests run it on the JVM. The banner comment of `TrackMatcher.java` gives the reason for each rule. [MATCHING.md](MATCHING.md) gives the math of each step, with figures and worked examples.
 
 Preparation of the reference track:
 

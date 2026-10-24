@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="700" height="310" viewBox="0 0 700 310" font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#222">
+  <title>The part of the route that each state searches</title>
+  <rect x="0.5" y="0.5" width="699" height="309" rx="10" fill="#ffffff" stroke="#d0d7de"/>
+
+  <!-- Scale: 0.6 px = 1 m. A route of 800 m from x = 200 to x = 680.
+       The last place s = 333 m is at x = 400. -->
+  <text x="16" y="46" font-weight="bold">The route</text>
+  <line x1="200" y1="40" x2="680" y2="40" stroke="#1e6fd9" stroke-width="5" stroke-linecap="round"/>
+  <text x="194" y="68" font-size="12" text-anchor="middle">0</text>
+  <text x="680" y="68" font-size="12" text-anchor="end">end</text>
+  <line x1="400" y1="28" x2="400" y2="250" stroke="#2e7d32" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <text x="400" y="22" font-size="12" text-anchor="middle" fill="#2e7d32">s</text>
+  <line x1="370" y1="48" x2="370" y2="250" stroke="#8c959f" stroke-width="1" stroke-dasharray="2 4"/>
+  <text x="365" y="68" font-size="12" text-anchor="end" fill="#57606a">s − 50</text>
+  <line x1="550" y1="48" x2="550" y2="250" stroke="#8c959f" stroke-width="1" stroke-dasharray="2 4"/>
+  <text x="550" y="68" font-size="12" text-anchor="middle" fill="#57606a">s + W</text>
+
+  <text x="16" y="105">WAITING</text>
+  <rect x="200" y="94" width="480" height="14" rx="3" fill="#9ec5f8"/>
+
+  <text x="16" y="135">AT_START</text>
+  <rect x="200" y="124" width="150" height="14" rx="3" fill="#9ec5f8"/>
+  <text x="208" y="135" font-size="12" fill="#1f2328">0 … W₀</text>
+
+  <text x="16" y="165">ON_ROUTE</text>
+  <rect x="370" y="154" width="180" height="14" rx="3" fill="#1e6fd9"/>
+
+  <text x="16" y="195">OFF_ROUTE, first</text>
+  <rect x="370" y="184" width="310" height="14" rx="3" fill="#9ec5f8"/>
+
+  <text x="16" y="225">OFF_ROUTE, then</text>
+  <rect x="200" y="214" width="480" height="14" rx="3" fill="#9ec5f8"/>
+
+  <text x="16" y="268" font-size="13" fill="#57606a">W₀ = max(250 m, 4 × off-route limit of the profile)</text>
+  <text x="16" y="288" font-size="13" fill="#57606a">W = W₀ + time since the last fix × top speed of the profile</text>
+</svg>

@@ -10,7 +10,8 @@ import java.util.List;
 //
 // The service gives each point of the current track to update(). The
 // result tells where the trip is on the route, and how it compares with the
-// reference track. See section 5.4 of doc/PLAN.md.
+// reference track. See section 5.4 of doc/PLAN.md. doc/MATCHING.md gives
+// the math of each step, with figures.
 //
 // The start of the trip:
 // - At the start of the route, the trip starts when it leaves the start

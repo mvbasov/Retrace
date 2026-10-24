@@ -11,7 +11,7 @@ Retrace has profiles for walking, running, cycling and driving. It finds the sav
 
 ## Status
 
-Retrace records tracks, shows them on a map, and compares a trip with a saved track. Retrace selects the reference track, or you select it yourself. The plan and the milestones are in [doc/PLAN.md](doc/PLAN.md).
+Retrace records tracks, shows them on a map, and compares a trip with a saved track. Retrace selects the reference track, or you select it yourself. The plan and the milestones are in [doc/PLAN.md](doc/PLAN.md). [doc/MATCHING.md](doc/MATCHING.md) tells how Retrace compares your position with the reference track, with the math and figures.
 
 - Select a profile and push **Start**. A notification shows the recording while the screen is off.
 - At the first point, Retrace looks for the saved tracks of the profile that start near you. During the first part of the trip, it compares with the best of them as a temporary reference track. After 300 m, or 10 % of the route if that is shorter, it selects the reference track. If no saved track agrees with your trip, Retrace records a new route with no comparison.

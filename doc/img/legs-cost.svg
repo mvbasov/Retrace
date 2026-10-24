@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="330" viewBox="0 0 680 330" font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#222">
+  <title>A route out and back: two legs near one fix, and the cost of each place</title>
+  <defs>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="14" markerHeight="14" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1e6fd9"/>
+    </marker>
+  </defs>
+  <rect x="0.5" y="0.5" width="679" height="329" rx="10" fill="#ffffff" stroke="#d0d7de"/>
+
+  <!-- Scale: 4 px = 1 m. The way out is y = 200 from x = 60 to x = 600.
+       The way back is y = 152 from x = 600 to x = 60. -->
+  <polyline points="60,200 600,200 600,152 60,152" fill="none" stroke="#1e6fd9" stroke-width="4" stroke-linejoin="round"/>
+  <line x1="180" y1="200" x2="200" y2="200" stroke="#1e6fd9" stroke-width="4" marker-end="url(#arrow-blue)"/>
+  <line x1="500" y1="200" x2="520" y2="200" stroke="#1e6fd9" stroke-width="4" marker-end="url(#arrow-blue)"/>
+  <line x1="200" y1="152" x2="180" y2="152" stroke="#1e6fd9" stroke-width="4" marker-end="url(#arrow-blue)"/>
+  <line x1="520" y1="152" x2="500" y2="152" stroke="#1e6fd9" stroke-width="4" marker-end="url(#arrow-blue)"/>
+  <circle cx="60" cy="200" r="6" fill="#2e7d32" stroke="#fff" stroke-width="2"/>
+  <text x="30" y="226" font-size="13">start, s = 0</text>
+  <text x="612" y="180" font-size="13">turn</text>
+  <text x="420" y="225" fill="#1e6fd9" font-size="13">the way out</text>
+  <text x="420" y="140" fill="#1e6fd9" font-size="13">the way back</text>
+
+  <!-- The last place: s = 60 m at x = 300. -->
+  <line x1="300" y1="188" x2="300" y2="212" stroke="#2e7d32" stroke-width="3"/>
+  <text x="252" y="232" fill="#2e7d32" font-size="13">last place s = 60 m</text>
+
+  <!-- The fix P at x = 340, y = 174. -->
+  <line x1="340" y1="174" x2="340" y2="200" stroke="#c62828" stroke-width="2.5" stroke-dasharray="6 3"/>
+  <line x1="340" y1="174" x2="340" y2="152" stroke="#8c959f" stroke-width="2.5" stroke-dasharray="6 3"/>
+  <circle cx="340" cy="200" r="5" fill="#ffffff" stroke="#c62828" stroke-width="3"/>
+  <circle cx="340" cy="152" r="5" fill="#ffffff" stroke="#8c959f" stroke-width="3"/>
+  <circle cx="340" cy="174" r="7" fill="#e8710a" stroke="#fff" stroke-width="2"/>
+  <text x="352" y="179" font-weight="bold">P</text>
+
+  <!-- The two candidates. -->
+  <text x="40" y="268" fill="#c62828" font-weight="bold">The way out: s = 70 m, d = 6.5 m</text>
+  <text x="40" y="288" fill="#c62828">cost = 6.5 + 0.25 × (70 − 60) = 9.0   ← the place</text>
+  <text x="40" y="52" fill="#57606a" font-weight="bold">The way back: s = 212 m, d = 5.5 m</text>
+  <text x="40" y="72" fill="#57606a">cost = 5.5 + 0.25 × (212 − 60) = 43.5</text>
+  <text x="40" y="92" fill="#57606a" font-size="13">The way back is nearer, but its cost is higher.</text>
+  <text x="40" y="310" font-size="13" fill="#57606a">A fix that moves east also removes the way back by the rule of direction.</text>
+</svg>

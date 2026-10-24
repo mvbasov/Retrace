@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="380" viewBox="0 0 680 380" font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#222">
+  <title>The time difference and the distance difference on a plot of distance along the route against elapsed time</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#222"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c62828"/>
+    </marker>
+    <marker id="arrow-violet" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8e24aa"/>
+    </marker>
+  </defs>
+  <rect x="0.5" y="0.5" width="679" height="379" rx="10" fill="#ffffff" stroke="#d0d7de"/>
+
+  <!-- The axes. -->
+  <line x1="70" y1="300" x2="640" y2="300" stroke="#222" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <line x1="70" y1="300" x2="70" y2="30" stroke="#222" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="640" y="324" text-anchor="end">elapsed time</text>
+  <text x="20" y="22">distance along the route</text>
+
+  <!-- The reference track S_ref(t) and the current track. -->
+  <path d="M70,300 C190,215 360,140 560,60" fill="none" stroke="#1e6fd9" stroke-width="3.5"/>
+  <text x="240" y="132" fill="#1e6fd9" font-weight="bold">reference track</text>
+  <path d="M70,300 C230,258 420,210 620,168" fill="none" stroke="#e8710a" stroke-width="3.5"/>
+  <text x="500" y="228" fill="#e8710a" font-weight="bold">current track</text>
+
+  <!-- The current fix C = (t, s) at (420.3, 212.4).
+       The reference track reaches s at x = 216.1: T_ref(s).
+       The ghost at t is at y = 117.5: S_ref(t). -->
+  <line x1="420.3" y1="212.4" x2="420.3" y2="300" stroke="#8c959f" stroke-dasharray="3 4"/>
+  <line x1="216.1" y1="212.4" x2="216.1" y2="300" stroke="#8c959f" stroke-dasharray="3 4"/>
+  <line x1="70" y1="212.4" x2="216.1" y2="212.4" stroke="#8c959f" stroke-dasharray="3 4"/>
+  <line x1="70" y1="117.5" x2="420.3" y2="117.5" stroke="#8c959f" stroke-dasharray="3 4"/>
+
+  <line x1="220" y1="212.4" x2="414" y2="212.4" stroke="#c62828" stroke-width="2.5" marker-start="url(#arrow-red)" marker-end="url(#arrow-red)"/>
+  <text x="310" y="190" fill="#c62828" font-weight="bold">Δt = t − T_ref(s)</text>
+  <text x="310" y="204" fill="#c62828" font-size="12">above zero: behind</text>
+
+  <line x1="420.3" y1="123" x2="420.3" y2="206" stroke="#8e24aa" stroke-width="2.5" marker-start="url(#arrow-violet)" marker-end="url(#arrow-violet)"/>
+  <text x="432" y="150" fill="#8e24aa" font-weight="bold">Δs = s − S_ref(t)</text>
+  <text x="432" y="166" fill="#8e24aa" font-size="12">below zero: behind the ghost</text>
+
+  <circle cx="216.1" cy="212.4" r="5" fill="#ffffff" stroke="#1e6fd9" stroke-width="3"/>
+  <circle cx="420.3" cy="117.5" r="7" fill="#8c959f" stroke="#fff" stroke-width="2"/>
+  <text x="350" y="108" fill="#57606a" font-size="13">the ghost</text>
+  <circle cx="420.3" cy="212.4" r="7" fill="#e8710a" stroke="#fff" stroke-width="2"/>
+  <text x="426" y="234" font-size="13" font-weight="bold">you</text>
+
+  <text x="420.3" y="320" text-anchor="middle">t</text>
+  <text x="216.1" y="320" text-anchor="middle">T_ref(s)</text>
+  <text x="62" y="217" text-anchor="end">s</text>
+  <text x="62" y="122" text-anchor="end" font-size="12">S_ref(t)</text>
+  <text x="70" y="356" font-size="13" fill="#57606a">The same distance comes later than on the reference track. Thus this trip is behind.</text>
+</svg>

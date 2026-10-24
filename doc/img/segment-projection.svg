@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#222">
+  <title>The projection of a fix onto one segment of the reference track</title>
+  <defs>
+    <marker id="arrow-grey" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6e7781"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2e7d32"/>
+    </marker>
+  </defs>
+  <rect x="0.5" y="0.5" width="639" height="359" rx="10" fill="#ffffff" stroke="#d0d7de"/>
+
+  <!-- The segment from A to B. A = (80,250), B = (540,150). -->
+  <line x1="80" y1="250" x2="540" y2="150" stroke="#1e6fd9" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- p = P - A, from A to P = (244.9,122.1). -->
+  <line x1="80" y1="250" x2="241" y2="125" stroke="#6e7781" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrow-grey)"/>
+  <text x="68" y="168" fill="#57606a">p = P − A</text>
+
+  <!-- The cross-track distance from P to Q = (264,210). -->
+  <line x1="244.9" y1="122.1" x2="264" y2="210" stroke="#c62828" stroke-width="2.5" stroke-dasharray="7 4"/>
+  <polyline points="271.8,208.3 270.1,200.5 262.3,202.2" fill="none" stroke="#c62828" stroke-width="1.5"/>
+  <text x="262" y="160" fill="#c62828">d = |p − f·b|</text>
+  <text x="262" y="178" fill="#c62828" font-size="12">cross-track distance</text>
+
+  <!-- f·b along the segment, below it. Offset by the normal (0.21, 0.98). -->
+  <line x1="88" y1="279" x2="271" y2="239" stroke="#2e7d32" stroke-width="2" marker-start="url(#arrow-green)" marker-end="url(#arrow-green)"/>
+  <text x="140" y="290" fill="#2e7d32">f · |b|</text>
+  <text x="330" y="262" fill="#1e6fd9">b = B − A</text>
+
+  <!-- The points. -->
+  <circle cx="80" cy="250" r="7" fill="#1e6fd9" stroke="#fff" stroke-width="2"/>
+  <circle cx="540" cy="150" r="7" fill="#1e6fd9" stroke="#fff" stroke-width="2"/>
+  <circle cx="264" cy="210" r="6" fill="#ffffff" stroke="#c62828" stroke-width="3"/>
+  <circle cx="244.9" cy="122.1" r="8" fill="#e8710a" stroke="#fff" stroke-width="2"/>
+
+  <text x="40" y="242" font-weight="bold">A</text>
+  <text x="26" y="275" font-size="12" fill="#57606a">point i</text>
+  <text x="552" y="146" font-weight="bold">B</text>
+  <text x="552" y="164" font-size="12" fill="#57606a">point i+1</text>
+  <text x="200" y="108" font-weight="bold">P</text>
+  <text x="216" y="108" font-size="12" fill="#57606a">the fix</text>
+  <text x="282" y="228" font-weight="bold">Q = A + f·b</text>
+  <text x="282" y="244" font-size="12" fill="#57606a">the projection</text>
+
+  <!-- The formulas. -->
+  <text x="330" y="300" font-size="13">f = (p · b) / (b · b), limited to 0 … 1</text>
+  <text x="330" y="320" font-size="13">s = S[i] + f · (S[i+1] − S[i])</text>
+  <text x="330" y="340" font-size="13">d = |p − f · b|</text>
+</svg>

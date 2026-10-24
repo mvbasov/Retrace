@@ -41,7 +41,7 @@ Do not remove a constraint without an instruction from the maintainer.
 | `Dockerfile.ci` | `Dockerfile.base` and `Dockerfile` in one file, for the GitHub workflows. |
 | `.github/workflows/release.yml` | The build of the signed APK. A tag push also makes a GitHub release. |
 | `.github/workflows/test.yml` | The quality gate for each push and each pull request. |
-| `doc/` | Maintainer documents: the plan, the terminology and the release guide. The Docker context excludes `doc/`. |
+| `doc/` | Maintainer documents: the plan, the terminology, the release guide and the math of the comparison (`MATCHING.md`). The figures are SVG files in `doc/img/`. The Docker context excludes `doc/`. |
 | `CLAUDE.md` | This document. |
 
 The repository does not hold `output-binaries/`, `.env` or the keystore.

@@ -22,6 +22,10 @@ Use one name for one thing. If a term is not in the table, use the plain word. A
 | opposite direction | A trip or a track from the finish of a route to its start. Its time is correct only on a flat route. | backward, inverse, reverse (in text) |
 | drift | The slow part of the GPS error. It changes over minutes. | bias, offset |
 | distance along the route | The distance from the start to your projection on the reference track. The code calls it `s`. | progress, odometer |
+| segment | The straight line between two neighbor points of the reference track. A leg has many segments. | edge, line piece |
+| projection | The nearest position on the route to a fix. Its distance along the route is `s`. | snap point, nearest point |
+| search window | The part of the route that TrackMatcher searches for one fix. | search range, scope |
+| local minimum | A segment with a cross-track distance not larger than the distance of its neighbors. Each leg near a fix gives one. | valley, dip |
 | cross-track distance | The distance from your position to the nearest part of the route. | deviation, offset, error |
 | on route, off route | The cross-track distance is below or above the limit of the profile. | lost, deviated |
 | ahead, behind | You are earlier or later than the reference track at the same distance along the route. Use these words for time only. | faster, slower (for time) |
