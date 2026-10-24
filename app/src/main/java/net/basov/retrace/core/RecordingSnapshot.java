@@ -42,7 +42,7 @@ public final class RecordingSnapshot {
     // The state of a service that does not record.
     public static final RecordingSnapshot IDLE =
             new RecordingSnapshot(false, null, 0, 0, 0, Double.NaN, TrackPoint.NO_TIME, 0, ERROR_NONE,
-                    null, SELECTION_OFF, null, MatchResult.UNKNOWN, null, null, 0, 0);
+                    null, SELECTION_OFF, false, null, MatchResult.UNKNOWN, null, null, 0, 0);
 
     public final boolean recording;
     public final Profile profile;
@@ -70,6 +70,10 @@ public final class RecordingSnapshot {
     // One of the SELECTION values.
     public final int selection;
 
+    // True if the trip follows the reference track in the opposite
+    // direction. The time is then correct only on a flat route.
+    public final boolean referenceReversed;
+
     // The last result of TrackMatcher, or null.
     public final MatchResult match;
 
@@ -91,7 +95,7 @@ public final class RecordingSnapshot {
     public RecordingSnapshot(boolean recording, Profile profile, long startTimeMs, int points,
                              double distanceM, double lastAccuracyM, long lastFixTimeMs,
                              int savedCount, int error, String referencePath, int selection,
-                             MatchResult match, long smoothedDeltaMs, String replayPath,
+                             boolean referenceReversed, MatchResult match, long smoothedDeltaMs, String replayPath,
                              String replayName, int replaySpeed, long replayElapsedMs) {
         this.recording = recording;
         this.profile = profile;
@@ -104,6 +108,7 @@ public final class RecordingSnapshot {
         this.error = error;
         this.referencePath = referencePath;
         this.selection = selection;
+        this.referenceReversed = referenceReversed;
         this.match = match;
         this.smoothedDeltaMs = smoothedDeltaMs;
         this.replayPath = replayPath;

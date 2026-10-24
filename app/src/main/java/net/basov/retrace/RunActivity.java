@@ -256,9 +256,10 @@ public final class RunActivity extends ThemedActivity {
 
     // The new reference track applies to the trip from its first point.
     private void selectReference() {
-        ReferenceDialog.show(this, files, TrackService.snapshot().profile, (automatic, path) ->
-                startService(ReferenceDialog.putSelection(new Intent(this, TrackService.class)
-                        .setAction(TrackService.ACTION_SELECT), automatic, path)));
+        ReferenceDialog.show(this, files, TrackService.snapshot().profile,
+                (automatic, path, reversed) -> startService(ReferenceDialog.putSelection(
+                        new Intent(this, TrackService.class).setAction(TrackService.ACTION_SELECT),
+                        automatic, path, reversed)));
     }
 
     // The speed applies from the next point of the replay.
@@ -316,6 +317,9 @@ public final class RunActivity extends ThemedActivity {
         }
         loadReference(s.referencePath);
         String reference = referenceText(s);
+        if (s.referenceReversed && s.referencePath != null) {
+            reference += "\n" + getString(R.string.opposite_warning);
+        }
         referenceView.setText(s.isReplay() ? getString(R.string.replay_line, s.replayName,
                 s.replaySpeed) + "\n" + reference : reference);
         List<TrackPoint> fresh = TrackService.pointsFrom(shownPoints);
@@ -429,6 +433,9 @@ public final class RunActivity extends ThemedActivity {
     private String referenceText(RecordingSnapshot s) {
         String name = shownReferenceName == null
                 ? getString(R.string.value_unknown) : shownReferenceName;
+        if (s.referenceReversed) {
+            name = getString(R.string.reference_opposite, name);
+        }
         switch (s.selection) {
             case RecordingSnapshot.SELECTION_SEARCH:
                 return getString(R.string.reference_search);

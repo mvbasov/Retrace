@@ -56,6 +56,13 @@
 
     <!-- The trip screen and the notification -->
     <string name="start_trip_on_route">Start a trip on this route</string>
+    <string name="start_trip_opposite">Start a trip on this route in the opposite direction</string>
+    <string name="direction_title">Direction of the trip</string>
+    <string name="direction_same">The same direction as the track</string>
+    <string name="direction_opposite">The opposite direction (correct only on a flat route)</string>
+    <string name="reference_opposite">%1$s, opposite direction</string>
+    <string name="opposite_warning">The times are correct only on a flat route.</string>
+    <string name="opposite_warning_long">In the opposite direction, the times are correct only on a flat route. Uphill and downhill, the speed in the two directions is different.</string>
     <string name="status_open_trip">Push here to show the trip.</string>
     <string name="status_recording_short">%1$d points · %2$s · %3$s</string>
     <string name="trip_waiting">Go to the route. The comparison starts at the start of the route.</string>

@@ -154,19 +154,24 @@ The precision of `Δt` has a limit. The GPS drift of two trips is different, and
 
 Automatic selection:
 
-1. At the first point of a trip, TrackService reads the saved tracks one at a time. It keeps each track of the same profile with its start inside three start circles. These tracks are the candidates.
-2. Each point of the trip goes to one TrackMatcher for each candidate.
-3. The temporary reference track is the valid candidate with the lowest mean cross-track distance. Before the first valid candidate, it is the candidate with the nearest start. A valid candidate is on the route, and it is at least half the decision distance along its route.
-4. The decision distance is 10 % of the shortest candidate, between 50 m and 300 m. When one candidate on the route reaches it, Retrace selects the temporary reference track. Its matcher has all the points, thus the comparison continues with no gap.
-5. Two tracks of the same route have almost the same score. Thus candidates within 3 m of the best mean cross-track distance count as equal. A way among them wins, because it is the typical trip on the route. With no way, the newest track wins, and the trip races the last trip on that route.
-6. If no candidate is valid after three decision distances, Retrace records a new route with no comparison.
+1. At the first point of a trip, TrackService reads the saved tracks one at a time. It keeps each track of the same profile with its route inside three start circles of the point. Each such track is a candidate in its own direction and in the opposite direction.
+2. Each point of the trip goes to one TrackMatcher for each candidate. A matcher joins the route at the start or in the middle. It does not join against the direction of movement.
+3. The progress of a candidate is the distance along its route from the start or the join.
+4. The temporary reference track is the valid candidate with the lowest mean cross-track distance. Before the first valid candidate, it is the candidate with the nearest route. A valid candidate is on the route, and its progress is at least half the decision distance.
+5. The decision distance is 10 % of the shortest candidate, between 50 m and 300 m. When the progress of one candidate on the route reaches it, Retrace selects the temporary reference track. Its matcher has all the points, thus the comparison continues with no gap.
+6. Two tracks of the same route have almost the same score. Thus candidates within 3 m of the best mean cross-track distance count as equal. From them:
+   - A way wins, because it is the typical trip on the route.
+   - Then the same direction wins over the opposite direction.
+   - Then the newest track wins, and the trip races the last trip on that route.
+7. If no candidate is valid after three decision distances, Retrace records a new route with no comparison.
 
 Limit: two routes with the same first part. The selection can come before the routes go apart. Then the newest track wins, also if the trip later follows the other route. A manual selection corrects this.
 
 Manual selection:
 
-- A long push on a track starts a trip with that track as the reference track.
-- During the trip, the menu of the trip screen selects a track of the same profile, the automatic selection or no comparison.
+- A long push on a track starts a trip with that track as the reference track, in its direction or in the opposite direction.
+- During the trip, the menu of the trip screen selects a track of the same profile, the automatic selection or no comparison. A second dialog asks for the direction of the track.
+- The time in the opposite direction comes from `Track.reversed()`. It is correct only on a flat route. The menu item, the dialog and the trip screen tell this.
 - After a change, TrackService gives all the points of the trip to the new matcher. A finish in these points gives no vibration.
 - A manual selection always replaces the automatic selection for that trip.
 

@@ -35,6 +35,8 @@ public final class ReferenceSelectorTest {
         aShortRouteDecidesEarly();
         theComparisonContinuesAfterTheChoice();
         aWayWinsOverTheTracksOfItsRoute();
+        aTripInTheOppositeDirectionSelectsTheReversedTrack();
+        aTripFromTheMiddleJoinsTheRoute();
 
         if (failures > 0) {
             System.out.println("ReferenceSelectorTest: " + failures + " check(s) failed");
@@ -44,14 +46,16 @@ public final class ReferenceSelectorTest {
     }
 
     // A far track and a track of a different profile must not be candidates.
+    // Each near track is a candidate in the two directions.
     private static void onlyNearTracksOfTheProfileAreCandidates() {
-        List<ReferenceSelector.Candidate> near = ReferenceSelector.nearStart(
+        List<ReferenceSelector.Candidate> near = ReferenceSelector.nearRoute(
                 saved(), Profile.WALKING, trip(NORTH, 100, 0).get(0));
         List<String> ids = new ArrayList<>();
         for (ReferenceSelector.Candidate c : near) {
-            ids.add(c.id);
+            ids.add(c.id + (c.reversed ? "/back" : ""));
         }
-        check("candidates", "[north-old, north-new, east]", ids.toString());
+        check("candidates", "[north-old, north-old/back, north-new, north-new/back, east, east/back]",
+                ids.toString());
     }
 
     // Two north tracks have almost the same score. The newest one wins.
@@ -117,7 +121,7 @@ public final class ReferenceSelectorTest {
     // the time difference at the finish is near zero.
     private static void theComparisonContinuesAfterTheChoice() {
         List<TrackPoint> points = trip(NORTH, 108, 0);
-        List<ReferenceSelector.Candidate> near = ReferenceSelector.nearStart(
+        List<ReferenceSelector.Candidate> near = ReferenceSelector.nearRoute(
                 saved(), Profile.WALKING, points.get(0));
         ReferenceSelector s = new ReferenceSelector(near, Profile.WALKING, points.get(0));
         for (TrackPoint p : points) {
@@ -143,10 +147,30 @@ public final class ReferenceSelectorTest {
         all.add(new ReferenceSelector.Candidate("north-way", built.withMembers(members)));
         List<TrackPoint> points = trip(NORTH, 109, 0);
         ReferenceSelector s = new ReferenceSelector(
-                ReferenceSelector.nearStart(all, Profile.WALKING, points.get(0)),
+                ReferenceSelector.nearRoute(all, Profile.WALKING, points.get(0)),
                 Profile.WALKING, points.get(0));
         Result r = feed(s, points);
         check("way: selected", "north-way", r.selected);
+    }
+
+    // The trip starts at the north end of the north tracks and goes south.
+    // The newest north track in the opposite direction is the reference.
+    private static void aTripInTheOppositeDirectionSelectsTheReversedTrack() {
+        Result r = run(trip(new double[][]{{0, 1000}, {0, 0}}, 110, 0));
+        check("opposite: state", ReferenceSelector.State.SELECTED, r.state);
+        check("opposite: track", "north-new", r.selected);
+        check("opposite: reversed", true, r.reversed);
+    }
+
+    // The trip starts at 400 m of the north route. It joins the route
+    // there, and the progress counts from the join. Thus the selection
+    // comes after the decision distance from the join, not at once.
+    private static void aTripFromTheMiddleJoinsTheRoute() {
+        Result r = run(trip(new double[][]{{0, 400}, {0, 1000}}, 111, 0));
+        check("middle: state", ReferenceSelector.State.SELECTED, r.state);
+        check("middle: track", "north-new", r.selected);
+        check("middle: same direction", false, r.reversed);
+        check("middle: not at once", true, r.decidedAtM >= 0.8 * r.decisionM);
     }
 
     // ------------------------------------------------------------------
@@ -156,12 +180,13 @@ public final class ReferenceSelectorTest {
     private static final class Result {
         ReferenceSelector.State state;
         String selected;
+        boolean reversed;
         double decisionM;
         double decidedAtM = Double.NaN;
     }
 
     private static Result run(List<TrackPoint> points) {
-        List<ReferenceSelector.Candidate> near = ReferenceSelector.nearStart(
+        List<ReferenceSelector.Candidate> near = ReferenceSelector.nearRoute(
                 saved(), Profile.WALKING, points.get(0));
         return feed(new ReferenceSelector(near, Profile.WALKING, points.get(0)), points);
     }
@@ -185,6 +210,7 @@ public final class ReferenceSelectorTest {
         r.state = s.state();
         r.decisionM = s.decisionM();
         r.selected = s.current() == null ? null : s.current().id;
+        r.reversed = s.current() != null && s.current().reversed;
         return r;
     }
 

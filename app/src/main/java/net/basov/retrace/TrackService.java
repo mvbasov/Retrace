@@ -47,7 +47,8 @@ import net.basov.retrace.core.TrackPoint;
 // screen is off. MainActivity starts it with ACTION_START and stops it with
 // ACTION_STOP. The stop button of the notification also sends ACTION_STOP.
 //
-// With EXTRA_REFERENCE, the service compares the trip with that track.
+// With EXTRA_REFERENCE, the service compares the trip with that track. With
+// EXTRA_REVERSED too, the trip follows that track in the opposite direction.
 // Without it, ReferenceSelector selects the reference track. At the first
 // point, the service reads the saved tracks of the profile, and keeps the
 // tracks with a start near that point. If no track starts there, the trip
@@ -86,6 +87,9 @@ public final class TrackService extends Service {
     static final String ACTION_SELECT = "net.basov.retrace.action.SELECT";
     static final String EXTRA_PROFILE = "net.basov.retrace.extra.PROFILE";
     static final String EXTRA_REFERENCE = "net.basov.retrace.extra.REFERENCE";
+    // True with EXTRA_REFERENCE: the trip follows the reference track in the
+    // opposite direction.
+    static final String EXTRA_REVERSED = "net.basov.retrace.extra.REVERSED";
     // ACTION_SELECT with this extra set to true starts the automatic
     // selection again. Without it and without EXTRA_REFERENCE, the trip has
     // no comparison.
@@ -167,6 +171,8 @@ public final class TrackService extends Service {
     private int error = RecordingSnapshot.ERROR_NONE;
 
     private String referencePath;
+    // True if the trip follows the reference track in the opposite direction.
+    private boolean referenceReversed;
     // The name of the reference track if it is a way, or null.
     private String referenceWayName;
     private int selection = RecordingSnapshot.SELECTION_OFF;
@@ -227,29 +233,32 @@ public final class TrackService extends Service {
             Profile requested = Profile.fromId(intent.getStringExtra(EXTRA_PROFILE));
             final Profile p = requested == null ? Profile.WALKING : requested;
             final String reference = intent.getStringExtra(EXTRA_REFERENCE);
+            final boolean reversed = intent.getBooleanExtra(EXTRA_REVERSED, false);
             final long start = System.currentTimeMillis();
             // Android 8 and newer stop the service if startForeground does not
             // come soon after startForegroundService. Thus it comes first.
             RecordingSnapshot first = new RecordingSnapshot(true, p, start, 0, 0, Double.NaN,
                     TrackPoint.NO_TIME, snapshot.savedCount, RecordingSnapshot.ERROR_NONE,
                     reference, reference == null ? RecordingSnapshot.SELECTION_SEARCH
-                            : RecordingSnapshot.SELECTION_MANUAL, null, MatchResult.UNKNOWN,
+                            : RecordingSnapshot.SELECTION_MANUAL, reference != null && reversed,
+                    null, MatchResult.UNKNOWN,
                     null, null, 0, 0);
             if (!enterForeground(notification(first))) {
                 snapshot = withError(RecordingSnapshot.ERROR_NO_PERMISSION);
                 stopSelf();
                 return START_NOT_STICKY;
             }
-            worker.post(() -> begin(p, start, reference));
+            worker.post(() -> begin(p, start, reference, reversed));
         } else if (ACTION_STOP.equals(action)) {
             worker.post(() -> finish(true));
         } else if (ACTION_REPLAY.equals(action)) {
             final String path = intent.getStringExtra(EXTRA_REPLAY);
             final String reference = intent.getStringExtra(EXTRA_REFERENCE);
+            final boolean reversed = intent.getBooleanExtra(EXTRA_REVERSED, false);
             final boolean automatic = intent.getBooleanExtra(EXTRA_AUTOMATIC, false);
             final int speed = intent.getIntExtra(EXTRA_SPEED, Replay.DEFAULT_SPEED);
             worker.post(() -> {
-                if (!recording && !beginReplay(path, reference, automatic, speed)) {
+                if (!recording && !beginReplay(path, reference, reversed, automatic, speed)) {
                     stopSelf(startId);
                 }
             });
@@ -265,10 +274,11 @@ public final class TrackService extends Service {
             });
         } else if (ACTION_SELECT.equals(action)) {
             final String reference = intent.getStringExtra(EXTRA_REFERENCE);
+            final boolean reversed = intent.getBooleanExtra(EXTRA_REVERSED, false);
             final boolean automatic = intent.getBooleanExtra(EXTRA_AUTOMATIC, false);
             worker.post(() -> {
                 if (recording) {
-                    select(reference, automatic);
+                    select(reference, reversed, automatic);
                 } else {
                     // The intent started a service with no trip.
                     stopSelf(startId);
@@ -299,7 +309,7 @@ public final class TrackService extends Service {
     }
 
     // Worker thread.
-    private void begin(Profile p, long start, String reference) {
+    private void begin(Profile p, long start, String reference, boolean reversed) {
         if (recording) {
             return;
         }
@@ -307,7 +317,7 @@ public final class TrackService extends Service {
         if (reference == null) {
             selection = RecordingSnapshot.SELECTION_SEARCH;
         } else {
-            loadReference(reference);
+            loadReference(reference, reversed);
         }
 
         try {
@@ -354,7 +364,8 @@ public final class TrackService extends Service {
     // Worker thread. Returns false if Retrace cannot read the track. The
     // replayed track gives the profile. A track with no profile is replayed
     // as walking.
-    private boolean beginReplay(String path, String reference, boolean automatic, int speed) {
+    private boolean beginReplay(String path, String reference, boolean reversed,
+                                boolean automatic, int speed) {
         Track track;
         try {
             track = path == null ? null : store.load(new File(path));
@@ -372,7 +383,7 @@ public final class TrackService extends Service {
         replayName = track.name;
         replayPoints = track.points;
         if (reference != null) {
-            loadReference(reference);
+            loadReference(reference, reversed);
         } else if (automatic) {
             selection = RecordingSnapshot.SELECTION_SEARCH;
         }
@@ -408,6 +419,7 @@ public final class TrackService extends Service {
     // Worker thread. Removes the reference track and the comparison.
     private void resetComparison(Profile p) {
         referencePath = null;
+        referenceReversed = false;
         referenceWayName = null;
         selection = RecordingSnapshot.SELECTION_OFF;
         selector = null;
@@ -420,13 +432,15 @@ public final class TrackService extends Service {
 
     // Worker thread. The manual selection. A reference track that Retrace
     // cannot read gives a trip with no comparison. The recording itself
-    // still works.
-    private void loadReference(String path) {
+    // still works. In the opposite direction, the matcher gets the reversed
+    // track.
+    private void loadReference(String path, boolean reversed) {
         try {
             Track reference = store.load(new File(path));
             if (reference.points.size() >= 2) {
-                matcher = new TrackMatcher(reference, profile);
+                matcher = new TrackMatcher(reversed ? reference.reversed() : reference, profile);
                 referencePath = path;
+                referenceReversed = reversed;
                 referenceWayName = reference.isWay() ? reference.name : null;
                 selection = RecordingSnapshot.SELECTION_MANUAL;
             }
@@ -449,8 +463,9 @@ public final class TrackService extends Service {
             }
             try {
                 Track track = store.load(f);
-                if (ReferenceSelector.startsNear(track, profile, first)) {
-                    near.add(new ReferenceSelector.Candidate(f.getPath(), track));
+                if (ReferenceSelector.routeNear(track, profile, first)) {
+                    near.add(new ReferenceSelector.Candidate(f.getPath(), track, false));
+                    near.add(new ReferenceSelector.Candidate(f.getPath(), track.reversed(), true));
                 }
             } catch (IOException | IllegalArgumentException e) {
                 // A file that Retrace cannot read is not a candidate.
@@ -467,12 +482,12 @@ public final class TrackService extends Service {
     // Worker thread. A new reference track during the trip. The points of
     // the trip go to the new matcher again. A finish in these points gives
     // no vibration, because it is in the past.
-    private void select(String path, boolean automatic) {
+    private void select(String path, boolean reversed, boolean automatic) {
         resetComparison(profile);
         if (automatic) {
             selection = RecordingSnapshot.SELECTION_SEARCH;
         } else if (path != null) {
-            loadReference(path);
+            loadReference(path, reversed);
         }
         for (TrackPoint p : pointsFrom(0)) {
             compare(p);
@@ -561,8 +576,10 @@ public final class TrackService extends Service {
             return false;
         }
         String path = selector.current().id;
-        if (!path.equals(referencePath)) {
+        boolean reversed = selector.current().reversed;
+        if (!path.equals(referencePath) || reversed != referenceReversed) {
             referencePath = path;
+            referenceReversed = reversed;
             Track candidate = selector.current().track;
             referenceWayName = candidate.isWay() ? candidate.name : null;
             match = null;
@@ -628,7 +645,8 @@ public final class TrackService extends Service {
         RecordingSnapshot last = snapshot;
         snapshot = new RecordingSnapshot(false, profile, startTimeMs, filter.count(),
                 filter.distanceM(), lastAccuracyM, lastFixTimeMs,
-                last.savedCount + (saved ? 1 : 0), error, referencePath, selection, match,
+                last.savedCount + (saved ? 1 : 0), error, referencePath, selection,
+                referenceReversed, match,
                 smoothedDeltaMs, replayPath, replayName, replaySpeed, replayElapsedMs);
         if (stopService) {
             leaveForeground();
@@ -671,14 +689,16 @@ public final class TrackService extends Service {
     private void publish() {
         snapshot = new RecordingSnapshot(recording, profile, startTimeMs, filter.count(),
                 filter.distanceM(), lastAccuracyM, lastFixTimeMs, snapshot.savedCount, error,
-                referencePath, selection, match, smoothedDeltaMs, replayPath, replayName, replaySpeed,
+                referencePath, selection, referenceReversed, match, smoothedDeltaMs, replayPath,
+                replayName, replaySpeed,
                 replayElapsedMs);
     }
 
     private static RecordingSnapshot withError(int code) {
         RecordingSnapshot s = snapshot;
         return new RecordingSnapshot(false, s.profile, s.startTimeMs, 0, 0, Double.NaN,
-                TrackPoint.NO_TIME, s.savedCount, code, null, RecordingSnapshot.SELECTION_OFF, null,
+                TrackPoint.NO_TIME, s.savedCount, code, null, RecordingSnapshot.SELECTION_OFF, false,
+                null,
                 MatchResult.UNKNOWN, null, null, 0, 0);
     }
 

@@ -17,12 +17,15 @@ import net.basov.retrace.core.Profile;
 // The trip screen uses it during a trip, and the list of tracks uses it
 // before a replay. The first two lines are the automatic selection and no
 // comparison. The saved tracks of the profile follow, the newest first.
+//
+// After a push on a track, a second dialog asks for the direction. The
+// opposite direction tells that its time is correct only on a flat route.
 final class ReferenceDialog {
 
     // The result of the dialog. A path of null with automatic false is no
-    // comparison.
+    // comparison. Reversed is true for the opposite direction of the track.
     interface Listener {
-        void onSelect(boolean automatic, String path);
+        void onSelect(boolean automatic, String path, boolean reversed);
     }
 
     private ReferenceDialog() {
@@ -48,13 +51,26 @@ final class ReferenceDialog {
     }
 
     // Puts the result into an intent for TrackService.
-    static Intent putSelection(Intent intent, boolean automatic, String path) {
+    static Intent putSelection(Intent intent, boolean automatic, String path, boolean reversed) {
         if (automatic) {
             intent.putExtra(TrackService.EXTRA_AUTOMATIC, true);
         } else if (path != null) {
             intent.putExtra(TrackService.EXTRA_REFERENCE, path);
+            intent.putExtra(TrackService.EXTRA_REVERSED, reversed);
         }
         return intent;
+    }
+
+    // The direction of a trip on the route of a track.
+    static void askDirection(Activity activity, String path, Listener listener) {
+        String[] items = {
+                activity.getString(R.string.direction_same),
+                activity.getString(R.string.direction_opposite)};
+        new AlertDialog.Builder(activity)
+                .setTitle(R.string.direction_title)
+                .setItems(items, (d, which) -> listener.onSelect(false, path, which == 1))
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
     }
 
     private static void showList(Activity activity, List<TrackStore.Entry> tracks,
@@ -71,11 +87,11 @@ final class ReferenceDialog {
                 .setTitle(R.string.select_reference)
                 .setItems(items, (d, which) -> {
                     if (which == 0) {
-                        listener.onSelect(true, null);
+                        listener.onSelect(true, null, false);
                     } else if (which == 1) {
-                        listener.onSelect(false, null);
+                        listener.onSelect(false, null, false);
                     } else {
-                        listener.onSelect(false, tracks.get(which - 2).file.getPath());
+                        askDirection(activity, tracks.get(which - 2).file.getPath(), listener);
                     }
                 })
                 .setNegativeButton(android.R.string.cancel, null)

@@ -20,6 +20,8 @@ Retrace records tracks, shows them on a map, and compares a trip with a saved tr
 - Each map has a scale bar at the bottom left. On the trip screen, the map follows your position from the first GPS point. A replay starts with the whole route on the screen.
 - A push on a track shows it on the map. The map uses OpenStreetMap tiles and keeps them in a cache.
 - To start a trip on the route of a track, do a long push on the track. Then push **Start a trip on this route**. That track becomes the reference track.
+- To follow the route in the opposite direction, push **Start a trip on this route in the opposite direction**. The times are then correct only on a flat route.
+- The automatic selection also finds a route that you join in the middle, and a route in the opposite direction.
 - To change the reference track during the trip, open the menu of the trip screen and push **Select the reference track**. Select a track, **Automatic selection** or **No comparison**. The comparison then starts again from the start of the trip.
 - The trip screen shows if you are ahead or behind, and your distance from the ghost. It also shows your speed, and the distance and time to the finish. At the finish, the device vibrates.
 - To check the comparison at your desk, do a long push on a track and push **Replay this track**. Then select the reference track. The trip screen shows the replay at ten times the real speed. Its menu changes the speed and the reference track.

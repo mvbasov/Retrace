@@ -89,6 +89,7 @@ public final class MainActivity extends ThemedActivity {
     private static final int MENU_SETTINGS = 9;
     private static final int MENU_MAKE_WAY = 10;
     private static final int MENU_CHANGE_WAY = 11;
+    private static final int MENU_TRIP_OPPOSITE = 12;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService files = Executors.newSingleThreadExecutor();
@@ -111,6 +112,7 @@ public final class MainActivity extends ThemedActivity {
     // null for a trip without a comparison.
     private Profile pendingProfile = Profile.WALKING;
     private String pendingReference;
+    private boolean pendingReversed;
 
     // The savedCount of the last snapshot that the list shows.
     private int shownSavedCount = -1;
@@ -252,6 +254,7 @@ public final class MainActivity extends ThemedActivity {
         } else {
             pendingProfile = Profile.values()[profileSpinner.getSelectedItemPosition()];
             pendingReference = null;
+            pendingReversed = false;
             startRecording();
         }
         startStopButton.setEnabled(false);
@@ -279,6 +282,7 @@ public final class MainActivity extends ThemedActivity {
                 .putExtra(TrackService.EXTRA_PROFILE, pendingProfile.id);
         if (pendingReference != null) {
             start.putExtra(TrackService.EXTRA_REFERENCE, pendingReference);
+            start.putExtra(TrackService.EXTRA_REVERSED, pendingReversed);
         }
         if (Build.VERSION.SDK_INT >= 26) {
             startForegroundService(start);
@@ -412,6 +416,7 @@ public final class MainActivity extends ThemedActivity {
         List<String> labels = new ArrayList<>();
         if (e.readable && e.points >= 2 && !TrackService.snapshot().recording) {
             addItem(ids, labels, MENU_TRIP, R.string.start_trip_on_route);
+            addItem(ids, labels, MENU_TRIP_OPPOSITE, R.string.start_trip_opposite);
             addItem(ids, labels, MENU_REPLAY, R.string.replay_track);
         }
         if (e.readable && e.isWay()) {
@@ -430,6 +435,16 @@ public final class MainActivity extends ThemedActivity {
                 .show();
     }
 
+    // The trip uses the profile of the reference track. A track from another
+    // application can have no profile. The selected profile then applies.
+    private void startTripOn(TrackStore.Entry e, boolean reversed) {
+        Profile selected = Profile.values()[profileSpinner.getSelectedItemPosition()];
+        pendingProfile = e.profile != null ? e.profile : selected;
+        pendingReference = e.file.getPath();
+        pendingReversed = reversed;
+        startRecording();
+    }
+
     private void addItem(List<Integer> ids, List<String> labels, int id, int textId) {
         ids.add(id);
         labels.add(getString(textId));
@@ -437,13 +452,16 @@ public final class MainActivity extends ThemedActivity {
 
     private void onTrackAction(int id, TrackStore.Entry e) {
         if (id == MENU_TRIP) {
-            // The trip uses the profile of the reference track. A track from
-            // another application can have no profile. The selected profile
-            // then applies.
-            Profile selected = Profile.values()[profileSpinner.getSelectedItemPosition()];
-            pendingProfile = e.profile != null ? e.profile : selected;
-            pendingReference = e.file.getPath();
-            startRecording();
+            startTripOn(e, false);
+        } else if (id == MENU_TRIP_OPPOSITE) {
+            // The time in the opposite direction is correct only on a flat
+            // route. The user reads this before the start.
+            new AlertDialog.Builder(this)
+                    .setTitle(R.string.start_trip_opposite)
+                    .setMessage(R.string.opposite_warning_long)
+                    .setPositiveButton(R.string.start_recording, (d, w) -> startTripOn(e, true))
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .show();
         } else if (id == MENU_MAKE_WAY) {
             WayDialogs.make(this, files, e, () -> {
                 setShowWays(true);
@@ -498,12 +516,12 @@ public final class MainActivity extends ThemedActivity {
     private void askReplay(TrackStore.Entry e) {
         Profile selected = Profile.values()[profileSpinner.getSelectedItemPosition()];
         Profile profile = e.profile != null ? e.profile : selected;
-        ReferenceDialog.show(this, files, profile, (automatic, path) -> {
+        ReferenceDialog.show(this, files, profile, (automatic, path, reversed) -> {
             Intent replay = new Intent(this, TrackService.class)
                     .setAction(TrackService.ACTION_REPLAY)
                     .putExtra(TrackService.EXTRA_REPLAY, e.file.getPath())
                     .putExtra(TrackService.EXTRA_SPEED, Replay.DEFAULT_SPEED);
-            startService(ReferenceDialog.putSelection(replay, automatic, path));
+            startService(ReferenceDialog.putSelection(replay, automatic, path, reversed));
             startActivity(new Intent(this, RunActivity.class));
         });
     }
