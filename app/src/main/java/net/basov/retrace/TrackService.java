@@ -234,7 +234,7 @@ public final class TrackService extends Service {
                     TrackPoint.NO_TIME, snapshot.savedCount, RecordingSnapshot.ERROR_NONE,
                     reference, reference == null ? RecordingSnapshot.SELECTION_SEARCH
                             : RecordingSnapshot.SELECTION_MANUAL, null, MatchResult.UNKNOWN,
-                    null, 0, 0);
+                    null, null, 0, 0);
             if (!enterForeground(notification(first))) {
                 snapshot = withError(RecordingSnapshot.ERROR_NO_PERMISSION);
                 stopSelf();
@@ -629,7 +629,7 @@ public final class TrackService extends Service {
         snapshot = new RecordingSnapshot(false, profile, startTimeMs, filter.count(),
                 filter.distanceM(), lastAccuracyM, lastFixTimeMs,
                 last.savedCount + (saved ? 1 : 0), error, referencePath, selection, match,
-                smoothedDeltaMs, replayName, replaySpeed, replayElapsedMs);
+                smoothedDeltaMs, replayPath, replayName, replaySpeed, replayElapsedMs);
         if (stopService) {
             leaveForeground();
             stopSelf();
@@ -671,7 +671,7 @@ public final class TrackService extends Service {
     private void publish() {
         snapshot = new RecordingSnapshot(recording, profile, startTimeMs, filter.count(),
                 filter.distanceM(), lastAccuracyM, lastFixTimeMs, snapshot.savedCount, error,
-                referencePath, selection, match, smoothedDeltaMs, replayName, replaySpeed,
+                referencePath, selection, match, smoothedDeltaMs, replayPath, replayName, replaySpeed,
                 replayElapsedMs);
     }
 
@@ -679,7 +679,7 @@ public final class TrackService extends Service {
         RecordingSnapshot s = snapshot;
         return new RecordingSnapshot(false, s.profile, s.startTimeMs, 0, 0, Double.NaN,
                 TrackPoint.NO_TIME, s.savedCount, code, null, RecordingSnapshot.SELECTION_OFF, null,
-                MatchResult.UNKNOWN, null, 0, 0);
+                MatchResult.UNKNOWN, null, null, 0, 0);
     }
 
     @SuppressWarnings("deprecation")

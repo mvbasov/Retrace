@@ -17,6 +17,7 @@ Retrace records tracks, shows them on a map, and compares a trip with a saved tr
 - At the first point, Retrace looks for the saved tracks of the profile that start near you. During the first part of the trip, it compares with the best of them as a temporary reference track. After 300 m, or 10 % of the route if that is shorter, it selects the reference track. If no saved track agrees with your trip, Retrace records a new route with no comparison.
 - Push **Stop** in the application or in the notification. Retrace saves the track as a GPX file.
 - Two tabs above the list show the saved tracks or the ways.
+- Each map has a scale bar at the bottom left. On the trip screen, the map follows your position from the first GPS point. A replay starts with the whole route on the screen.
 - A push on a track shows it on the map. The map uses OpenStreetMap tiles and keeps them in a cache.
 - To start a trip on the route of a track, do a long push on the track. Then push **Start a trip on this route**. That track becomes the reference track.
 - To change the reference track during the trip, open the menu of the trip screen and push **Select the reference track**. Select a track, **Automatic selection** or **No comparison**. The comparison then starts again from the start of the trip.

@@ -42,7 +42,7 @@ public final class RecordingSnapshot {
     // The state of a service that does not record.
     public static final RecordingSnapshot IDLE =
             new RecordingSnapshot(false, null, 0, 0, 0, Double.NaN, TrackPoint.NO_TIME, 0, ERROR_NONE,
-                    null, SELECTION_OFF, null, MatchResult.UNKNOWN, null, 0, 0);
+                    null, SELECTION_OFF, null, MatchResult.UNKNOWN, null, null, 0, 0);
 
     public final boolean recording;
     public final Profile profile;
@@ -77,7 +77,9 @@ public final class RecordingSnapshot {
     // this value. At the finish it is the exact result.
     public final long smoothedDeltaMs;
 
-    // The name of the replayed track, or null for a trip with the GPS.
+    // The path and the name of the replayed track, or null for a trip with
+    // the GPS.
+    public final String replayPath;
     public final String replayName;
 
     // The speed of the replay, or 0 for a trip with the GPS.
@@ -89,8 +91,8 @@ public final class RecordingSnapshot {
     public RecordingSnapshot(boolean recording, Profile profile, long startTimeMs, int points,
                              double distanceM, double lastAccuracyM, long lastFixTimeMs,
                              int savedCount, int error, String referencePath, int selection,
-                             MatchResult match, long smoothedDeltaMs, String replayName,
-                             int replaySpeed, long replayElapsedMs) {
+                             MatchResult match, long smoothedDeltaMs, String replayPath,
+                             String replayName, int replaySpeed, long replayElapsedMs) {
         this.recording = recording;
         this.profile = profile;
         this.startTimeMs = startTimeMs;
@@ -104,6 +106,7 @@ public final class RecordingSnapshot {
         this.selection = selection;
         this.match = match;
         this.smoothedDeltaMs = smoothedDeltaMs;
+        this.replayPath = replayPath;
         this.replayName = replayName;
         this.replaySpeed = replaySpeed;
         this.replayElapsedMs = replayElapsedMs;

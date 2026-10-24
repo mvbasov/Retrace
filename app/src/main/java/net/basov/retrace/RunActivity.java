@@ -50,6 +50,14 @@ import net.basov.retrace.core.TrackPoint;
 //
 // After the stop, the screen keeps the last values. The stop button then
 // closes the screen.
+//
+// The camera at the start of a trip:
+// - A trip with the GPS shows the reference track until the first point.
+//   At the first point, the map follows the position, as after a push on
+//   Me, and zooms in to at least FIRST_FIX_ZOOM.
+// - A replay shows the whole replayed track and the reference track, as
+//   after a push on All.
+// After a rotation of the screen, the camera of the user stays.
 public final class RunActivity extends ThemedActivity {
 
     private static final long REFRESH_MS = 1000;
@@ -59,6 +67,10 @@ public final class RunActivity extends ThemedActivity {
     private static final String STATE_LAT = "lat";
     private static final String STATE_LON = "lon";
     private static final String STATE_ZOOM = "zoom";
+    private static final String STATE_TRIP = "trip";
+
+    // A zoom level that shows the streets near the position.
+    private static final double FIRST_FIX_ZOOM = 16;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService files = Executors.newSingleThreadExecutor();
@@ -80,6 +92,10 @@ public final class RunActivity extends ThemedActivity {
     private boolean shownRecording;
     private int shownSpeed;
     private boolean cameraRestored;
+    // The start time of the trip of the restored camera.
+    private long restoredTripMs = Long.MIN_VALUE;
+    // True from the start of a trip with the GPS to its first point.
+    private boolean waitingForFirstFix;
     private volatile boolean destroyed;
 
     private final Runnable refresh = new Runnable() {
@@ -100,6 +116,7 @@ public final class RunActivity extends ThemedActivity {
 
         if (savedInstanceState != null) {
             cameraRestored = true;
+            restoredTripMs = savedInstanceState.getLong(STATE_TRIP, Long.MIN_VALUE);
             map.setCamera(savedInstanceState.getDouble(STATE_LAT),
                     savedInstanceState.getDouble(STATE_LON),
                     savedInstanceState.getDouble(STATE_ZOOM));
@@ -130,6 +147,7 @@ public final class RunActivity extends ThemedActivity {
         out.putDouble(STATE_LAT, map.centerLatitude());
         out.putDouble(STATE_LON, map.centerLongitude());
         out.putDouble(STATE_ZOOM, map.zoom());
+        out.putLong(STATE_TRIP, shownStartMs);
     }
 
     @Override
@@ -286,10 +304,15 @@ public final class RunActivity extends ThemedActivity {
         }
 
         if (s.startTimeMs != shownStartMs) {
-            // A new trip started while the screen was open.
+            // The first snapshot of this screen, or a new trip while the
+            // screen was open. The restored camera belongs to one trip.
+            boolean restored = cameraRestored && s.startTimeMs == restoredTripMs;
             shownStartMs = s.startTimeMs;
             shownPoints = 0;
             map.setCurrent(new ArrayList<TrackPoint>());
+            map.setFitPoints(new ArrayList<TrackPoint>());
+            cameraRestored = restored;
+            startCamera(s, !restored);
         }
         loadReference(s.referencePath);
         String reference = referenceText(s);
@@ -303,6 +326,12 @@ public final class RunActivity extends ThemedActivity {
         if (!fresh.isEmpty()) {
             TrackPoint last = fresh.get(fresh.size() - 1);
             map.setPosition(last.latitude, last.longitude);
+            if (waitingForFirstFix) {
+                waitingForFirstFix = false;
+                map.setCamera(last.latitude, last.longitude,
+                        Math.max(map.zoom(), FIRST_FIX_ZOOM));
+                map.setFollow(true);
+            }
         }
 
         MatchResult m = s.match;
@@ -350,6 +379,50 @@ public final class RunActivity extends ThemedActivity {
 
     private String stoppedText(RecordingSnapshot s) {
         return getString(s.isReplay() ? R.string.replay_done : R.string.trip_stopped);
+    }
+
+    // The camera at the start of a trip. See the comment at the top. A
+    // restored camera stays, but a replay still needs its fit points.
+    private void startCamera(RecordingSnapshot s, boolean move) {
+        waitingForFirstFix = false;
+        if (s.isReplay()) {
+            if (move) {
+                map.showAll();
+            }
+            loadFitPoints(s.replayPath, s.startTimeMs, move);
+        } else if (move && s.recording && s.points == 0) {
+            // The reference track shows until the first point. See the
+            // read of the reference track.
+            waitingForFirstFix = true;
+            map.setFollow(false);
+        } else if (move) {
+            map.setFollow(true);
+        }
+    }
+
+    // Reads the replayed track for the fit of All, on the background thread.
+    private void loadFitPoints(String path, long tripMs, boolean fit) {
+        if (path == null) {
+            return;
+        }
+        TrackStore store = new TrackStore(this);
+        files.execute(() -> {
+            Track track;
+            try {
+                track = store.load(new File(path));
+            } catch (IOException e) {
+                return;
+            }
+            runOnUiThread(() -> {
+                if (destroyed || tripMs != shownStartMs) {
+                    return;
+                }
+                map.setFitPoints(track.points);
+                if (fit && !map.isFollow()) {
+                    map.showAll();
+                }
+            });
+        });
     }
 
     // The line above the panel.

@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Set;
 
 import net.basov.retrace.core.MapViewport;
+import net.basov.retrace.core.ScaleBar;
 import net.basov.retrace.core.TileMath;
 import net.basov.retrace.core.TrackPoint;
 
@@ -27,8 +28,8 @@ import net.basov.retrace.core.TrackPoint;
 // ----------------------------------------------------------------------
 //
 // The view draws the tiles, the reference track, the current track, the
-// position and the ghost. MapViewport does the math. TileLoader gives the
-// tiles.
+// position, the ghost and a scale bar. MapViewport does the math. TileLoader
+// gives the tiles. ScaleBar gives the length of the scale bar.
 //
 // Gestures: move with one finger, zoom with two fingers, and zoom in with a
 // double tap. A move with the finger turns off the follow mode.
@@ -69,6 +70,12 @@ public final class MapView extends View {
     private final RectF target = new RectF();
     private final Path path = new Path();
     private final String attribution;
+    private final Paint scalePaint;
+
+    // Points that showAll() includes, but the view does not draw. A replay
+    // gives all the points of the replayed track here.
+    private double[] fitX = new double[0];
+    private double[] fitY = new double[0];
 
     private final ScaleGestureDetector scaleDetector;
     private final GestureDetector gestureDetector;
@@ -100,6 +107,8 @@ public final class MapView extends View {
         attributionPaint.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 11,
                 getResources().getDisplayMetrics()));
         attribution = context.getString(R.string.osm_attribution);
+        scalePaint = strokePaint(R.color.map_attribution_text, 2);
+        scalePaint.setStrokeCap(Paint.Cap.BUTT);
         setBackgroundColor(getResources().getColor(R.color.map_background, null));
 
         loader.setListener(this::invalidate);
@@ -151,6 +160,15 @@ public final class MapView extends View {
             referenceY[i] = TileMath.worldY(points.get(i).latitude);
         }
         invalidate();
+    }
+
+    void setFitPoints(List<TrackPoint> points) {
+        fitX = new double[points.size()];
+        fitY = new double[points.size()];
+        for (int i = 0; i < points.size(); i++) {
+            fitX[i] = TileMath.worldX(points.get(i).longitude);
+            fitY[i] = TileMath.worldY(points.get(i).latitude);
+        }
     }
 
     void setCurrent(List<TrackPoint> points) {
@@ -233,8 +251,9 @@ public final class MapView extends View {
         invalidate();
     }
 
-    // Shows the whole reference track and the current track. Before the
-    // first layout, the view has no size. The fit then waits for it.
+    // Shows the whole reference track, the current track and the fit
+    // points. Before the first layout, the view has no size. The fit then
+    // waits for it.
     void showAll() {
         setFollow(false);
         if (getWidth() == 0 || getHeight() == 0) {
@@ -256,6 +275,12 @@ public final class MapView extends View {
             maxX = Math.max(maxX, currentX[i]);
             minY = Math.min(minY, currentY[i]);
             maxY = Math.max(maxY, currentY[i]);
+        }
+        for (int i = 0; i < fitX.length; i++) {
+            minX = Math.min(minX, fitX[i]);
+            maxX = Math.max(maxX, fitX[i]);
+            minY = Math.min(minY, fitY[i]);
+            maxY = Math.max(maxY, fitY[i]);
         }
         if (minX > maxX) {
             return;
@@ -309,6 +334,7 @@ public final class MapView extends View {
         drawTrack(canvas, currentX, currentY, currentCount, currentPaint);
         drawMarker(canvas, ghostLat, ghostLon, ghostPaint, 6);
         drawMarker(canvas, positionLat, positionLon, positionPaint, 7);
+        drawScale(canvas);
         drawAttribution(canvas);
     }
 
@@ -392,6 +418,34 @@ public final class MapView extends View {
         float r = radiusDp * density;
         canvas.drawCircle(x, y, r, fill);
         canvas.drawCircle(x, y, r, ringPaint);
+    }
+
+    // The scale bar at the bottom left, on a light box. It is at most one
+    // third of the width of the view. The attribution is at the bottom right.
+    private void drawScale(Canvas canvas) {
+        double mpp = ScaleBar.metersPerPixel(viewport.centerLatitude(), viewport.worldSizePx());
+        ScaleBar bar = ScaleBar.choose(mpp, getWidth() / 3.0);
+        if (bar == null) {
+            return;
+        }
+        String text = bar.meters >= 1000
+                ? getContext().getString(R.string.scale_km, (int) (bar.meters / 1000))
+                : getContext().getString(R.string.scale_m, (int) bar.meters);
+        float pad = 4 * density;
+        float tick = 6 * density;
+        float length = (float) bar.pixels;
+        Paint.FontMetrics fm = attributionPaint.getFontMetrics();
+        float textHeight = fm.descent - fm.ascent;
+        float width = Math.max(length, attributionPaint.measureText(text)) + 2 * pad;
+        float height = textHeight + tick + 2 * pad;
+        float bottom = getHeight();
+        canvas.drawRect(0, bottom - height, width, bottom, attributionBackground);
+        float lineY = bottom - pad;
+        float x0 = pad;
+        canvas.drawLine(x0, lineY, x0 + length, lineY, scalePaint);
+        canvas.drawLine(x0, lineY, x0, lineY - tick, scalePaint);
+        canvas.drawLine(x0 + length, lineY, x0 + length, lineY - tick, scalePaint);
+        canvas.drawText(text, x0, lineY - tick - fm.descent, attributionPaint);
     }
 
     // The tile usage policy asks for the attribution on the map.
