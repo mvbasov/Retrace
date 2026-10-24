@@ -121,6 +121,25 @@ public final class RecordingSnapshot {
         return replaySpeed > 0;
     }
 
+    // True after the stop of a replay. The trip screen can then repeat it.
+    public boolean canReplayAgain() {
+        return !recording && isReplay() && replayPath != null;
+    }
+
+    // The selection for a repeated replay. After the automatic selection,
+    // the repeat selects again. This is also true when the selection found
+    // no track, or when the replay stopped before the selection.
+    public boolean automaticAgain() {
+        return selection == SELECTION_SEARCH || selection == SELECTION_TEMPORARY
+                || selection == SELECTION_AUTOMATIC || selection == SELECTION_NOT_FOUND;
+    }
+
+    // The reference track for a repeated replay. A track that the user
+    // selected stays, also in the opposite direction. Otherwise null.
+    public String referenceAgain() {
+        return selection == SELECTION_MANUAL ? referencePath : null;
+    }
+
     // The elapsed time of the trip. A stopped trip shows 0.
     public long elapsedMs(long nowMs) {
         if (!recording) {

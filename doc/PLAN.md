@@ -219,6 +219,7 @@ The OpenStreetMap tile usage policy for `tile.openstreetmap.org` has these rules
   - The map tiles stay light in the dark theme.
   - The menu of a track is a dialog. From Android 7, a context menu is a popup at the place of the push. Some systems draw that popup with the night mode of the system, not with the theme of Retrace.
   - The themes set `android:forceDarkAllowed` to false on Android 10 and newer. Retrace has its own dark theme. A forced dark look on a light theme can give dark text on a dark background.
+  - Each button has round corners. The themes set `android:buttonStyle` to the style `RoundButton`. Its drawable takes the colors from the theme, thus one drawable serves the two themes. The buttons of a dialog have no background and stay as they are.
   - Later: the limits of each profile, the tile URL, the size of the tile cache and the voice messages.
 - Alerts: vibration and optional `TextToSpeech` messages. Android has `TextToSpeech` in the framework.
 
@@ -292,7 +293,8 @@ Retrace does not need `ACCESS_BACKGROUND_LOCATION`. The service starts while the
   - a wait at the start, and a GPS gap
   - a faster trip, a slower trip, and a route with no times
 - Replay mode: the service takes the points of a saved track and not the fixes of the GPS. Thus you can test the full user interface at your desk.
-  - A long push on a track starts its replay. A dialog first selects the reference track: the automatic selection, no comparison, or a saved track of the same profile.
+  - The **Replay** button of the track screen starts a replay of that track. A dialog first selects the reference track: the automatic selection, no comparison, or a saved track of the same profile.
+  - After the stop of a replay, the **Replay** button of the trip screen starts the same replay again. It uses the last selection of the reference track and the last speed. After the automatic selection, the selection runs again.
   - The automatic selection does not use the replayed track. A replay with the replayed track as the reference track gives a time difference near zero. This is a quick check of the matcher.
   - Each point keeps its own time. Only the wait on the screen is shorter. The speeds are 1×, 5×, 10×, 30× and 100×, and the menu of the trip screen changes the speed. No wait is longer than 2 seconds.
   - A replay uses no GPS, writes no log file and saves no track. It does not use the foreground state. Thus Android can stop it soon after you leave Retrace.

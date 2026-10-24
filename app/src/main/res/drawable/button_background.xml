@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The background of each button. It is the Material button of the
+     framework with round corners. The theme gives the color and the color
+     of a disabled button. Thus the light theme and the dark theme each get
+     their own colors. The inset gives space for the shadow. -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="?android:attr/colorControlHighlight">
+    <item>
+        <inset
+            android:insetLeft="4dp"
+            android:insetTop="6dp"
+            android:insetRight="4dp"
+            android:insetBottom="6dp">
+            <shape android:shape="rectangle">
+                <corners android:radius="12dp" />
+                <solid android:color="?android:attr/colorButtonNormal" />
+                <padding
+                    android:left="12dp"
+                    android:top="4dp"
+                    android:right="12dp"
+                    android:bottom="4dp" />
+            </shape>
+        </inset>
+    </item>
+</ripple>

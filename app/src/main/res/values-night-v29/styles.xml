@@ -4,5 +4,6 @@
          values-v29/styles.xml for the item. -->
     <style name="AppTheme" parent="android:Theme.Material">
         <item name="android:forceDarkAllowed">false</item>
+        <item name="android:buttonStyle">@style/RoundButton</item>
     </style>
 </resources>

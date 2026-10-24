@@ -96,7 +96,7 @@
     <string name="reference_not_found">No saved track starts here. Retrace records a new route.</string>
 
     <!-- The replay -->
-    <string name="replay_track">Replay this track</string>
+    <string name="replay">Replay</string>
     <string name="replay_line">Replay of %1$s at %2$d× speed</string>
     <string name="replay_speed">Replay speed</string>
     <string name="replay_speed_value">%1$d×</string>

@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import net.basov.retrace.core.Profile;
 import net.basov.retrace.core.TimeText;
 import net.basov.retrace.core.Track;
 
@@ -24,6 +25,9 @@ import net.basov.retrace.core.Track;
 // A push on a track in the list opens this screen. It shows the track on
 // the map, and its profile, distance and duration. The buttons zoom in, zoom
 // out and show the whole track.
+//
+// The Replay button at the bottom starts a replay of the track. It is
+// available after the read of the track, and not during a trip.
 //
 // The screen keeps the center and the zoom of the map when Android makes the
 // activity again, for example after a turn of the device.
@@ -39,6 +43,12 @@ public final class TrackMapActivity extends ThemedActivity {
     private TileLoader loader;
     private MapView map;
     private TextView info;
+    private Button replayButton;
+    private String path;
+    // The profile of the track, after the read. Null before the read or
+    // for a track from another application with no profile.
+    private Profile trackProfile;
+    private boolean replayable;
     private volatile boolean destroyed;
 
     @Override
@@ -53,12 +63,19 @@ public final class TrackMapActivity extends ThemedActivity {
                     savedInstanceState.getDouble(STATE_LON),
                     savedInstanceState.getDouble(STATE_ZOOM));
         }
-        String path = getIntent().getStringExtra(EXTRA_FILE);
+        path = getIntent().getStringExtra(EXTRA_FILE);
         if (path == null) {
             finish();
             return;
         }
         load(new File(path), savedInstanceState == null);
+    }
+
+    // A trip can start or stop while this screen is in the background.
+    @Override
+    protected void onResume() {
+        super.onResume();
+        updateReplayButton();
     }
 
     @Override
@@ -106,12 +123,32 @@ public final class TrackMapActivity extends ThemedActivity {
         corner.setMargins(pad, pad, pad, pad);
         mapFrame.addView(buttons, corner);
 
+        replayButton = new Button(this);
+        replayButton.setText(R.string.replay);
+        replayButton.setOnClickListener(v -> onReplay());
+
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.addView(info);
         root.addView(mapFrame, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+        root.addView(replayButton, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        updateReplayButton();
         return root;
+    }
+
+    // The service starts no replay during a trip. Thus the button checks
+    // the state again.
+    private void onReplay() {
+        updateReplayButton();
+        if (replayButton.isEnabled()) {
+            ReplayStarter.ask(this, files, path, trackProfile);
+        }
+    }
+
+    private void updateReplayButton() {
+        replayButton.setEnabled(replayable && !TrackService.snapshot().recording);
     }
 
     // Reads the track on the background thread. At the first start, the map
@@ -135,6 +172,9 @@ public final class TrackMapActivity extends ThemedActivity {
                     return;
                 }
                 setTitle(result.name);
+                trackProfile = result.profile;
+                replayable = result.points.size() >= TrackStore.MIN_POINTS;
+                updateReplayButton();
                 info.setText(getString(R.string.track_details,
                         Labels.profile(this, result.profile),
                         Labels.distance(this, result.distanceM()),

@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- The dark theme, when the system uses the night mode. -->
-    <style name="AppTheme" parent="android:Theme.Material" />
+    <style name="AppTheme" parent="android:Theme.Material">
+        <item name="android:buttonStyle">@style/RoundButton</item>
+    </style>
 </resources>

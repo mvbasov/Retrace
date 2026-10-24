@@ -25,6 +25,12 @@ public final class Replay {
     private Replay() {
     }
 
+    // The profile of a replay. A track from another application can have
+    // no profile. It is then replayed as walking.
+    public static Profile profileFor(Profile trackProfile) {
+        return trackProfile != null ? trackProfile : Profile.WALKING;
+    }
+
     // The wait on the screen between two points of the saved track.
     public static long waitMs(TrackPoint before, TrackPoint next, int speed) {
         int s = Math.max(1, speed);

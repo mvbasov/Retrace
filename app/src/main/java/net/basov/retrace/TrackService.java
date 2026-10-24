@@ -376,8 +376,7 @@ public final class TrackService extends Service {
             snapshot = withError(RecordingSnapshot.ERROR_REPLAY);
             return false;
         }
-        resetTrip(track.profile != null ? track.profile : Profile.WALKING,
-                System.currentTimeMillis());
+        resetTrip(Replay.profileFor(track.profile), System.currentTimeMillis());
         replaySpeed = Math.max(1, speed);
         replayPath = path;
         replayName = track.name;

@@ -49,7 +49,9 @@ import net.basov.retrace.core.TrackPoint;
 // changes the speed.
 //
 // After the stop, the screen keeps the last values. The stop button then
-// closes the screen.
+// closes the screen. After the stop of a replay, the Replay button beside
+// it starts the same replay again. The replay keeps the last selection of
+// the reference track and the last speed.
 //
 // The camera at the start of a trip:
 // - A trip with the GPS shows the reference track until the first point.
@@ -83,6 +85,7 @@ public final class RunActivity extends ThemedActivity {
     private TextView detail2;
     private TextView detail3;
     private Button stopButton;
+    private Button replayButton;
     private Button followButton;
 
     private int shownPoints;
@@ -206,15 +209,36 @@ public final class RunActivity extends ThemedActivity {
         stopButton = new Button(this);
         stopButton.setText(R.string.stop_recording);
         stopButton.setOnClickListener(v -> onStopOrClose());
+        replayButton = new Button(this);
+        replayButton.setText(R.string.replay);
+        replayButton.setVisibility(View.GONE);
+        replayButton.setOnClickListener(v -> onReplayAgain());
+
+        LinearLayout bottom = new LinearLayout(this);
+        bottom.setOrientation(LinearLayout.HORIZONTAL);
+        bottom.addView(replayButton, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        bottom.addView(stopButton, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.addView(panel);
         root.addView(mapFrame, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
-        root.addView(stopButton, new LinearLayout.LayoutParams(
+        root.addView(bottom, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         return root;
+    }
+
+    // The screen hides the button until the next snapshot. Thus a second push
+    // cannot come before the service starts the replay.
+    private void onReplayAgain() {
+        RecordingSnapshot s = TrackService.snapshot();
+        if (s.canReplayAgain()) {
+            replayButton.setVisibility(View.GONE);
+            ReplayStarter.again(this, s);
+        }
     }
 
     private void onStopOrClose() {
@@ -298,6 +322,7 @@ public final class RunActivity extends ThemedActivity {
             invalidateOptionsMenu();
         }
         stopButton.setText(s.recording ? R.string.stop_recording : R.string.close);
+        replayButton.setVisibility(s.canReplayAgain() ? View.VISIBLE : View.GONE);
         if (s.recording) {
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         } else {

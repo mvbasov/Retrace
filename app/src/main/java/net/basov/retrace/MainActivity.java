@@ -45,7 +45,6 @@ import net.basov.retrace.core.GpxReader;
 import net.basov.retrace.core.LimitedInputStream;
 import net.basov.retrace.core.Profile;
 import net.basov.retrace.core.RecordingSnapshot;
-import net.basov.retrace.core.Replay;
 import net.basov.retrace.core.TimeText;
 import net.basov.retrace.core.Track;
 import net.basov.retrace.core.TrackImport;
@@ -56,8 +55,9 @@ import net.basov.retrace.core.TrackImport;
 //
 // The top row holds the profile and the start or stop button. Below it, a
 // line shows the state of the recording. Two tabs select the list of saved
-// tracks or the list of ways. The list fills the rest of the screen. A push on a track shows it on the map. A long push on a
-// track opens a menu: start a trip on its route, replay it, make a way from
+// tracks or the list of ways. The list fills the rest of the screen. A push
+// on a track shows it on the map, and that screen starts a replay. A long
+// push on a track opens a menu: start a trip on its route, make a way from
 // its route, share, rename or delete. The menu of a way changes its tracks.
 // The options menu imports a GPX file from another application.
 //
@@ -85,7 +85,6 @@ public final class MainActivity extends ThemedActivity {
     private static final int MENU_SHARE = 5;
     private static final int MENU_IMPORT = 6;
     private static final int MENU_ABOUT = 7;
-    private static final int MENU_REPLAY = 8;
     private static final int MENU_SETTINGS = 9;
     private static final int MENU_MAKE_WAY = 10;
     private static final int MENU_CHANGE_WAY = 11;
@@ -417,7 +416,6 @@ public final class MainActivity extends ThemedActivity {
         if (e.readable && e.points >= 2 && !TrackService.snapshot().recording) {
             addItem(ids, labels, MENU_TRIP, R.string.start_trip_on_route);
             addItem(ids, labels, MENU_TRIP_OPPOSITE, R.string.start_trip_opposite);
-            addItem(ids, labels, MENU_REPLAY, R.string.replay_track);
         }
         if (e.readable && e.isWay()) {
             addItem(ids, labels, MENU_CHANGE_WAY, R.string.change_way);
@@ -469,8 +467,6 @@ public final class MainActivity extends ThemedActivity {
             });
         } else if (id == MENU_CHANGE_WAY) {
             WayDialogs.change(this, files, e, () -> loadTracks(false));
-        } else if (id == MENU_REPLAY) {
-            askReplay(e);
         } else if (id == MENU_SHARE) {
             share(e);
         } else if (id == MENU_RENAME) {
@@ -508,22 +504,6 @@ public final class MainActivity extends ThemedActivity {
                 }, R.string.error_delete))
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
-    }
-
-    // A replay needs no location permission and no GPS. The dialog selects
-    // the reference track. The automatic selection does not use the
-    // replayed track itself.
-    private void askReplay(TrackStore.Entry e) {
-        Profile selected = Profile.values()[profileSpinner.getSelectedItemPosition()];
-        Profile profile = e.profile != null ? e.profile : selected;
-        ReferenceDialog.show(this, files, profile, (automatic, path, reversed) -> {
-            Intent replay = new Intent(this, TrackService.class)
-                    .setAction(TrackService.ACTION_REPLAY)
-                    .putExtra(TrackService.EXTRA_REPLAY, e.file.getPath())
-                    .putExtra(TrackService.EXTRA_SPEED, Replay.DEFAULT_SPEED);
-            startService(ReferenceDialog.putSelection(replay, automatic, path, reversed));
-            startActivity(new Intent(this, RunActivity.class));
-        });
     }
 
     // ------------------------------------------------------------------

@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- The framework Material theme. Android has it from API 21. -->
-    <style name="AppTheme" parent="android:Theme.Material.Light.DarkActionBar" />
+    <style name="AppTheme" parent="android:Theme.Material.Light.DarkActionBar">
+        <item name="android:buttonStyle">@style/RoundButton</item>
+    </style>
+
+    <!-- Each button of Retrace has round corners. The dark theme uses the
+         same style, because the drawable takes its colors from the theme. -->
+    <style name="RoundButton" parent="android:Widget.Material.Button">
+        <item name="android:background">@drawable/button_background</item>
+    </style>
 </resources>
