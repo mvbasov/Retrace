@@ -224,10 +224,14 @@ A way is the mean track of some tracks on one route. It has the mean position an
 - `WayBuilder` makes the way. The banner comment of `WayBuilder.java` gives each step and the reason for it.
 - A way is a GPX file in the track directory. The `<metadata>` element holds an extension with the file names of its tracks. Other applications ignore the extension and read a way as a plain track.
 - A way works as a track: on the map, as a reference track, in a replay and in a share intent.
+- A track can join the route away from its start, after a GPS error or a start in the middle. It gives its place and its time for the part that it covers.
+- A track in the opposite direction is turned around. Its time is correct only on a flat route. Uphill and downhill, the speed in the two directions is different.
+- A step faster than two times the top speed of the profile, in the first or the last 10 points, is a GPS jump. The points before or after the jump are not used.
+- The way keeps the longest part of the route that two tracks or more cover. A part that only one track covers can be a GPS error.
 - The way does not use these tracks:
-  - a track that starts far from the start
-  - a track that stops before the finish
-  - a track with more than 10 % of the route off the route
+  - a track that never joins the route
+  - a track that covers less than half of the route
+  - a track with more than 10 % of its part off the route
 - The time of the way starts at the start of its newest track.
 - The menu of a track has **Make a way from this route**. The dialog shows the tracks of the same route with a checkbox each. Such a track has the same profile and a length of 70 % to 140 % of the base. Its start and its finish are near the start and the finish of the base.
 - The menu of a way has **Change the tracks of the way**. Retrace then builds the way again in its file.
@@ -246,6 +250,13 @@ Results of 100 seeds of five invented walks with a mean speed of 1.4 m/s. One wa
 | 8 m | 0.44 to 0.51 | 6 s |
 
 The ratio 0.44 agrees with 1 / √5 for five tracks.
+
+The same runs had a sixth track at a noise of 4 m, in three cases:
+- a GPS jump at the start
+- the opposite direction
+- a start in the middle of the route
+
+In each case, each of the 100 seeds gave a way with all six tracks and a correct time. Two tracks in opposite directions on one street gave the street alone. One of them had a GPS jump at the start, and the other had a tail at the end.
 
 ## 6. Permissions
 

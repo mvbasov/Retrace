@@ -28,6 +28,10 @@ public final class WayBuilderTest {
     private static final double[][] OUT_AND_BACK = {{0, 0}, {0, 500}, {0, 0}};
     private static final double[][] OTHER = {{0, 0}, {300, 0}, {300, -600}};
     private static final double[][] RIDE = {{0, 0}, {2000, 0}, {2000, 1500}};
+    private static final double[][] BACK = {{800, 600}, {800, 0}, {0, 0}};
+    private static final double[][] FROM_MIDDLE = {{500, 0}, {800, 0}, {800, 600}};
+    private static final double[][] STREET_WEST = {{250, 0}, {0, 0}};
+    private static final double[][] STREET_EAST = {{0, 0}, {250, 0}, {250, 40}};
 
     public static void main(String[] args) {
         theWayIsNearerToTheRouteThanOneTrack();
@@ -36,11 +40,16 @@ public final class WayBuilderTest {
         aWayOutAndBackHasTheLengthOfTheRoute();
         theBaseTrackDoesNotChangeTheResult();
         aTrackOnADifferentRouteIsNotUsed();
-        aTrackThatStopsHalfwayIsNotUsed();
-        aTrackFarFromTheStartIsNotUsed();
+        aTrackThatCoversTooLittleIsNotUsed();
+        aTrackFarFromTheRouteIsNotUsed();
         oneGoodTrackGivesNoWay();
         theTimesOfTheWayIncrease();
         aCyclingWayHasTheCyclingStep();
+        aGpsErrorAtTheStartDoesNotStopATrack();
+        aTrackInTheOppositeDirectionJoinsTheWay();
+        aTrackFromTheMiddleGivesItsPart();
+        twoTracksInOppositeDirections();
+        theMatchTellsTheCoverAndTheDirection();
 
         if (failures > 0) {
             System.out.println("WayBuilderTest: " + failures + " check(s) failed");
@@ -124,25 +133,29 @@ public final class WayBuilderTest {
         check("other route: rejected", "[5]", r.rejected.toString());
     }
 
-    private static void aTrackThatStopsHalfwayIsNotUsed() {
+    // A track must cover at least half of the route. This one covers 30
+    // percent.
+    private static void aTrackThatCoversTooLittleIsNotUsed() {
         List<Track> tracks = walks(ROUTE, 70);
         Track full = walk(ROUTE, 1.4, 77, 7, 0);
-        tracks.add(new Track("half", Profile.WALKING,
-                full.points.subList(0, full.points.size() / 2)));
+        tracks.add(new Track("part", Profile.WALKING,
+                full.points.subList(0, full.points.size() * 3 / 10)));
         WayBuilder.Result r = WayBuilder.build("way", Profile.WALKING, tracks, 0);
-        check("half: rejected", "[5]", r.rejected.toString());
-        check("half: reason", "[" + WayBuilder.REJECT_FINISH + "]", r.reasons.toString());
+        check("part: rejected", "[5]", r.rejected.toString());
+        check("part: reason", "[" + WayBuilder.REJECT_SHORT + "]", r.reasons.toString());
     }
 
-    private static void aTrackFarFromTheStartIsNotUsed() {
+    // The same shape 400 m to the north and 400 m to the east. No part of
+    // it is near the route, thus it never joins the route.
+    private static void aTrackFarFromTheRouteIsNotUsed() {
         List<Track> tracks = walks(ROUTE, 80);
         List<TrackPoint> moved = new ArrayList<>();
         for (TrackPoint p : walk(ROUTE, 1.4, 88, 7, 0).points) {
-            moved.add(TestTracks.shift(p, 0, 400));
+            moved.add(TestTracks.shift(p, 400, 400));
         }
         tracks.add(new Track("far", Profile.WALKING, moved));
         WayBuilder.Result r = WayBuilder.build("way", Profile.WALKING, tracks, 0);
-        check("far: reason", "[" + WayBuilder.REJECT_START + "]", r.reasons.toString());
+        check("far: reason", "[" + WayBuilder.REJECT_NO_JOIN + "]", r.reasons.toString());
     }
 
     // A way needs two tracks. One track and one track of a different route
@@ -186,9 +199,157 @@ public final class WayBuilderTest {
         near("cycling: duration", mean, r.way.durationMs() / 1000.0, 3 * SIGMA * Math.sqrt(2) / 6);
     }
 
+    // The first six points of one walk are a GPS error: they come from 110 m
+    // before the start, at 18 m/s. The walk joins the route after them. The
+    // error does not go into the way, and the walk gives its time.
+    private static void aGpsErrorAtTheStartDoesNotStopATrack() {
+        List<Track> tracks = walks(ROUTE, 120);
+        List<TrackPoint> points = new ArrayList<>(walk(ROUTE, 1.4, 1205, 5, 0).points);
+        for (int i = 0; i < 6; i++) {
+            TrackPoint p = points.get(i);
+            points.set(i, TestTracks.point(-110 + 18 * i, -15, p.timeMs));
+        }
+        tracks.add(new Track("jump", Profile.WALKING, points));
+        WayBuilder.Result r = WayBuilder.build("way", Profile.WALKING, tracks, 0);
+        check("jump: all used", 6, r.used.size());
+        near("jump: duration", meanDurationS(ROUTE, 1.4), r.way.durationMs() / 1000.0,
+                3 * TYPICAL_TIME_S);
+        near("jump: start of the way", 0, distanceFrom(r.way.points.get(0), 0, 0), 3 * SIGMA);
+    }
+
+    // One walk goes from the finish to the start. The builder turns it
+    // around. Its time is correct here, because the invented route is flat.
+    private static void aTrackInTheOppositeDirectionJoinsTheWay() {
+        List<Track> tracks = walks(ROUTE, 130);
+        tracks.add(walk(BACK, 1.4, 1305, 6, 0));
+        WayBuilder.Result r = WayBuilder.build("way", Profile.WALKING, tracks, 0);
+        check("back: all used", 6, r.used.size());
+        check("back: reversed", "[5]", r.reversed.toString());
+        near("back: duration", meanDurationS(ROUTE, 1.4), r.way.durationMs() / 1000.0,
+                3 * TYPICAL_TIME_S);
+        near("back: start of the way", 0, distanceFrom(r.way.points.get(0), 0, 0), 3 * SIGMA);
+    }
+
+    // One slow walk starts in the middle of the route, at 500 m. It gives
+    // its time to the part from 500 m only. The first part has the mean of
+    // the five other walks.
+    private static void aTrackFromTheMiddleGivesItsPart() {
+        List<Track> tracks = walks(ROUTE, 140);
+        tracks.add(walk(FROM_MIDDLE, 1.0, 1405, 6, 0));
+        WayBuilder.Result r = WayBuilder.build("way", Profile.WALKING, tracks, 0);
+        check("middle: all used", 6, r.used.size());
+        double fivePerMeter = 0;
+        for (double v : SPEEDS) {
+            fivePerMeter += 1 / v / SPEEDS.length;
+        }
+        double sixPerMeter = (fivePerMeter * SPEEDS.length + 1 / 1.0) / (SPEEDS.length + 1);
+        double expected = 500 * fivePerMeter + (length(ROUTE) - 500) * sixPerMeter;
+        near("middle: duration", expected, r.way.durationMs() / 1000.0, 3 * TYPICAL_TIME_S);
+    }
+
+    // Two runs on one street of 250 m, the case of the maintainer. One goes
+    // west, and its first five points are a GPS jump from 130 m to the east
+    // of the street. The other goes east, and has a tail of 40 m to the
+    // north at the end.
+    //
+    // The way is the street alone, in the direction of the base track: no
+    // jump and no tail. The westbound run has no good point on the first
+    // part of the street. Thus the way can start up to 25 m after the east
+    // end of the street. The west end is at the start or the finish, in the
+    // finish circle of the trip. Thus the radius of the profile is its
+    // tolerance.
+    private static void twoTracksInOppositeDirections() {
+        List<TrackPoint> west = new ArrayList<>(run(STREET_WEST, 3.0, 1501, 1));
+        for (int i = 0; i < 5; i++) {
+            TrackPoint p = west.get(i);
+            west.set(i, TestTracks.point(380 - 25 * i, -8, p.timeMs));
+        }
+        List<Track> tracks = new ArrayList<>();
+        tracks.add(new Track("west", Profile.RUNNING, west));
+        tracks.add(new Track("east", Profile.RUNNING, run(STREET_EAST, 2.4, 1502, 2)));
+        double end = Profile.RUNNING.radiusM;
+
+        WayBuilder.Result a = WayBuilder.build("way", Profile.RUNNING, tracks, 0);
+        check("street west: used", "[0, 1]", a.used.toString());
+        check("street west: reversed", "[1]", a.reversed.toString());
+        checkOnStreet("street west", a.way);
+        near("street west: finish", 0,
+                distanceFrom(a.way.points.get(a.way.points.size() - 1), 0, 0), end);
+
+        WayBuilder.Result b = WayBuilder.build("way", Profile.RUNNING, tracks, 1);
+        check("street east: reversed", "[0]", b.reversed.toString());
+        checkOnStreet("street east", b.way);
+        near("street east: start", 0, distanceFrom(b.way.points.get(0), 0, 0), end);
+    }
+
+    // Each point of the way is on the street, and the way has most of it.
+    // The tail is 40 m long. A point more than half of it from the street is
+    // a part of the tail. The corner of the eastbound run moves the end of
+    // the way by some meters. GPS noise makes the line of the way longer
+    // than the street.
+    private static void checkOnStreet(String name, Track way) {
+        double worst = 0;
+        for (TrackPoint p : way.points) {
+            double[] q = xy(p);
+            double x = Math.max(0, Math.min(250, q[0]));
+            worst = Math.max(worst, Math.hypot(q[0] - x, q[1]));
+        }
+        check(name + ": on the street, worst " + round(worst) + " m", true, worst <= 20);
+        check(name + ": length " + round(way.distanceM()) + " m", true,
+                way.distanceM() >= 200 && way.distanceM() <= 280);
+    }
+
+    // The way dialog shows the cover and the direction of each track.
+    private static void theMatchTellsTheCoverAndTheDirection() {
+        Track base = walk(ROUTE, 1.4, 1601, 1, 0);
+        WayBuilder.Match back = WayBuilder.match(base, walk(BACK, 1.4, 1602, 2, 0), Profile.WALKING);
+        check("match back: no reject", 0, back.reject);
+        check("match back: reversed", true, back.reversed);
+        check("match back: whole route", true, back.cover > 0.9);
+
+        WayBuilder.Match part = WayBuilder.match(base, walk(FROM_MIDDLE, 1.4, 1603, 3, 0),
+                Profile.WALKING);
+        check("match part: no reject", 0, part.reject);
+        check("match part: forward", false, part.reversed);
+        near("match part: cover", 900 / length(ROUTE), part.cover, 0.05);
+
+        List<TrackPoint> moved = new ArrayList<>();
+        for (TrackPoint p : walk(ROUTE, 1.4, 1604, 4, 0).points) {
+            moved.add(TestTracks.shift(p, 400, 400));
+        }
+        check("match far: no join", WayBuilder.REJECT_NO_JOIN, WayBuilder.match(base,
+                new Track("far", Profile.WALKING, moved), Profile.WALKING).reject);
+    }
+
     // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
+
+    private static List<TrackPoint> run(double[][] corners, double speed, long seed, int day) {
+        return TestTracks.recorded(TestTracks.noisy(TestTracks.ideal(corners, speed,
+                TestTracks.START_MS + day * DAY_MS, 0), seed, SIGMA), Profile.RUNNING);
+    }
+
+    // The mean time of the five walks and one more walk at the speed.
+    private static double meanDurationS(double[][] corners, double extraSpeed) {
+        return (meanDurationS(corners) * SPEEDS.length + length(corners) / extraSpeed)
+                / (SPEEDS.length + 1);
+    }
+
+    // The distance of a point from a place of the invented plane.
+    private static double distanceFrom(TrackPoint p, double x, double y) {
+        double[] q = xy(p);
+        return Math.hypot(q[0] - x, q[1] - y);
+    }
+
+    private static double[] xy(TrackPoint p) {
+        TrackPoint origin = TestTracks.point(0, 0, 0);
+        double x = Geo.distanceM(origin.latitude, origin.longitude, origin.latitude, p.longitude)
+                * Math.signum(p.longitude - origin.longitude);
+        double y = Geo.distanceM(origin.latitude, origin.longitude, p.latitude, origin.longitude)
+                * Math.signum(p.latitude - origin.latitude);
+        return new double[]{x, y};
+    }
 
     // Five walks on the corners. Walk 2 waits two minutes at the start.
     private static List<Track> walks(double[][] corners, long seed) {

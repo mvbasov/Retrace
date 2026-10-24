@@ -54,6 +54,30 @@ public final class Track {
         return new Track(name, profile, points, newMembers);
     }
 
+    // The same route in the opposite direction. The first point is the
+    // last point. The time of each point is the time that the trip needs
+    // from the old finish to that place: the old time at the finish minus the
+    // old time there. The new first point gets the old start time.
+    //
+    // This time is correct only on a flat route. Uphill and downhill, the
+    // speed in the opposite direction is different.
+    public Track reversed() {
+        int n = points.size();
+        long first = startTimeMs();
+        long last = TrackPoint.NO_TIME;
+        for (int i = n - 1; i >= 0 && last == TrackPoint.NO_TIME; i--) {
+            last = points.get(i).timeMs;
+        }
+        List<TrackPoint> out = new ArrayList<>(n);
+        for (int i = n - 1; i >= 0; i--) {
+            TrackPoint p = points.get(i);
+            long time = p.hasTime() && first != TrackPoint.NO_TIME
+                    ? first + (last - p.timeMs) : TrackPoint.NO_TIME;
+            out.add(new TrackPoint(p.latitude, p.longitude, time, p.elevationM, p.accuracyM));
+        }
+        return new Track(name, profile, out, members);
+    }
+
     // The length of the track along its points, in meters.
     public double distanceM() {
         return distanceM;

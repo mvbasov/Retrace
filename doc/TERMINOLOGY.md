@@ -18,7 +18,8 @@ Use one name for one thing. If a term is not in the table, use the plain word. A
 | start, finish | The first point and the last point of the reference track. | origin, goal, destination |
 | start circle, finish circle | The circle around the start and the finish. Its radius is the radius of the profile plus twice the accuracy of the fix. | start zone, geofence |
 | leg | A part of a route in one direction. A route out and back has two legs. | branch, section |
-| join | To find the route away from its start, at the first fixes near it. | snap, attach |
+| join | To find the route away from its start, at the first fixes near it. A track of a way also joins the route. | snap, attach |
+| opposite direction | A trip or a track from the finish of a route to its start. Its time is correct only on a flat route. | backward, inverse, reverse (in text) |
 | drift | The slow part of the GPS error. It changes over minutes. | bias, offset |
 | distance along the route | The distance from the start to your projection on the reference track. The code calls it `s`. | progress, odometer |
 | cross-track distance | The distance from your position to the nearest part of the route. | deviation, offset, error |

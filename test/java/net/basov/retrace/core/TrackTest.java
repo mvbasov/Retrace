@@ -21,6 +21,7 @@ public final class TrackTest {
         distances();
         lengthAndDuration();
         profileIds();
+        aReversedTrackGoesBack();
         theFilterDropsBadFixes();
         theFilterAddsTheDistance();
         theLogKeepsEachPoint();
@@ -59,6 +60,29 @@ public final class TrackTest {
         check("no time duration", 0L, noTime.durationMs());
         check("empty", 0.0, new Track(null, null, new ArrayList<TrackPoint>()).distanceM());
         check("rename keeps points", 4, track.withName("other").points.size());
+    }
+
+    // The reversed track starts at the old finish, at the old start time.
+    // Each step takes the same time as the step in the other direction.
+    private static void aReversedTrackGoesBack() {
+        List<TrackPoint> points = new ArrayList<>();
+        points.add(point(0, 0, 1000));
+        points.add(point(0.001, 0, 61000));
+        points.add(point(0.002, 0, TrackPoint.NO_TIME));
+        points.add(point(0.003, 0, 181000));
+        Track track = new Track("test", Profile.RUNNING, points);
+        Track back = track.reversed();
+        near("reversed: first point", 0.003, back.points.get(0).latitude, 1e-12);
+        check("reversed: start time", 1000L, back.startTimeMs());
+        check("reversed: duration", track.durationMs(), back.durationMs());
+        check("reversed: point with no time", false, back.points.get(1).hasTime());
+        check("reversed: third time", 121000L, back.points.get(2).timeMs);
+        check("reversed: last time", 181000L, back.points.get(3).timeMs);
+        near("reversed: length", track.distanceM(), back.distanceM(), 1e-9);
+        Track again = back.reversed();
+        for (int i = 0; i < points.size(); i++) {
+            check("twice: time " + i, points.get(i).timeMs, again.points.get(i).timeMs);
+        }
     }
 
     // The id is in each GPX file. A change of an id breaks old files.
