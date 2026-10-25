@@ -53,11 +53,12 @@ For a trip in the opposite direction, `Track.reversed()` turns the reference tra
 
 The constructor of `TrackMatcher` prepares the reference track once. It does these steps:
 
-1. It smooths the points. Each point becomes the mean of the points within 10 m along the raw track (`SMOOTH_M`). The first point and the last point stay as they are.
-2. It calculates `S[i]` along the smoothed points with the haversine formula. `S` of the last point is the length of the route.
-3. It checks the times. Each point must have a time, and no time can be earlier than the time before it. Otherwise the track has no time values, and the matcher gives `s` and `d` only.
-4. It finds the start of the reference track. This is the last point before the track leaves its start circle, at the radius of the profile. `T_ref` counts from that point. Thus a wait at the start of the reference track does not count.
-5. It finds the finish place. From the end, it goes back while the points are inside the finish circle. The finish place is `S` of the earliest of these points. This is the place where the reference track enters the finish circle.
+1. It removes the GPS spikes. A spike is a burst of at most 5 bad fixes that jumps away from the track and back. `GpsSpikes` removes only these points. One spike of 95 m adds almost 200 m to the length along the track.
+2. It smooths the points. Each point becomes the mean of the points within 10 m along the raw track (`SMOOTH_M`). The first point and the last point stay as they are.
+3. It calculates `S[i]` along the smoothed points with the haversine formula. `S` of the last point is the length of the route.
+4. It checks the times. Each point must have a time, and no time can be earlier than the time before it. Otherwise the track has no time values, and the matcher gives `s` and `d` only.
+5. It finds the start of the reference track. This is the last point before the track leaves its start circle, at the radius of the profile. `T_ref` counts from that point. Thus a wait at the start of the reference track does not count.
+6. It finds the finish place. From the end, it goes back while the points are inside the finish circle. The finish place is `S` of the earliest of these points. This is the place where the reference track enters the finish circle.
 
 Why the smoothing: GPS noise gives a recorded track a small zigzag. The zigzag makes the distance along the track too large. The mean of the points within 10 m removes most of the zigzag. At a corner, the smooth route moves some meters inside the corner. That is much less than the off-route limit.
 

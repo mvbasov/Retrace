@@ -57,7 +57,7 @@ public final class TrackSpeeds {
 
     public static TrackSpeeds of(Track track, Profile profile) {
         TrackSpeeds none = new TrackSpeeds(Double.NaN, Double.NaN, Double.NaN);
-        List<TrackPoint> p = track.points;
+        List<TrackPoint> p = GpsSpikes.remove(track.points, profile);
         int n = p.size();
         if (n < 2) {
             return none;

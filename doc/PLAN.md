@@ -125,6 +125,7 @@ TrackMatcher is the core of Retrace. It is plain Java with no Android import. Th
 
 Preparation of the reference track:
 
+- Remove the GPS spikes. See section 5.8.
 - Smooth the track. Each point becomes the mean of the points within 10 m along the track. GPS noise gives a recorded track a small zigzag, and the zigzag makes the length too large.
 - Calculate the distance along the route `S[i]` and the time `T[i]` of each point.
 - The reference track starts where it leaves its start circle. Its finish place is where it enters its finish circle.
@@ -246,6 +247,8 @@ A way is the mean track of some tracks on one route. It has the mean position an
 - A loop ends where it starts. The first points of a track are then near the start and near the finish. A join in the finish zone, near the first point of the track and near the start of the route, is at the start. Without this rule, a GPS error at the start of the base track could turn the direction of the route there. Then each track joined at the finish, and no way came out.
 - A track in the opposite direction is turned around. Its time is correct only on a flat route. Uphill and downhill, the speed in the two directions is different.
 - A step faster than two times the top speed of the profile, in the first or the last 10 points, is a GPS jump. The points before or after the jump are not used.
+- A GPS spike is a burst of at most 5 bad fixes: the track jumps away and jumps back. `GpsSpikes` removes only the points of the burst. The calculations use the points without spikes: the length of a track, its speeds, a way and the reference track of a trip. The saved file does not change, and the map shows each point.
+- The trim of the base track removes a part at an end only if the track waits there: its path is slower than 0.5 m/s. A route can turn back near its finish, and that turn is not a wait.
 - The way keeps the longest part of the route that two tracks or more cover. A part that only one track covers can be a GPS error.
 - The way does not use these tracks:
   - a track that never joins the route

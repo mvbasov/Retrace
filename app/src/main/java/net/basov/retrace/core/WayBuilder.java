@@ -119,6 +119,11 @@ public final class WayBuilder {
     static final double STOP_MPS = 0.3;
     static final double WAIT_MS = 3000;
 
+    // The trim of a base track removes a part at an end only if that part is
+    // a wait: its path is slower than this speed. GPS noise moves a point
+    // that waits by some meters, thus the limit is above STOP_MPS.
+    static final double WAIT_PATH_MPS = 0.5;
+
     // The stations are smoothed over this distance before and after each
     // station. TrackMatcher smooths the reference track in the same way.
     static final double SMOOTH_M = 10;
@@ -208,8 +213,10 @@ public final class WayBuilder {
         double lon0 = base.points.get(0).longitude;
         double cos0 = Math.cos(Math.toRadians(lat0));
         double jump = JUMP_FACTOR * profile.maxSpeedMps;
-        Plane b = new Plane(base.points, lat0, lon0, cos0).withoutJumps(jump);
-        Plane o = new Plane(other.points, lat0, lon0, cos0).withoutJumps(jump);
+        Plane b = new Plane(GpsSpikes.remove(base.points, profile), lat0, lon0, cos0)
+                .withoutJumps(jump);
+        Plane o = new Plane(GpsSpikes.remove(other.points, profile), lat0, lon0, cos0)
+                .withoutJumps(jump);
         double limit = 2 * profile.offRouteM;
         if (!b.boxNear(o, limit)) {
             return new Match(REJECT_NO_JOIN, 0, false);
@@ -235,7 +242,8 @@ public final class WayBuilder {
         double jump = JUMP_FACTOR * profile.maxSpeedMps;
         List<Plane> planes = new ArrayList<>();
         for (Track t : tracks) {
-            planes.add(new Plane(t.points, lat0, lon0, cos0).withoutJumps(jump));
+            planes.add(new Plane(GpsSpikes.remove(t.points, profile), lat0, lon0, cos0)
+                    .withoutJumps(jump));
         }
         Stations stations = Stations.smoothed(
                 planes.get(baseIndex).trimmed(profile.radiusM + profile.offRouteM,
@@ -447,10 +455,21 @@ public final class WayBuilder {
         // departure is the last point back where the distance to the exit
         // still grows. A track with no wait thus keeps its first point. The
         // arrival is the same from the end of the track.
+        //
+        // A route can turn back near its finish, for example around a
+        // corner. The distance to the exit then gets smaller, and the rule
+        // above takes the turn for a wait. Thus a part is removed only if
+        // it is a wait. See waits().
         Plane trimmed(double zone, double tolerance) {
             int n = x.length;
             int first = edge(zone, tolerance, 0, 1);
             int last = n - 1 - edge(zone, tolerance, n - 1, -1);
+            if (!waits(0, first)) {
+                first = 0;
+            }
+            if (!waits(last, n - 1)) {
+                last = n - 1;
+            }
             if (last - first < 1) {
                 return this;
             }
@@ -464,6 +483,24 @@ public final class WayBuilder {
             System.arraycopy(t, first, tt, 0, m);
             System.arraycopy(ele, first, te, 0, m);
             return new Plane(tx, ty, tt, te);
+        }
+
+        // True if the track waits from point a to point b: its path is slower
+        // than WAIT_PATH_MPS. A part with no time is a wait. Then the trim
+        // works as before the time check.
+        private boolean waits(int a, int b) {
+            if (b <= a) {
+                return false;
+            }
+            double dt = t[b] - t[a];
+            if (!(dt > 0)) {
+                return true;
+            }
+            double path = 0;
+            for (int i = a + 1; i <= b; i++) {
+                path += Math.hypot(x[i] - x[i - 1], y[i] - y[i - 1]);
+            }
+            return path * 1000 / dt < WAIT_PATH_MPS;
         }
 
         // The count of points before the departure, from the index from in

@@ -37,7 +37,7 @@ public final class Track {
         this.profile = profile;
         this.points = Collections.unmodifiableList(new ArrayList<>(points));
         this.members = Collections.unmodifiableList(new ArrayList<>(members));
-        this.distanceM = sumDistance(this.points);
+        this.distanceM = sumDistance(GpsSpikes.remove(this.points, profile));
     }
 
     public boolean isWay() {
@@ -78,7 +78,8 @@ public final class Track {
         return new Track(name, profile, out, members);
     }
 
-    // The length of the track along its points, in meters.
+    // The length of the track along its points, in meters. A GPS spike
+    // does not count. See GpsSpikes.
     public double distanceM() {
         return distanceM;
     }

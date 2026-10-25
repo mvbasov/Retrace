@@ -162,7 +162,9 @@ public final class TrackMatcher {
     private double anchorLon = Double.NaN;
 
     public TrackMatcher(Track reference, Profile profile) {
-        List<TrackPoint> pts = reference.points;
+        // A GPS spike makes the length along the route too large. See
+        // GpsSpikes.
+        List<TrackPoint> pts = GpsSpikes.remove(reference.points, profile);
         if (pts.size() < 2) {
             throw new IllegalArgumentException("the reference track has fewer than 2 points");
         }

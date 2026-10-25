@@ -37,6 +37,11 @@ public final class WayBuilderTest {
     // first 25 m.
     private static final double[][] LOOP_AT_CORNER = {{0, 0}, {300, 0}, {300, -250},
             {0, -250}, {0, -30}};
+    // A route with a narrow hook at its finish. The whole hook is in the
+    // finish zone, and its last leg goes back to where the route enters the
+    // zone.
+    private static final double[][] HOOK = {{-300, 40}, {-15, 40}, {0, 30}, {0, 0}, {25, 0},
+            {28, 25}};
     private static final double[][] LOOP_BEFORE_CORNER = {{0, -25}, {0, 0}, {300, 0},
             {300, -250}, {0, -250}, {0, -30}};
 
@@ -58,6 +63,8 @@ public final class WayBuilderTest {
         twoTracksInOppositeDirections();
         theMatchTellsTheCoverAndTheDirection();
         eachTrackOfALoopJoinsAtTheStart();
+        aHookAtTheFinishStays();
+        aSpikeNearTheFinishDoesNotCutTheTrack();
 
         if (failures > 0) {
             System.out.println("WayBuilderTest: " + failures + " check(s) failed");
@@ -353,6 +360,42 @@ public final class WayBuilderTest {
                 check("loop base " + base + ": match " + i, 0,
                         WayBuilder.match(r.way, tracks.get(i), Profile.WALKING).reject);
             }
+        }
+    }
+
+    // The case of the maintainer: the route turns back near its finish.
+    // The trim of the base track took the last leg for a wait at the finish
+    // and removed it. The way then ended up to 31 m before the finish.
+    // The finish of the way is in the finish circle of a trip. Thus the
+    // radius of the profile is its tolerance.
+    private static void aHookAtTheFinishStays() {
+        List<Track> tracks = new ArrayList<>();
+        tracks.add(walk(HOOK, 1.4, 1801, 1, 0));
+        tracks.add(walk(HOOK, 1.6, 1802, 2, 0));
+        for (int base = 0; base < tracks.size(); base++) {
+            Track way = WayBuilder.build("way", Profile.WALKING, tracks, base).way;
+            near("hook base " + base + ": finish", 0,
+                    distanceFrom(way.points.get(way.points.size() - 1), 28, 25),
+                    Profile.WALKING.radiusM);
+        }
+    }
+
+    // The case of the maintainer: one fix 95 m to the side, four points
+    // before the end of a track. The cut of a GPS jump at the end of a track
+    // removed the fix and all the points after it. The way then ended at
+    // that place. GpsSpikes removes only the fix.
+    private static void aSpikeNearTheFinishDoesNotCutTheTrack() {
+        List<Track> tracks = new ArrayList<>();
+        tracks.add(walk(HOOK, 1.4, 1803, 1, 0));
+        List<TrackPoint> points = new ArrayList<>(walk(HOOK, 1.6, 1804, 2, 0).points);
+        int k = points.size() - 5;
+        points.set(k, TestTracks.shift(points.get(k), 95, 0));
+        tracks.add(new Track("spike", Profile.WALKING, points));
+        for (int base = 0; base < tracks.size(); base++) {
+            Track way = WayBuilder.build("way", Profile.WALKING, tracks, base).way;
+            near("spike base " + base + ": finish", 0,
+                    distanceFrom(way.points.get(way.points.size() - 1), 28, 25),
+                    Profile.WALKING.radiusM);
         }
     }
 
