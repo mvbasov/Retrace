@@ -53,12 +53,10 @@ import net.basov.retrace.core.TrackPoint;
 // it starts the same replay again. The replay keeps the last selection of
 // the reference track and the last speed.
 //
-// The camera at the start of a trip:
-// - A trip with the GPS shows the reference track until the first point.
-//   At the first point, the map follows the position, as after a push on
-//   Me, and zooms in to at least FIRST_FIX_ZOOM.
-// - A replay shows the whole replayed track and the reference track, as
-//   after a push on All.
+// The camera at the start of a trip, also of a replay: the map shows the
+// reference track until the first point. At the first point, the map
+// follows the position, as after a push on Me, and zooms in to at least
+// FIRST_FIX_ZOOM. During a replay, All also shows the whole replayed track.
 // After a rotation of the screen, the camera of the user stays.
 public final class RunActivity extends ThemedActivity {
 
@@ -415,11 +413,9 @@ public final class RunActivity extends ThemedActivity {
     private void startCamera(RecordingSnapshot s, boolean move) {
         waitingForFirstFix = false;
         if (s.isReplay()) {
-            if (move) {
-                map.showAll();
-            }
-            loadFitPoints(s.replayPath, s.startTimeMs, move);
-        } else if (move && s.recording && s.points == 0) {
+            loadFitPoints(s.replayPath, s.startTimeMs);
+        }
+        if (move && s.recording && s.points == 0) {
             // The reference track shows until the first point. See the
             // read of the reference track.
             waitingForFirstFix = true;
@@ -430,7 +426,7 @@ public final class RunActivity extends ThemedActivity {
     }
 
     // Reads the replayed track for the fit of All, on the background thread.
-    private void loadFitPoints(String path, long tripMs, boolean fit) {
+    private void loadFitPoints(String path, long tripMs) {
         if (path == null) {
             return;
         }
@@ -447,9 +443,6 @@ public final class RunActivity extends ThemedActivity {
                     return;
                 }
                 map.setFitPoints(track.points);
-                if (fit && !map.isFollow()) {
-                    map.showAll();
-                }
             });
         });
     }

@@ -218,7 +218,7 @@ The OpenStreetMap tile usage policy for `tile.openstreetmap.org` has these rules
   - The screen stays on while the trip screen is visible.
   - The map follows your position. A move of the map stops that. The button **Me** starts it again.
   - At the start of a trip, the map shows the reference track. At the first point, the map follows your position, as after a push on **Me**. It zooms in to at least level 16.
-  - At the start of a replay, the map shows the whole replayed track and the reference track, as after a push on **All**.
+  - A replay starts the same as a trip with the GPS: the map follows the replayed position from the first point. During a replay, **All** also shows the whole replayed track.
   - After a rotation of the screen, the camera of the user stays.
   - A scale bar at the bottom left shows a round length: 1, 2 or 5 times a power of 10, in meters. `ScaleBar` calculates it for the latitude of the center of the map.
   - The menu of the track screen starts a trip on the route of the track. The trip starts on the list screen, because that screen asks for the location permission and checks the GPS. A push on the notification, or on the status line of the list, opens the trip screen.
