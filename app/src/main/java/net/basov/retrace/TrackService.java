@@ -58,10 +58,12 @@ import net.basov.retrace.core.TrackPoint;
 // tracks with a start near that point. If no track starts there, the trip
 // has no comparison.
 //
-// The service gets fixes from the GPS and from the network location of
-// Android. A network fix is a fallback for a gap of the GPS, for example in
-// a passage. FixSelector selects the fixes and gives them one time base.
-// A device with only one of the two providers records with that provider.
+// From Android 12, the service gets the fused location of Android. See
+// FusedFixes. A device with no fused provider, and an older Android, use
+// the GPS and the network location of Android. A network fix is then a
+// fallback for a gap of the GPS, for example in a passage. FixSelector
+// selects the fixes and gives them one time base. A device with only one
+// of the two providers records with that provider.
 //
 // FixSmoother smooths each fix and drops the GPS spikes. Each point that
 // RecordFilter accepts goes to TrackMatcher. The notification and the trip
@@ -177,6 +179,9 @@ public final class TrackService extends Service {
     private FixSelector fixSelector = new FixSelector();
     private FixSmoother fixSmoother = new FixSmoother(Profile.WALKING);
     private Writer log;
+    // A FusedFixes object while the trip uses the fused provider, or null.
+    // The type is Object, thus Android 6 to 11 do not load the class.
+    private Object fused;
     private double lastAccuracyM = Double.NaN;
     private long lastFixTimeMs = TrackPoint.NO_TIME;
     private int lastFixSource = FixSource.NONE;
@@ -349,10 +354,17 @@ public final class TrackService extends Service {
         publish();
     }
 
-    // Worker thread. Requests the fixes of the GPS and of the network. The
-    // network is a fallback, thus a missing network provider is no fault.
-    // Returns ERROR_NONE if at least one provider gives fixes.
+    // Worker thread. From Android 12, requests the fused fixes. Otherwise, or
+    // if the device has no fused provider, requests the fixes of the GPS and
+    // of the network. The network is a fallback, thus a missing network
+    // provider is no fault. Returns ERROR_NONE if a provider gives fixes.
     private int requestFixes() {
+        if (Build.VERSION.SDK_INT >= 31) {
+            fused = FusedFixes.start(locationManager, FIX_INTERVAL_MS, worker, listener);
+            if (fused != null) {
+                return RecordingSnapshot.ERROR_NONE;
+            }
+        }
         boolean gps = request(LocationManager.GPS_PROVIDER);
         boolean network = locationManager.getProvider(LocationManager.NETWORK_PROVIDER) != null
                 && request(LocationManager.NETWORK_PROVIDER);
@@ -547,7 +559,11 @@ public final class TrackService extends Service {
         long clock = location.getElapsedRealtimeNanos() > 0
                 ? location.getElapsedRealtimeNanos() / 1000000L : now;
         boolean gps = LocationManager.GPS_PROVIDER.equals(location.getProvider());
-        long time = fixSelector.timeOf(gps, location.getTime(), clock, now);
+        // A fused fix is the only fix of the trip. FixSelector then always
+        // uses it, the same as a GPS fix.
+        boolean fusedFix = Build.VERSION.SDK_INT >= 31 && fused != null
+                && FusedFixes.isFused(location);
+        long time = fixSelector.timeOf(gps || fusedFix, location.getTime(), clock, now);
         if (time == TrackPoint.NO_TIME) {
             return;
         }
@@ -557,7 +573,11 @@ public final class TrackService extends Service {
                 time,
                 location.hasAltitude() ? location.getAltitude() : Double.NaN,
                 location.hasAccuracy() ? location.getAccuracy() : Double.NaN);
-        lastFixSource = gps ? FixSource.GPS : FixSource.NETWORK;
+        if (fusedFix) {
+            lastFixSource = FusedFixes.source(fused, location);
+        } else {
+            lastFixSource = gps ? FixSource.GPS : FixSource.NETWORK;
+        }
         TrackPoint smoothed = fixSmoother.filter(fix);
         if (smoothed == null) {
             lastAccuracyM = fix.accuracyM;
@@ -685,6 +705,10 @@ public final class TrackService extends Service {
                 worker.removeCallbacks(replayStep);
             } else {
                 locationManager.removeUpdates(listener);
+                if (Build.VERSION.SDK_INT >= 31 && fused != null) {
+                    FusedFixes.stop(locationManager, fused);
+                }
+                fused = null;
                 closeLog();
                 try {
                     File savedFile = store.saveLog();

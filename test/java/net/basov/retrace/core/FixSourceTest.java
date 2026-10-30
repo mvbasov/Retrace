@@ -13,6 +13,7 @@ public final class FixSourceTest {
         anOldFixIsRed();
         theGpsComesFirst();
         theSnapshotGivesTheDot();
+        theSatellitesGiveTheSourceOfAFusedFix();
 
         if (failures > 0) {
             System.out.println("FixSourceTest: " + failures + " check(s) failed");
@@ -66,6 +67,23 @@ public final class FixSourceTest {
                 RecordingSnapshot.SELECTION_OFF, false, null, MatchResult.UNKNOWN, null, null, 0, 0);
         check("fresh", FixSource.GPS, s.fixSource(t + 1000));
         check("old", FixSource.NONE, s.fixSource(t + FixSource.GPS_FRESH_MS + 1));
+    }
+
+    // A fused fix does not tell its source. The satellites in use tell if
+    // the GPS gives the position. Without a recent count, the accuracy
+    // decides.
+    private static void theSatellitesGiveTheSourceOfAFusedFix() {
+        check("satellites", FixSource.GPS, FixSource.ofFused(FixSource.MIN_SATELLITES, 0, 30));
+        check("too few", FixSource.NETWORK,
+                FixSource.ofFused(FixSource.MIN_SATELLITES - 1, 0, 5));
+        check("no count, good accuracy", FixSource.GPS,
+                FixSource.ofFused(-1, GpsReadiness.NO_FIX, FixSource.GPS_ACCURACY_M));
+        check("no count, bad accuracy", FixSource.NETWORK,
+                FixSource.ofFused(-1, GpsReadiness.NO_FIX, 25));
+        check("old count", FixSource.GPS,
+                FixSource.ofFused(0, FixSource.GPS_FRESH_MS + 1, 5));
+        check("no accuracy", FixSource.NETWORK,
+                FixSource.ofFused(-1, GpsReadiness.NO_FIX, Double.NaN));
     }
 
     private static void check(String name, Object expected, Object actual) {

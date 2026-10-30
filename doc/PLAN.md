@@ -84,7 +84,9 @@ The `core` package imports no Android package. Thus the tests run on the JVM.
 ### 5.1 TrackService (recording)
 
 - A foreground service with a notification. It continues to record when the screen is off.
-- It asks for a GPS fix each second.
+- From Android 12, it asks for the fused location of Android each second, with the high accuracy. `FusedFixes` holds this code. The fused provider mixes the GPS, the network location and the motion sensors, and needs no library. A device with no fused provider uses the GPS and the network location, the same as an older Android.
+- A fused fix does not tell its source. For the dot, a satellite callback counts the satellites in use. With 4 or more, the dot is green. Without a count, a fix with an accuracy of 10 m or better is green.
+- On Android 6 to 11, it asks for a GPS fix each second.
 - It also asks for the network location of Android, from Wi-Fi networks and cell towers. A network fix is a fallback: `FixSelector` uses it only after 5 s with no GPS fix, for example in a passage. When the GPS gives fixes again, the network fixes wait again. The same accuracy limit of the profile applies to each fix. Thus most network fixes help only near Wi-Fi networks, or with the larger limits of cycling and driving.
 - Before the first precise point, `RecordFilter` uses a limit of 100 m. A precise point has an accuracy inside the limit of the profile. Thus a network fix can start the track when the GPS has no fix yet. The automatic selection widens its search by the accuracy of the first point. A fix from the cells of the phone network is not used.
 - `FixSmoother` is a Kalman filter with a constant speed model. It smooths each fix, with a weight from its accuracy. It drops a GPS spike: a fix too far from the estimate for the noise and for the top speed of the profile. After 5 dropped fixes in a sequence, it starts again at the new position. It does not remove the drift. A replay does not use it, because a saved track is already smooth.
@@ -220,7 +222,7 @@ The OpenStreetMap tile usage policy for `tile.openstreetmap.org` has these rules
 - **MainActivity**: the list of tracks, with name, profile, distance, time and date. Two tabs show the saved tracks or the ways. The tabs show the count of each, and the preference keeps the selected tab. Actions: record a new track, select the reference track, rename, delete, share and import.
   - The button **Start GPS** starts the GPS receiver before a trip. Then the trip starts with a good fix. The row shows the state of the receiver: the location is off, no fix yet, or the accuracy. From Android 7, it also shows the satellites in use and in view.
   - `GpsReadiness` compares the accuracy with the limit of the selected profile. The rule agrees with `RecordFilter` after the first precise point.
-  - The receiver also starts the network location of Android. While the receiver runs, a dot shows the source of the fixes. See `FixSource`.
+  - The receiver also starts the network location of Android. It does not use the fused location, because it prepares the GPS receiver for the trip. While the receiver runs, a dot shows the source of the fixes. See `FixSource`.
   - The receiver stops after a push on **Stop GPS**, at the start of a trip, when the list screen closes, and after 10 minutes. It uses much power.
 - **RunActivity**, the trip screen: the map and a panel with large numbers. During a trip with the GPS, a dot at the top left of the map shows the source of the fixes. The panel shows Δt, Δs, and on route or off route. It also shows the speed compared with the reference track, the distance to the finish and the time to the finish.
   - The large Δt is smoothed by `DeltaSmoother`, with a time constant of two times the speed smoothing window of the profile. At the finish, the panel shows the exact result.
