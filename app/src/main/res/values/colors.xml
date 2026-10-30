@@ -25,4 +25,8 @@
     <color name="trip_ahead">#FF2E7D32</color>
     <color name="trip_behind">#FFC62828</color>
     <color name="trip_neutral">#DE000000</color>
+    <!-- The dot of the fix source. See SourceDot. -->
+    <color name="source_none">#FFE53935</color>
+    <color name="source_network">#FFFDD835</color>
+    <color name="source_gps">#FF43A047</color>
 </resources>

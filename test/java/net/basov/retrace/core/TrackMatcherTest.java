@@ -218,7 +218,7 @@ public final class TrackMatcherTest {
     // grows with the gap. Thus the trip is on route after the gap.
     private static void aGpsGapDoesNotLoseTheRoute() {
         Track current = trip(STRAIGHT, WALK, 0, 20);
-        long gapStart = current.points.get(300).timeMs;
+        long gapStart = current.points.get(0).timeMs + 600000;
         Track withGap = TestTracks.track("gap",
                 TestTracks.withGap(current.points, gapStart, gapStart + 90000));
         List<MatchResult> r = run(Profile.WALKING, trip(STRAIGHT, WALK, 0, 19), withGap);

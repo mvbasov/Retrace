@@ -12,6 +12,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 
+import net.basov.retrace.core.FixSource;
 import net.basov.retrace.core.GpsReadiness;
 
 // ----------------------------------------------------------------------
@@ -22,6 +23,10 @@ import net.basov.retrace.core.GpsReadiness;
 // pause. The GPS button of the list screen starts the receiver before the
 // trip. Then the trip starts with a good fix. The list screen shows the
 // state of the receiver and the accuracy of its last fix.
+//
+// The network location of Android also starts, if the device has it. Its
+// fixes only change the dot of the fix source. See FixSource. The text
+// about the GPS uses the GPS fixes only.
 //
 // The receiver runs on the main thread and keeps no point. It stops:
 // - after a push on the button
@@ -46,15 +51,18 @@ final class GpsWarmup {
         final double accuracyM;
         final int satellitesUsed;
         final int satellitesVisible;
+        // A FixSource value.
+        final int source;
 
         Status(boolean running, boolean locationOn, long fixAgeMs, double accuracyM,
-               int satellitesUsed, int satellitesVisible) {
+               int satellitesUsed, int satellitesVisible, int source) {
             this.running = running;
             this.locationOn = locationOn;
             this.fixAgeMs = fixAgeMs;
             this.accuracyM = accuracyM;
             this.satellitesUsed = satellitesUsed;
             this.satellitesVisible = satellitesVisible;
+            this.source = source;
         }
     }
 
@@ -65,6 +73,8 @@ final class GpsWarmup {
     private static boolean running;
     // The time of the last fix on the clock since the boot, or NO_FIX.
     private static long lastFixMs = GpsReadiness.NO_FIX;
+    // The time of the last network fix on the same clock, or NO_FIX.
+    private static long lastNetworkFixMs = GpsReadiness.NO_FIX;
     private static double accuracyM = Double.NaN;
     private static int satellitesUsed = -1;
     private static int satellitesVisible = -1;
@@ -81,6 +91,25 @@ final class GpsWarmup {
 
         // Android 6 to 10 declare the next three methods as abstract. A class
         // without them stops with AbstractMethodError on those versions.
+        @Override
+        public void onStatusChanged(String provider, int status, Bundle extras) {
+        }
+
+        @Override
+        public void onProviderEnabled(String provider) {
+        }
+
+        @Override
+        public void onProviderDisabled(String provider) {
+        }
+    };
+
+    private static final LocationListener NETWORK_LISTENER = new LocationListener() {
+        @Override
+        public void onLocationChanged(Location location) {
+            lastNetworkFixMs = SystemClock.elapsedRealtime();
+        }
+
         @Override
         public void onStatusChanged(String provider, int status, Bundle extras) {
         }
@@ -114,9 +143,20 @@ final class GpsWarmup {
         } catch (SecurityException | IllegalArgumentException e) {
             return false;
         }
+        // The network location is optional. Without it, the dot shows the
+        // GPS only.
+        try {
+            if (lm.getProvider(LocationManager.NETWORK_PROVIDER) != null) {
+                lm.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, INTERVAL_MS, 0f,
+                        NETWORK_LISTENER, Looper.getMainLooper());
+            }
+        } catch (SecurityException | IllegalArgumentException e) {
+            // The dot then shows the GPS only.
+        }
         manager = lm;
         running = true;
         lastFixMs = GpsReadiness.NO_FIX;
+        lastNetworkFixMs = GpsReadiness.NO_FIX;
         accuracyM = Double.NaN;
         satellitesUsed = -1;
         satellitesVisible = -1;
@@ -133,6 +173,7 @@ final class GpsWarmup {
             return;
         }
         manager.removeUpdates(LISTENER);
+        manager.removeUpdates(NETWORK_LISTENER);
         if (Build.VERSION.SDK_INT >= 24 && satellites != null) {
             Satellites.unregister(manager, satellites);
         }
@@ -147,12 +188,18 @@ final class GpsWarmup {
 
     static Status status() {
         if (!running) {
-            return new Status(false, true, GpsReadiness.NO_FIX, Double.NaN, -1, -1);
+            return new Status(false, true, GpsReadiness.NO_FIX, Double.NaN, -1, -1,
+                    FixSource.NONE);
         }
-        long age = lastFixMs == GpsReadiness.NO_FIX
-                ? GpsReadiness.NO_FIX : SystemClock.elapsedRealtime() - lastFixMs;
+        long age = age(lastFixMs);
         return new Status(true, manager.isProviderEnabled(LocationManager.GPS_PROVIDER), age,
-                accuracyM, satellitesUsed, satellitesVisible);
+                accuracyM, satellitesUsed, satellitesVisible,
+                FixSource.best(age, age(lastNetworkFixMs)));
+    }
+
+    private static long age(long fixMs) {
+        return fixMs == GpsReadiness.NO_FIX
+                ? GpsReadiness.NO_FIX : SystemClock.elapsedRealtime() - fixMs;
     }
 
     // The satellites in view and in use, from Android 7.

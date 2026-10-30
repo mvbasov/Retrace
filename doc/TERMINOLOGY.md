@@ -9,7 +9,9 @@ Use one name for one thing. If a term is not in the table, use the plain word. A
 | track | A list of points with a time each. Retrace saves one track as one GPX file. | path, log, recording |
 | log file | The file `current.log` that holds the points of the current track during a trip. | temporary file, journal |
 | point | One stored position of a track: latitude, longitude, time and accuracy. | sample, waypoint |
-| fix | One position that the GPS receiver gives. A fix becomes a point after the filter. | reading, location update |
+| fix | One position that the GPS receiver or the network location gives. A fix becomes a point after the filter. | reading, location update |
+| fix source | The provider of the fixes now: the GPS, the network location, or none. A dot on the screen shows it. | provider (in text), signal |
+| GPS spike | A burst of at most 5 bad fixes far from the real position, for example 70 m for one second. | jump (in text), glitch |
 | trip | The movement from the start to the finish. One trip gives one track. | journey, ride, session |
 | route | The line on the ground that a track follows. | course, way |
 | reference track | The saved track that Retrace compares with the current track. | baseline, master track, template |

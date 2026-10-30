@@ -368,16 +368,29 @@ public final class WayBuilderTest {
     // and removed it. The way then ended up to 31 m before the finish.
     // The finish of the way is in the finish circle of a trip. Thus the
     // radius of the profile is its tolerance.
+    //
+    // The two legs of the hook are 25 m apart. In about 1 percent of the
+    // builds, the drifts of the two tracks differ by more than half of that.
+    // The last leg of one track is then nearer to the other leg of the base
+    // track, and the way ends early. Thus the test builds 50 pairs and
+    // permits 5 percent. The old fault failed each build.
     private static void aHookAtTheFinishStays() {
-        List<Track> tracks = new ArrayList<>();
-        tracks.add(walk(HOOK, 1.4, 1801, 1, 0));
-        tracks.add(walk(HOOK, 1.6, 1802, 2, 0));
-        for (int base = 0; base < tracks.size(); base++) {
-            Track way = WayBuilder.build("way", Profile.WALKING, tracks, base).way;
-            near("hook base " + base + ": finish", 0,
-                    distanceFrom(way.points.get(way.points.size() - 1), 28, 25),
-                    Profile.WALKING.radiusM);
+        int builds = 0;
+        int early = 0;
+        for (long seed = 1801; seed < 1901; seed += 2) {
+            List<Track> tracks = new ArrayList<>();
+            tracks.add(walk(HOOK, 1.4, seed, 1, 0));
+            tracks.add(walk(HOOK, 1.6, seed + 1, 2, 0));
+            for (int base = 0; base < tracks.size(); base++) {
+                Track way = WayBuilder.build("way", Profile.WALKING, tracks, base).way;
+                builds++;
+                if (distanceFrom(way.points.get(way.points.size() - 1), 28, 25)
+                        > Profile.WALKING.radiusM) {
+                    early++;
+                }
+            }
         }
+        check("hook: early finishes", true, early <= builds / 20);
     }
 
     // The case of the maintainer: one fix 95 m to the side, four points

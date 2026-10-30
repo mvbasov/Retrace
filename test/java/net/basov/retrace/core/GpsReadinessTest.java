@@ -46,9 +46,12 @@ public final class GpsReadinessTest {
                 GpsReadiness.of(true, 0, accuracy, Profile.DRIVING));
         check("at the limit", GpsReadiness.State.READY,
                 GpsReadiness.of(true, 0, Profile.WALKING.accuracyLimitM, Profile.WALKING));
+        // After the first precise point, the filter uses the limit of the
+        // profile. Before it, a coarse fix can start the track.
         RecordFilter filter = new RecordFilter(Profile.WALKING);
+        filter.accept(new TrackPoint(0, 0, 1000, Double.NaN, 5));
         check("filter agrees", false,
-                filter.accept(new TrackPoint(0, 0, 1000, Double.NaN, accuracy)));
+                filter.accept(new TrackPoint(0.001, 0, 2000, Double.NaN, accuracy)));
     }
 
     // RecordFilter accepts a fix with no accuracy.

@@ -30,6 +30,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import net.basov.retrace.core.DeltaSmoother;
 import net.basov.retrace.core.FixSelector;
+import net.basov.retrace.core.FixSmoother;
+import net.basov.retrace.core.FixSource;
 import net.basov.retrace.core.MatchResult;
 import net.basov.retrace.core.PointLog;
 import net.basov.retrace.core.Profile;
@@ -61,8 +63,9 @@ import net.basov.retrace.core.TrackPoint;
 // a passage. FixSelector selects the fixes and gives them one time base.
 // A device with only one of the two providers records with that provider.
 //
-// Each point that RecordFilter accepts goes to TrackMatcher. The notification
-// and the trip screen show the result. At the finish, the device vibrates.
+// FixSmoother smooths each fix and drops the GPS spikes. Each point that
+// RecordFilter accepts goes to TrackMatcher. The notification and the trip
+// screen show the result. At the finish, the device vibrates.
 // The recording continues until the user stops it.
 //
 // ACTION_SELECT changes the reference track during the trip. The service
@@ -172,9 +175,11 @@ public final class TrackService extends Service {
     private long startTimeMs;
     private RecordFilter filter = new RecordFilter(Profile.WALKING);
     private FixSelector fixSelector = new FixSelector();
+    private FixSmoother fixSmoother = new FixSmoother(Profile.WALKING);
     private Writer log;
     private double lastAccuracyM = Double.NaN;
     private long lastFixTimeMs = TrackPoint.NO_TIME;
+    private int lastFixSource = FixSource.NONE;
     private long lastNotificationMs;
     private int error = RecordingSnapshot.ERROR_NONE;
 
@@ -246,7 +251,8 @@ public final class TrackService extends Service {
             // Android 8 and newer stop the service if startForeground does not
             // come soon after startForegroundService. Thus it comes first.
             RecordingSnapshot first = new RecordingSnapshot(true, p, start, 0, 0, Double.NaN,
-                    TrackPoint.NO_TIME, snapshot.savedCount, RecordingSnapshot.ERROR_NONE,
+                    TrackPoint.NO_TIME, FixSource.NONE, snapshot.savedCount,
+                    RecordingSnapshot.ERROR_NONE,
                     reference, reference == null ? RecordingSnapshot.SELECTION_SEARCH
                             : RecordingSnapshot.SELECTION_MANUAL, reference != null && reversed,
                     null, MatchResult.UNKNOWN,
@@ -374,8 +380,10 @@ public final class TrackService extends Service {
         startTimeMs = start;
         filter = new RecordFilter(p);
         fixSelector = new FixSelector();
+        fixSmoother = new FixSmoother(p);
         lastAccuracyM = Double.NaN;
         lastFixTimeMs = TrackPoint.NO_TIME;
+        lastFixSource = FixSource.NONE;
         error = RecordingSnapshot.ERROR_NONE;
         replaySpeed = 0;
         replayPath = null;
@@ -528,7 +536,9 @@ public final class TrackService extends Service {
 
     // Worker thread. FixSelector decides if the fix goes into the track, and
     // gives its time. A provider can give no clock value. The fix then has
-    // the clock value of now.
+    // the clock value of now. FixSmoother then smooths the fix. A spike goes
+    // into the snapshot only, thus the screen still shows a working source.
+    // A replay does not come here, because a saved track is already smooth.
     private void onFix(Location location) {
         if (!recording) {
             return;
@@ -547,7 +557,15 @@ public final class TrackService extends Service {
                 time,
                 location.hasAltitude() ? location.getAltitude() : Double.NaN,
                 location.hasAccuracy() ? location.getAccuracy() : Double.NaN);
-        onPoint(fix);
+        lastFixSource = gps ? FixSource.GPS : FixSource.NETWORK;
+        TrackPoint smoothed = fixSmoother.filter(fix);
+        if (smoothed == null) {
+            lastAccuracyM = fix.accuracyM;
+            lastFixTimeMs = System.currentTimeMillis();
+            publish();
+            return;
+        }
+        onPoint(smoothed);
     }
 
     // Worker thread. A GPS fix, or a point of a replay. A replay writes no
@@ -681,7 +699,7 @@ public final class TrackService extends Service {
         }
         RecordingSnapshot last = snapshot;
         snapshot = new RecordingSnapshot(false, profile, startTimeMs, filter.count(),
-                filter.distanceM(), lastAccuracyM, lastFixTimeMs,
+                filter.distanceM(), lastAccuracyM, lastFixTimeMs, lastFixSource,
                 last.savedCount + (saved ? 1 : 0), error, referencePath, selection,
                 referenceReversed, match,
                 smoothedDeltaMs, replayPath, replayName, replaySpeed, replayElapsedMs);
@@ -725,7 +743,8 @@ public final class TrackService extends Service {
 
     private void publish() {
         snapshot = new RecordingSnapshot(recording, profile, startTimeMs, filter.count(),
-                filter.distanceM(), lastAccuracyM, lastFixTimeMs, snapshot.savedCount, error,
+                filter.distanceM(), lastAccuracyM, lastFixTimeMs, lastFixSource,
+                snapshot.savedCount, error,
                 referencePath, selection, referenceReversed, match, smoothedDeltaMs, replayPath,
                 replayName, replaySpeed,
                 replayElapsedMs);
@@ -734,7 +753,7 @@ public final class TrackService extends Service {
     private static RecordingSnapshot withError(int code) {
         RecordingSnapshot s = snapshot;
         return new RecordingSnapshot(false, s.profile, s.startTimeMs, 0, 0, Double.NaN,
-                TrackPoint.NO_TIME, s.savedCount, code, null, RecordingSnapshot.SELECTION_OFF, false,
+                TrackPoint.NO_TIME, FixSource.NONE, s.savedCount, code, null, RecordingSnapshot.SELECTION_OFF, false,
                 null,
                 MatchResult.UNKNOWN, null, null, 0, 0);
     }

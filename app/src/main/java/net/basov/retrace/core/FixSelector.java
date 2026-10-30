@@ -11,8 +11,9 @@ package net.basov.retrace.core;
 //
 // The GPS comes first. A network fix is a fallback: Retrace uses it only if
 // the GPS gave no fix for GPS_FRESH_MS. When the GPS gives fixes again, the
-// network fixes wait again. RecordFilter then applies the same accuracy
-// limit of the profile to each fix.
+// network fixes wait again. FixSmoother and RecordFilter then apply the
+// same rules to each fix. RecordFilter has a larger accuracy limit before
+// the first precise point. Thus a network fix can start the track.
 //
 // The time of a GPS fix comes from the satellites. The time of a network
 // fix comes from the clock of the device, and that clock can be some

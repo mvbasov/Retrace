@@ -41,7 +41,8 @@ public final class RecordingSnapshot {
 
     // The state of a service that does not record.
     public static final RecordingSnapshot IDLE =
-            new RecordingSnapshot(false, null, 0, 0, 0, Double.NaN, TrackPoint.NO_TIME, 0, ERROR_NONE,
+            new RecordingSnapshot(false, null, 0, 0, 0, Double.NaN, TrackPoint.NO_TIME,
+                    FixSource.NONE, 0, ERROR_NONE,
                     null, SELECTION_OFF, false, null, MatchResult.UNKNOWN, null, null, 0, 0);
 
     public final boolean recording;
@@ -55,6 +56,9 @@ public final class RecordingSnapshot {
 
     // The time of the last fix, or NO_TIME before the first fix.
     public final long lastFixTimeMs;
+
+    // The source of the last fix: a FixSource value. A replay has NONE.
+    public final int lastFixSource;
 
     // The service adds 1 each time that it saves a track. The activity then
     // knows that the list of tracks changed.
@@ -94,7 +98,7 @@ public final class RecordingSnapshot {
 
     public RecordingSnapshot(boolean recording, Profile profile, long startTimeMs, int points,
                              double distanceM, double lastAccuracyM, long lastFixTimeMs,
-                             int savedCount, int error, String referencePath, int selection,
+                             int lastFixSource, int savedCount, int error, String referencePath, int selection,
                              boolean referenceReversed, MatchResult match, long smoothedDeltaMs, String replayPath,
                              String replayName, int replaySpeed, long replayElapsedMs) {
         this.recording = recording;
@@ -104,6 +108,7 @@ public final class RecordingSnapshot {
         this.distanceM = distanceM;
         this.lastAccuracyM = lastAccuracyM;
         this.lastFixTimeMs = lastFixTimeMs;
+        this.lastFixSource = lastFixSource;
         this.savedCount = savedCount;
         this.error = error;
         this.referencePath = referencePath;
@@ -154,5 +159,10 @@ public final class RecordingSnapshot {
 
     public boolean hasFix() {
         return lastFixTimeMs != TrackPoint.NO_TIME;
+    }
+
+    // The source for the dot of the trip screen at the time nowMs.
+    public int fixSource(long nowMs) {
+        return FixSource.of(lastFixSource, hasFix() ? nowMs - lastFixTimeMs : GpsReadiness.NO_FIX);
     }
 }

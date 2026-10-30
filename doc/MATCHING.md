@@ -13,7 +13,8 @@ The plan in [PLAN.md](PLAN.md) gives the rules in short form, in section 5.4. Th
 | Class | Package | Task |
 | --- | --- | --- |
 | `TrackService` | `net.basov.retrace` | Gets each fix on its worker thread. Gives the fix to the filter, the matcher and the smoother. |
-| `RecordFilter` | `core` | Drops a fix with a bad accuracy, an old time, or a step below the minimum distance. |
+| `FixSmoother` | `core` | A Kalman filter. Smooths each fix and drops a GPS spike. |
+| `RecordFilter` | `core` | Drops a fix with a bad accuracy, an old time, or a step below the minimum distance or the accuracy. |
 | `TrackMatcher` | `core` | Compares one point of the current track with the reference track. This document is mostly about this class. |
 | `MatchResult` | `core` | The result for one point. It is immutable. |
 | `DeltaSmoother` | `core` | Smooths the time difference for the screen. |

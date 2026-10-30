@@ -95,7 +95,8 @@ public final class ReplayTest {
     private static RecordingSnapshot snapshot(boolean recording, int speed, int selection,
                                               String reference) {
         return new RecordingSnapshot(recording, Profile.RUNNING, TestTracks.START_MS, 10, 100,
-                5, TestTracks.START_MS, 0, RecordingSnapshot.ERROR_NONE, reference, selection,
+                5, TestTracks.START_MS, FixSource.NONE, 0, RecordingSnapshot.ERROR_NONE, reference,
+                selection,
                 false, null, MatchResult.UNKNOWN, speed > 0 ? "/replayed.gpx" : null,
                 speed > 0 ? "Replayed" : null, speed, 0);
     }

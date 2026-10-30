@@ -15,7 +15,10 @@ Retrace records tracks, shows them on a map, and compares a trip with a saved tr
 
 - Select a profile and push **Start**. A notification shows the recording while the screen is off.
 - Retrace records with the GPS. Sometimes the GPS has no satellites for 5 s, for example in a passage. Retrace then uses the network location of Android, from Wi-Fi networks and cell towers. The accuracy limit of the profile applies to these points too.
-- To get a good fix before the trip, push **Start GPS** some time before **Start**. The row shows the accuracy and the satellites. It also tells if the accuracy is good enough for the profile.
+- At the start, the GPS can have no fix yet, for example inside a building. A network fix with an accuracy of 100 m or better can then start the track. After the first precise point, the limit of the profile applies.
+- A Kalman filter smooths each fix and removes the GPS spikes. A new point comes only after a step larger than the accuracy of the fix. Thus a stop adds less false distance.
+- A small dot shows the source of the fixes: red for no fix, yellow for the network location, green for the GPS. The trip screen shows it at the top left of the map.
+- To get a good fix before the trip, push **Start GPS** some time before **Start**. The row shows the dot, the accuracy and the satellites. It also tells if the accuracy is good enough for the profile.
 - At the first point, Retrace looks for the saved tracks of the profile that start near you. During the first part of the trip, it compares with the best of them as a temporary reference track. After 300 m, or 10 % of the route if that is shorter, it selects the reference track. If no saved track agrees with your trip, Retrace records a new route with no comparison.
 - Push **Stop** in the application or in the notification. Retrace saves the track as a GPX file.
 - Two tabs above the list show the saved tracks or the ways.

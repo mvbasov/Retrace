@@ -99,6 +99,7 @@ public final class MainActivity extends ThemedActivity {
     private LinearLayout gpsRow;
     private Button gpsButton;
     private TextView gpsView;
+    private SourceDot gpsDot;
     private TextView emptyView;
     private RadioButton tracksTab;
     private RadioButton waysTab;
@@ -206,11 +207,16 @@ public final class MainActivity extends ThemedActivity {
         gpsButton.setOnClickListener(v -> onGps());
         gpsView = new TextView(this);
         gpsView.setPadding(pad / 2, 0, 0, 0);
+        gpsDot = new SourceDot(this);
         gpsRow = new LinearLayout(this);
         gpsRow.setOrientation(LinearLayout.HORIZONTAL);
         gpsRow.setGravity(Gravity.CENTER_VERTICAL);
         gpsRow.addView(gpsButton, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        dotParams.setMargins(pad / 2, 0, 0, 0);
+        gpsRow.addView(gpsDot, dotParams);
         gpsRow.addView(gpsView, new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
@@ -364,10 +370,13 @@ public final class MainActivity extends ThemedActivity {
     }
 
     // During a trip, the status line shows the GPS. Thus the screen hides
-    // the row.
+    // the row. The dot of the fix source shows while the receiver runs.
     private void showGps(RecordingSnapshot s) {
         gpsRow.setVisibility(s.recording ? View.GONE : View.VISIBLE);
-        gpsButton.setText(GpsWarmup.isRunning() ? R.string.gps_stop : R.string.gps_start);
+        boolean running = GpsWarmup.isRunning();
+        gpsButton.setText(running ? R.string.gps_stop : R.string.gps_start);
+        gpsDot.setVisibility(running ? View.VISIBLE : View.GONE);
+        gpsDot.setSource(GpsWarmup.status().source);
         gpsView.setText(gpsText());
     }
 

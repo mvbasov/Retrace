@@ -24,6 +24,8 @@ public final class TrackTest {
         aReversedTrackGoesBack();
         theFilterDropsBadFixes();
         theFilterAddsTheDistance();
+        aCoarseFixCanStartTheTrack();
+        aStopAddsLessDistance();
         theLogKeepsEachPoint();
         theLogIgnoresABrokenLine();
         theLogRejectsAWrongHeader();
@@ -105,8 +107,9 @@ public final class TrackTest {
         check("same time", false, filter.accept(fix(0.001, 1000, 5)));
         check("older time", false, filter.accept(fix(0.001, 500, 5)));
         check("too near", false, filter.accept(fix(10 * 1e-6, 3000, 5)));
-        check("far enough", true, filter.accept(fix(30 * 1e-6, 4000, 5)));
-        check("no accuracy", true, filter.accept(fix(60 * 1e-6, 5000, Double.NaN)));
+        check("inside the accuracy", false, filter.accept(fix(40 * 1e-6, 4000, 5)));
+        check("far enough", true, filter.accept(fix(50 * 1e-6, 5000, 5)));
+        check("no accuracy", true, filter.accept(fix(80 * 1e-6, 6000, Double.NaN)));
         check("count", 3, filter.count());
     }
 
@@ -118,6 +121,46 @@ public final class TrackTest {
         filter.accept(fix(200 * 1e-6, 3000, 5));
         near("distance", 200 * MICRO_DEGREE_M, filter.distanceM(), 0.01);
         check("last", 3000L, filter.last().timeMs);
+    }
+
+    // Inside a building, the GPS has no fix at the start. A network fix
+    // starts the track. After the first precise point, the limit of the
+    // profile applies again. A fix from the phone cells is never used.
+    private static void aCoarseFixCanStartTheTrack() {
+        RecordFilter filter = new RecordFilter(Profile.WALKING);
+        check("cells", false, filter.accept(fix(0, 1000, RecordFilter.COARSE_LIMIT_M + 1)));
+        check("network", true, filter.accept(fix(0, 2000, 60)));
+        check("network inside its accuracy", false,
+                filter.accept(fix(300 * 1e-6, 3000, 60)));
+        check("gps", true, filter.accept(fix(400 * 1e-6, 4000, 5)));
+        check("network after gps", false, filter.accept(fix(2000 * 1e-6, 5000, 60)));
+        check("count", 2, filter.count());
+    }
+
+    // A receiver that does not move gives fixes with an error of some
+    // meters. A step shorter than the accuracy does not count. The drift
+    // still moves the fixes, thus a stop of ten minutes adds some distance.
+    // With the minimum distance of the profile alone, it adds about twice as
+    // much. The test asks for less than 70 percent of that over 20 seeds.
+    private static void aStopAddsLessDistance() {
+        List<TrackPoint> ideal = TestTracks.ideal(new double[][] {{0, 0}, {0, 1}}, 1,
+                TestTracks.START_MS, 600);
+        for (long seed = 1; seed <= 20; seed++) {
+            List<TrackPoint> fixes = TestTracks.noisy(ideal, seed, 4);
+            RecordFilter filter = new RecordFilter(Profile.WALKING);
+            double old = 0;
+            TrackPoint last = null;
+            for (TrackPoint p : fixes) {
+                filter.accept(p);
+                if (last == null) {
+                    last = p;
+                } else if (Geo.distanceM(last, p) >= Profile.WALKING.minDistanceM) {
+                    old += Geo.distanceM(last, p);
+                    last = p;
+                }
+            }
+            check("stop " + seed, true, filter.distanceM() < 0.7 * old);
+        }
     }
 
     // The log must give back each point that the service wrote.

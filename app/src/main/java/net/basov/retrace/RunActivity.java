@@ -58,6 +58,9 @@ import net.basov.retrace.core.TrackPoint;
 // follows the position, as after a push on Me, and zooms in to at least
 // FIRST_FIX_ZOOM. During a replay, All also shows the whole replayed track.
 // After a rotation of the screen, the camera of the user stays.
+//
+// During a trip with the GPS, a dot at the top left corner of the map shows
+// the source of the fixes. See SourceDot.
 public final class RunActivity extends ThemedActivity {
 
     private static final long REFRESH_MS = 1000;
@@ -85,6 +88,7 @@ public final class RunActivity extends ThemedActivity {
     private Button stopButton;
     private Button replayButton;
     private Button followButton;
+    private SourceDot sourceDot;
 
     private int shownPoints;
     private long shownStartMs = Long.MIN_VALUE;
@@ -203,6 +207,12 @@ public final class RunActivity extends ThemedActivity {
                 Gravity.END | Gravity.TOP);
         corner.setMargins(pad, pad, pad, pad);
         mapFrame.addView(buttons, corner);
+        sourceDot = new SourceDot(this);
+        FrameLayout.LayoutParams dotCorner = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.START | Gravity.TOP);
+        dotCorner.setMargins(pad, pad, pad, pad);
+        mapFrame.addView(sourceDot, dotCorner);
 
         stopButton = new Button(this);
         stopButton.setText(R.string.stop_recording);
@@ -320,6 +330,8 @@ public final class RunActivity extends ThemedActivity {
             invalidateOptionsMenu();
         }
         stopButton.setText(s.recording ? R.string.stop_recording : R.string.close);
+        sourceDot.setVisibility(s.recording && !s.isReplay() ? View.VISIBLE : View.GONE);
+        sourceDot.setSource(s.fixSource(System.currentTimeMillis()));
         replayButton.setVisibility(s.canReplayAgain() ? View.VISIBLE : View.GONE);
         if (s.recording) {
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
