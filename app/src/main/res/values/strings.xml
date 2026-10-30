@@ -166,6 +166,9 @@
     <string name="way_update_ask">Ask each time</string>
     <string name="way_update_automatic">Automatically</string>
     <string name="way_update_never">Never</string>
+    <string name="settings_fused">Use the fused location</string>
+    <string name="settings_fused_hint">Android mixes the GPS, the network location and the motion sensors. With this off, Retrace uses the GPS and the network location. A change applies from the next trip.</string>
+    <string name="settings_fused_missing">This device does not have the fused location. It needs Android 12 or newer. Retrace uses the GPS and the network location.</string>
 
     <string name="version">Version %1$s</string>
     <string name="about">About Retrace</string>

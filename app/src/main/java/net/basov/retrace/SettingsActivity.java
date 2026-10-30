@@ -1,5 +1,8 @@
 package net.basov.retrace;
 
+import android.content.Context;
+import android.location.LocationManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.View;
@@ -17,6 +20,10 @@ import android.widget.TextView;
 // The screen has framework widgets only. A preference screen of the
 // framework is deprecated, and the AndroidX preference library is a
 // dependency. Each change goes to AppSettings at once.
+//
+// The switch of the fused location works from Android 12, on a device with
+// the fused provider. Otherwise, the switch is off and disabled, and a line
+// below it tells the reason. A change applies from the next trip.
 public final class SettingsActivity extends ThemedActivity {
 
     private static final int[] THEME_TEXT = {
@@ -56,6 +63,18 @@ public final class SettingsActivity extends ThemedActivity {
         RadioGroup ways = choices(WAY_TEXT, AppSettings.wayUpdate(this),
                 index -> AppSettings.setWayUpdate(this, index));
 
+        boolean fusedOn = fusedAvailable();
+        Switch fused = new Switch(this);
+        fused.setText(R.string.settings_fused);
+        fused.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17);
+        fused.setPadding(0, pad, 0, 0);
+        fused.setEnabled(fusedOn);
+        fused.setChecked(fusedOn && AppSettings.useFused(this));
+        fused.setOnCheckedChangeListener((v, on) -> AppSettings.setUseFused(this, on));
+        TextView fusedHint = new TextView(this);
+        fusedHint.setText(fusedOn ? R.string.settings_fused_hint
+                : R.string.settings_fused_missing);
+
         LinearLayout column = new LinearLayout(this);
         column.setOrientation(LinearLayout.VERTICAL);
         column.setPadding(pad, pad, pad, pad);
@@ -64,6 +83,8 @@ public final class SettingsActivity extends ThemedActivity {
         column.addView(themes);
         column.addView(wayTitle);
         column.addView(ways);
+        column.addView(fused);
+        column.addView(fusedHint);
 
         ScrollView scroll = new ScrollView(this);
         scroll.addView(column);
@@ -100,6 +121,14 @@ public final class SettingsActivity extends ThemedActivity {
             }
         });
         return group;
+    }
+
+    private boolean fusedAvailable() {
+        if (Build.VERSION.SDK_INT < 31) {
+            return false;
+        }
+        return FusedFixes.available(
+                (LocationManager) getSystemService(Context.LOCATION_SERVICE));
     }
 
     private int dp(int value) {

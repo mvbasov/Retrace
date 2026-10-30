@@ -354,12 +354,12 @@ public final class TrackService extends Service {
         publish();
     }
 
-    // Worker thread. From Android 12, requests the fused fixes. Otherwise, or
-    // if the device has no fused provider, requests the fixes of the GPS and
+    // Worker thread. From Android 12, requests the fused fixes. Otherwise, if
+    // the setting is off, or if the device has no fused provider, requests the fixes of the GPS and
     // of the network. The network is a fallback, thus a missing network
     // provider is no fault. Returns ERROR_NONE if a provider gives fixes.
     private int requestFixes() {
-        if (Build.VERSION.SDK_INT >= 31) {
+        if (Build.VERSION.SDK_INT >= 31 && AppSettings.useFused(this)) {
             fused = FusedFixes.start(locationManager, FIX_INTERVAL_MS, worker, listener);
             if (fused != null) {
                 return RecordingSnapshot.ERROR_NONE;

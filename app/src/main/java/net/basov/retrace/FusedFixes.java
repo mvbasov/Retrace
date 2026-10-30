@@ -24,8 +24,9 @@ import net.basov.retrace.core.GpsReadiness;
 // it gives better fixes than the network location alone. The fused provider
 // needs no library.
 //
-// TrackService uses the fused provider if the device has it. Otherwise, it
-// uses the GPS and the network location as on older Android versions.
+// TrackService uses the fused provider if the device has it and the
+// setting permits it. Otherwise, it uses the GPS and the network location as
+// on older Android versions. See AppSettings.useFused().
 //
 // The request asks for the high accuracy. Without it, the fused provider can
 // use the network location only, to save power.
@@ -61,12 +62,17 @@ final class FusedFixes extends GnssStatus.Callback {
         statusClockMs = SystemClock.elapsedRealtime();
     }
 
+    // True if the device has the fused provider.
+    static boolean available(LocationManager lm) {
+        return lm != null && lm.hasProvider(LocationManager.FUSED_PROVIDER);
+    }
+
     // Starts the fused fixes and the satellite count on the thread of the
     // handler. Returns null if the device has no fused provider, or if
     // Android refuses it. A missing satellite count is no fault.
     static Object start(LocationManager lm, long intervalMs, Handler handler,
                         LocationListener listener) {
-        if (!lm.hasProvider(LocationManager.FUSED_PROVIDER)) {
+        if (!available(lm)) {
             return null;
         }
         Executor executor = handler::post;

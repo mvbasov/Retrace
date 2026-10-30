@@ -14,7 +14,7 @@ Retrace has profiles for walking, running, cycling and driving. It finds the sav
 Retrace records tracks, shows them on a map, and compares a trip with a saved track. Retrace selects the reference track, or you select it yourself. The plan and the milestones are in [doc/PLAN.md](doc/PLAN.md). [doc/MATCHING.md](doc/MATCHING.md) tells how Retrace compares your position with the reference track, with the math and figures.
 
 - Select a profile and push **Start**. A notification shows the recording while the screen is off.
-- From Android 12, Retrace records with the fused location of Android. It mixes the GPS, the network location and the motion sensors. Near high buildings, it gives better points than the GPS alone.
+- From Android 12, Retrace records with the fused location of Android. It mixes the GPS, the network location and the motion sensors. Near high buildings, it gives better points than the GPS alone. A switch in Settings turns it off.
 - On older Android, Retrace records with the GPS. Sometimes the GPS has no satellites for 5 s, for example in a passage. Retrace then uses the network location of Android, from Wi-Fi networks and cell towers. The accuracy limit of the profile applies to these points too.
 - At the start, the GPS can have no fix yet, for example inside a building. A network fix with an accuracy of 100 m or better can then start the track. After the first precise point, the limit of the profile applies.
 - A Kalman filter smooths each fix and removes the GPS spikes. A new point comes only after a step larger than the accuracy of the fix. Thus a stop adds less false distance.

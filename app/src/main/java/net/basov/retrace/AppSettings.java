@@ -27,6 +27,7 @@ final class AppSettings {
     private static final String KEY_THEME = "theme";
     private static final String[] THEME_IDS = {"auto", "light", "dark"};
     private static final String KEY_WAY_UPDATE = "way_update";
+    private static final String KEY_FUSED = "fused_location";
     private static final String[] WAY_IDS = {"ask", "automatic", "never"};
 
     private AppSettings() {
@@ -60,6 +61,17 @@ final class AppSettings {
 
     static void setWayUpdate(Context context, int mode) {
         prefs(context).edit().putString(KEY_WAY_UPDATE, WAY_IDS[mode]).apply();
+    }
+
+    // From Android 12, a trip uses the fused location of Android if the
+    // device has it. With this setting off, a trip uses the GPS and the
+    // network location, as on older Android. See FusedFixes.
+    static boolean useFused(Context context) {
+        return prefs(context).getBoolean(KEY_FUSED, true);
+    }
+
+    static void setUseFused(Context context, boolean on) {
+        prefs(context).edit().putBoolean(KEY_FUSED, on).apply();
     }
 
     private static int index(String id, String[] ids, int fallback) {

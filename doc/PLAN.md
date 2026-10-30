@@ -84,7 +84,7 @@ The `core` package imports no Android package. Thus the tests run on the JVM.
 ### 5.1 TrackService (recording)
 
 - A foreground service with a notification. It continues to record when the screen is off.
-- From Android 12, it asks for the fused location of Android each second, with the high accuracy. `FusedFixes` holds this code. The fused provider mixes the GPS, the network location and the motion sensors, and needs no library. A device with no fused provider uses the GPS and the network location, the same as an older Android.
+- From Android 12, it asks for the fused location of Android each second, with the high accuracy. `FusedFixes` holds this code. The fused provider mixes the GPS, the network location and the motion sensors, and needs no library. A device with no fused provider uses the GPS and the network location, the same as an older Android. The setting "Use the fused location" also turns it off. The change applies from the next trip.
 - A fused fix does not tell its source. For the dot, a satellite callback counts the satellites in use. With 4 or more, the dot is green. Without a count, a fix with an accuracy of 10 m or better is green.
 - On Android 6 to 11, it asks for a GPS fix each second.
 - It also asks for the network location of Android, from Wi-Fi networks and cell towers. A network fix is a fallback: `FixSelector` uses it only after 5 s with no GPS fix, for example in a passage. When the GPS gives fixes again, the network fixes wait again. The same accuracy limit of the profile applies to each fix. Thus most network fixes help only near Wi-Fi networks, or with the larger limits of cycling and driving.
@@ -236,7 +236,7 @@ The OpenStreetMap tile usage policy for `tile.openstreetmap.org` has these rules
   - The menu of the track screen starts a trip on the route of the track. The trip starts on the list screen, because that screen asks for the location permission and checks the GPS. A push on the notification, or on the status line of the list, opens the trip screen.
   - At the finish, the device vibrates. The recording continues until you push Stop.
   - A line above the panel shows the reference track and how the trip got it: temporary, selected, no saved track, or no comparison. The menu changes the reference track during the trip.
-- **SettingsActivity**: the vibration at the finish, the color theme, and the addition of a finished trip to its way.
+- **SettingsActivity**: the vibration at the finish, the color theme, the addition of a finished trip to its way, and the fused location.
   - The color theme is light, dark, or the same as the system. Android has the night mode of the system from Android 10. On an older device, the same as the system is light.
   - `ThemedActivity` gives the light and the dark theme. It overrides the night mode of the configuration of each screen. Thus the theme and the colors of `values-night/` follow the setting.
   - The map tiles stay light in the dark theme.
