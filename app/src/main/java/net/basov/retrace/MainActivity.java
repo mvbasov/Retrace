@@ -315,9 +315,13 @@ public final class MainActivity extends ThemedActivity {
         startActivity(new Intent(this, RunActivity.class));
     }
 
+    // On Android 6 to 8, the battery saving mode of the location turns off the
+    // GPS and keeps the network location. A trip then records with the
+    // network location. See TrackService.
     private boolean locationOn() {
         LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        return lm != null && lm.isProviderEnabled(LocationManager.GPS_PROVIDER);
+        return lm != null && (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)
+                || lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER));
     }
 
     private void showLocationOff() {

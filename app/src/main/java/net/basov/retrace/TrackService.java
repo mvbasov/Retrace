@@ -15,6 +15,7 @@ import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.VibrationEffect;
@@ -28,6 +29,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import net.basov.retrace.core.DeltaSmoother;
+import net.basov.retrace.core.FixSelector;
 import net.basov.retrace.core.MatchResult;
 import net.basov.retrace.core.PointLog;
 import net.basov.retrace.core.Profile;
@@ -54,6 +56,11 @@ import net.basov.retrace.core.TrackPoint;
 // tracks with a start near that point. If no track starts there, the trip
 // has no comparison.
 //
+// The service gets fixes from the GPS and from the network location of
+// Android. A network fix is a fallback for a gap of the GPS, for example in
+// a passage. FixSelector selects the fixes and gives them one time base.
+// A device with only one of the two providers records with that provider.
+//
 // Each point that RecordFilter accepts goes to TrackMatcher. The notification
 // and the trip screen show the result. At the finish, the device vibrates.
 // The recording continues until the user stops it.
@@ -73,7 +80,7 @@ import net.basov.retrace.core.TrackPoint;
 // finish. See WayUpdater. The service keeps one offer, and the visible
 // screen takes it with takeWayOffer().
 //
-// One worker thread does all the work: the GPS fixes, the filter, the
+// One worker thread does all the work: the fixes, the filter, the
 // matcher and the log file. Thus the fields of the recording need no lock.
 // The main thread only receives the intents and posts the work to the worker
 // thread.
@@ -164,6 +171,7 @@ public final class TrackService extends Service {
     private Profile profile = Profile.WALKING;
     private long startTimeMs;
     private RecordFilter filter = new RecordFilter(Profile.WALKING);
+    private FixSelector fixSelector = new FixSelector();
     private Writer log;
     private double lastAccuracyM = Double.NaN;
     private long lastFixTimeMs = TrackPoint.NO_TIME;
@@ -327,18 +335,37 @@ public final class TrackService extends Service {
             return;
         }
         recording = true;
-        try {
-            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,
-                    FIX_INTERVAL_MS, 0f, listener, thread.getLooper());
-        } catch (SecurityException e) {
-            stopWithError(RecordingSnapshot.ERROR_NO_PERMISSION);
-            return;
-        } catch (IllegalArgumentException e) {
-            // The device has no GPS receiver.
-            stopWithError(RecordingSnapshot.ERROR_NO_GPS);
+        int result = requestFixes();
+        if (result != RecordingSnapshot.ERROR_NONE) {
+            stopWithError(result);
             return;
         }
         publish();
+    }
+
+    // Worker thread. Requests the fixes of the GPS and of the network. The
+    // network is a fallback, thus a missing network provider is no fault.
+    // Returns ERROR_NONE if at least one provider gives fixes.
+    private int requestFixes() {
+        boolean gps = request(LocationManager.GPS_PROVIDER);
+        boolean network = locationManager.getProvider(LocationManager.NETWORK_PROVIDER) != null
+                && request(LocationManager.NETWORK_PROVIDER);
+        if (gps || network) {
+            return RecordingSnapshot.ERROR_NONE;
+        }
+        return locationManager.getProvider(LocationManager.GPS_PROVIDER) == null
+                ? RecordingSnapshot.ERROR_NO_GPS : RecordingSnapshot.ERROR_NO_PERMISSION;
+    }
+
+    // Worker thread. Returns false if Android refuses the provider.
+    private boolean request(String provider) {
+        try {
+            locationManager.requestLocationUpdates(provider, FIX_INTERVAL_MS, 0f, listener,
+                    thread.getLooper());
+            return true;
+        } catch (SecurityException | IllegalArgumentException e) {
+            return false;
+        }
     }
 
     // Worker thread. The common start of a trip and of a replay.
@@ -346,6 +373,7 @@ public final class TrackService extends Service {
         profile = p;
         startTimeMs = start;
         filter = new RecordFilter(p);
+        fixSelector = new FixSelector();
         lastAccuracyM = Double.NaN;
         lastFixTimeMs = TrackPoint.NO_TIME;
         error = RecordingSnapshot.ERROR_NONE;
@@ -498,15 +526,25 @@ public final class TrackService extends Service {
         }
     }
 
-    // Worker thread.
+    // Worker thread. FixSelector decides if the fix goes into the track, and
+    // gives its time. A provider can give no clock value. The fix then has
+    // the clock value of now.
     private void onFix(Location location) {
         if (!recording) {
+            return;
+        }
+        long now = SystemClock.elapsedRealtime();
+        long clock = location.getElapsedRealtimeNanos() > 0
+                ? location.getElapsedRealtimeNanos() / 1000000L : now;
+        boolean gps = LocationManager.GPS_PROVIDER.equals(location.getProvider());
+        long time = fixSelector.timeOf(gps, location.getTime(), clock, now);
+        if (time == TrackPoint.NO_TIME) {
             return;
         }
         TrackPoint fix = new TrackPoint(
                 location.getLatitude(),
                 location.getLongitude(),
-                location.getTime(),
+                time,
                 location.hasAltitude() ? location.getAltitude() : Double.NaN,
                 location.hasAccuracy() ? location.getAccuracy() : Double.NaN);
         onPoint(fix);

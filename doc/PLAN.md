@@ -85,6 +85,10 @@ The `core` package imports no Android package. Thus the tests run on the JVM.
 
 - A foreground service with a notification. It continues to record when the screen is off.
 - It asks for a GPS fix each second. The minimum distance between two points comes from the profile.
+- It also asks for the network location of Android, from Wi-Fi networks and cell towers. A network fix is a fallback: `FixSelector` uses it only after 5 s with no GPS fix, for example in a passage. When the GPS gives fixes again, the network fixes wait again. The same accuracy limit of the profile applies to each fix. Thus most network fixes help only near Wi-Fi networks, or with the larger limits of cycling and driving.
+- All points get the time of the first fix plus the time on the clock since the boot. The clock of the device can be some seconds wrong, and the GPS time and the network time then do not agree. One time base keeps the points in sequence.
+- A network fix older than 10 s comes from a cache of Android, and the service does not use it.
+- A device with only one of the two providers records with that provider. On Android 6 to 8, the battery saving mode of the location turns off the GPS. A trip then records with the network location.
 - It drops a fix with bad accuracy and smooths the speed. The profile table gives the limits.
 - It writes each point to the log file during the trip. Thus a crash loses no data.
 - The service does not restart after Android stops the process. The next start of MainActivity saves the log file as a track.
