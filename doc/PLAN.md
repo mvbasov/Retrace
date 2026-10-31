@@ -97,7 +97,7 @@ The `core` package imports no Android package. Thus the tests run on the JVM.
 - A device with only one of the two providers records with that provider. On Android 6 to 8, the battery saving mode of the location turns off the GPS. A trip then records with the network location.
 - It drops a fix with bad accuracy and smooths the speed. The profile table gives the limits.
 - It writes each point to the log file during the trip. Thus a crash loses no data.
-- Stop of a trip with the GPS ends the current track segment and stops the fixes. The trip stays open, and the elapsed time continues. Continue gets the fixes again, and the next point starts a new track segment. It needs no minimum step, and the step to it is not distance. End saves the track. A replay has no pause.
+- Stop of a trip with the GPS ends the current track segment. The trip stays open, and the elapsed time continues. The GPS stays on during the pause, thus it keeps its fix. Its fixes then update the dot, the smoother and the position for a waypoint, but they do not go into the track. Continue starts a new track segment at the next point. It needs no minimum step, and the step to it is not distance. End stops the GPS and saves the track. A replay has no pause.
 - The Waypoint button adds a waypoint at the last smoothed fix, with the next automatic name: wpt01, wpt02 and so on. The service writes it to the log file at once.
 - The service does not restart after Android stops the process. The next start of MainActivity saves the log file as a track.
 - The notification shows the live result, for example "0:42 ahead · 3.2 km to the finish".

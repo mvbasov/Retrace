@@ -52,9 +52,11 @@ import net.basov.retrace.core.Waypoint;
 // screen is off. MainActivity starts it with ACTION_START.
 //
 // ACTION_PAUSE is the Stop button of a trip with the GPS. The service ends
-// the current track segment and stops the fixes, but the trip stays open.
-// ACTION_CONTINUE gets the fixes again, and the next point starts a new
-// track segment. ACTION_STOP is the End button: it saves the track. The
+// the current track segment, but the trip stays open. The GPS stays on, thus
+// it keeps its fix for Continue. During the pause, the fixes go to the dot
+// and to the position of a waypoint, but not into the track. ACTION_CONTINUE
+// starts a new track segment at the next point. ACTION_STOP is the End
+// button: it stops the GPS and saves the track. The
 // notification has the same buttons. A replay has no pause: Stop ends it.
 //
 // ACTION_WAYPOINT adds a waypoint at the last position, with the next
@@ -600,7 +602,7 @@ public final class TrackService extends Service {
     // into the snapshot only, thus the screen still shows a working source.
     // A replay does not come here, because a saved track is already smooth.
     private void onFix(Location location) {
-        if (!recording || paused) {
+        if (!recording) {
             return;
         }
         long now = SystemClock.elapsedRealtime();
@@ -634,6 +636,13 @@ public final class TrackService extends Service {
             return;
         }
         lastPosition = smoothed;
+        if (paused) {
+            // The GPS stays warm. The fix only updates the state.
+            lastAccuracyM = smoothed.accuracyM;
+            lastFixTimeMs = System.currentTimeMillis();
+            publish();
+            return;
+        }
         onPoint(smoothed);
     }
 
@@ -763,28 +772,21 @@ public final class TrackService extends Service {
             finish(true);
             return;
         }
-        stopFixes();
+        // The fixes continue. FixSmoother follows them during the pause,
+        // thus its estimate is current at Continue.
         paused = true;
         newSegmentPending = true;
         filter.newSegment();
-        // The new track segment can start far away. The old estimate of the
-        // speed must not pull its first fixes.
-        fixSmoother = new FixSmoother(profile);
-        lastFixSource = FixSource.NONE;
         publishAndNotify();
     }
 
-    // Worker thread. Continue after Stop: the fixes come again.
+    // Worker thread. Continue after Stop: the next point starts a new track
+    // segment.
     private void resume() {
         if (!recording || !paused) {
             return;
         }
         paused = false;
-        int result = requestFixes();
-        if (result != RecordingSnapshot.ERROR_NONE) {
-            stopWithError(result);
-            return;
-        }
         publishAndNotify();
     }
 
