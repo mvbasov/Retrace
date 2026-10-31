@@ -36,6 +36,7 @@
     <string name="track_details_speeds">%1$s · %2$s</string>
     <string name="track_unreadable">Retrace cannot read this file.</string>
     <string name="rename">Rename</string>
+    <string name="rename_waypoints">Waypoints</string>
     <string name="delete">Delete</string>
     <string name="delete_question">Delete the track \"%1$s\"?</string>
     <string name="error_rename">Retrace cannot rename the track.</string>

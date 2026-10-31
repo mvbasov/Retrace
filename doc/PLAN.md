@@ -214,6 +214,7 @@ Manual selection:
   - The direction of the arrow comes from the first point at least 16 dp from the start on the screen. The points of a wait at the start do not turn the arrow.
   - The bottom of the track screen has the **Replay** button and the **Menu** button. The menu has the trip items, the way item, and share, rename and delete.
   - A long push on a track in the list shows a short menu: share, rename and delete.
+  - The rename dialog shows the name of the track and the names of its waypoints. An empty field keeps the old name. With no change, Retrace does not write the file.
 - You can change the tile URL in Settings. Thus you can use a different tile server.
 
 The OpenStreetMap tile usage policy for `tile.openstreetmap.org` has these rules. Retrace obeys each rule.

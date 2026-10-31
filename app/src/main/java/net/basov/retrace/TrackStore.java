@@ -26,6 +26,7 @@ import net.basov.retrace.core.Profile;
 import net.basov.retrace.core.TimeText;
 import net.basov.retrace.core.Track;
 import net.basov.retrace.core.TrackPoint;
+import net.basov.retrace.core.Waypoint;
 
 // ----------------------------------------------------------------------
 // The files of the tracks
@@ -67,6 +68,9 @@ final class TrackStore {
         // The file names of the tracks of a way. Empty for a track.
         final List<String> members;
 
+        // The names of the waypoints, in the order of the file.
+        final List<String> waypointNames;
+
         Entry(File file, Track track) {
             this.file = file;
             this.name = track.name;
@@ -77,6 +81,11 @@ final class TrackStore {
             this.startTimeMs = track.startTimeMs();
             this.readable = true;
             this.members = track.members;
+            List<String> names = new ArrayList<>();
+            for (Waypoint w : track.waypoints) {
+                names.add(w.name);
+            }
+            this.waypointNames = Collections.unmodifiableList(names);
         }
 
         Entry(File file) {
@@ -89,6 +98,7 @@ final class TrackStore {
             this.startTimeMs = TrackPoint.NO_TIME;
             this.readable = false;
             this.members = new ArrayList<>();
+            this.waypointNames = new ArrayList<>();
         }
 
         boolean isWay() {
@@ -225,10 +235,17 @@ final class TrackStore {
         return new File(trackDirectory, name);
     }
 
-    void rename(File file, String newName) throws IOException {
+    // Changes the name of the track and the names of its waypoints. The
+    // list holds one name for each waypoint, in the order of the file.
+    void rename(File file, String newName, List<String> waypointNames) throws IOException {
         synchronized (LOCK) {
             Track track = readGpx(file);
-            writeGpx(track.withName(newName), file);
+            List<Waypoint> renamed = new ArrayList<>();
+            for (int i = 0; i < track.waypoints.size(); i++) {
+                Waypoint w = track.waypoints.get(i);
+                renamed.add(i < waypointNames.size() ? w.withName(waypointNames.get(i)) : w);
+            }
+            writeGpx(track.withName(newName).withWaypoints(renamed), file);
         }
     }
 

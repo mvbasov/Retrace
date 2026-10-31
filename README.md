@@ -36,6 +36,7 @@ Retrace records tracks, shows them on a map, and compares a trip with a saved tr
 - The menu item **Settings** turns the vibration at the finish on or off. It also selects the color theme: light, dark, or the same as the system.
 - The menu item **About Retrace** shows the version of the application.
 - A long push on a track in the list opens a short menu to share, rename or delete it. The **Menu** of the track screen has these items too. **Share** sends the GPX file to a different application.
+- **Rename** shows the name of the track, and below it the names of its waypoints. Change the names that you want. An empty field keeps the old name.
 - To import a GPX file from a different application, open the menu and push **Import a GPX file**. The track needs a time for each point. If the file has no Retrace profile, Retrace shows a guess from the speed. Confirm it or select a different profile.
 - Retrace keeps the GPX files in `/storage/emulated/0/Android/media/net.basov.retrace/tracks/`. Copy this directory for a backup.
 

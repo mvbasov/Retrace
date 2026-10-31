@@ -6,7 +6,11 @@ import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.Intent;
 import android.net.Uri;
+import android.util.TypedValue;
 import android.widget.EditText;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -140,25 +144,67 @@ final class TrackActions {
         activity.startActivity(trip);
     }
 
+    // The dialog shows the name of the track, then the names of its
+    // waypoints, if it has waypoints. An empty field keeps the old name.
+    // With no change, the file stays as it is.
     private static void askRename(Activity activity, ExecutorService files, TrackStore.Entry e,
                                   Listener listener) {
-        EditText input = new EditText(activity);
-        input.setSingleLine(true);
-        input.setText(e.name);
+        int pad = Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 20,
+                activity.getResources().getDisplayMetrics()));
+        LinearLayout column = new LinearLayout(activity);
+        column.setOrientation(LinearLayout.VERTICAL);
+        column.setPadding(pad, pad / 2, pad, 0);
+        EditText input = nameField(activity, e.name);
         input.setSelectAllOnFocus(true);
+        column.addView(input);
+        List<EditText> waypointFields = new ArrayList<>();
+        if (!e.waypointNames.isEmpty()) {
+            TextView title = new TextView(activity);
+            title.setText(R.string.rename_waypoints);
+            title.setPadding(0, pad, 0, 0);
+            column.addView(title);
+            for (String old : e.waypointNames) {
+                EditText field = nameField(activity, old);
+                waypointFields.add(field);
+                column.addView(field);
+            }
+        }
+        ScrollView scroll = new ScrollView(activity);
+        scroll.addView(column);
         new AlertDialog.Builder(activity)
                 .setTitle(R.string.rename)
-                .setView(input)
+                .setView(scroll)
                 .setPositiveButton(android.R.string.ok, (d, w) -> {
-                    String name = input.getText().toString().trim();
-                    if (!name.isEmpty() && !name.equals(e.name)) {
+                    String name = newName(input, e.name);
+                    boolean changed = !name.equals(e.name);
+                    List<String> names = new ArrayList<>();
+                    for (int i = 0; i < waypointFields.size(); i++) {
+                        String old = e.waypointNames.get(i);
+                        String value = newName(waypointFields.get(i), old);
+                        changed |= !value.equals(old);
+                        names.add(value);
+                    }
+                    if (changed) {
                         TrackStore store = new TrackStore(activity);
-                        runFileTask(activity, files, () -> store.rename(e.file, name),
+                        runFileTask(activity, files, () -> store.rename(e.file, name, names),
                                 R.string.error_rename, () -> listener.onChanged(RENAMED));
                     }
                 })
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
+    }
+
+    private static EditText nameField(Activity activity, String text) {
+        EditText field = new EditText(activity);
+        field.setSingleLine(true);
+        field.setText(text);
+        return field;
+    }
+
+    // The trimmed text of the field, or the old name if the field is empty.
+    private static String newName(EditText field, String old) {
+        String value = field.getText().toString().trim();
+        return value.isEmpty() ? old : value;
     }
 
     private static void askDelete(Activity activity, ExecutorService files, TrackStore.Entry e,
