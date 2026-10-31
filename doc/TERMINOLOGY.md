@@ -25,6 +25,8 @@ Use one name for one thing. If a term is not in the table, use the plain word. A
 | drift | The slow part of the GPS error. It changes over minutes. | bias, offset |
 | distance along the route | The distance from the start to your projection on the reference track. The code calls it `s`. | progress, odometer |
 | segment | The straight line between two neighbor points of the reference track. A leg has many segments. | edge, line piece |
+| track segment | A part of a track with no stop of the recording. A GPX file holds it as a `trkseg` element. | segment (alone), part, section |
+| waypoint | A named place of a track, for example wpt01. A GPX file holds it as a `wpt` element. | marker, pin, POI |
 | projection | The nearest position on the route to a fix. Its distance along the route is `s`. | snap point, nearest point |
 | search window | The part of the route that TrackMatcher searches for one fix. | search range, scope |
 | local minimum | A segment with a cross-track distance not larger than the distance of its neighbors. Each leg near a fix gives one. | valley, dip |

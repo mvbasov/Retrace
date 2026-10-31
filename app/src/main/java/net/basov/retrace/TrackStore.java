@@ -287,7 +287,8 @@ final class TrackStore {
         File saved = null;
         if (content != null && content.points.size() >= MIN_POINTS) {
             String name = TimeText.localName(content.startTimeMs, offsetMs(content.startTimeMs));
-            Track track = new Track(name, content.profile, content.points);
+            Track track = new Track(name, content.profile, content.points,
+                    new ArrayList<String>(), content.segmentStarts, content.waypoints);
             saved = newTrackFile(content.startTimeMs, content.profile);
             writeGpx(track, saved);
         }

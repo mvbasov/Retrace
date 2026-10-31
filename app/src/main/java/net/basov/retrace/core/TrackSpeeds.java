@@ -1,5 +1,6 @@
 package net.basov.retrace.core;
 
+import java.util.ArrayList;
 import java.util.List;
 
 // ----------------------------------------------------------------------
@@ -17,6 +18,9 @@ import java.util.List;
 // A GPS jump does not count either. A step faster than WayBuilder.JUMP_FACTOR
 // times the top speed of the profile is a jump, the same as in WayBuilder.
 // Without this rule, a GPS error at the start gives the highest speed.
+//
+// The step from one track segment to the next is a stop too. The user can travel
+// between the two track segments in a different way, or not at all.
 //
 // The mean speed is the distance of the moving steps divided by their time.
 //
@@ -57,13 +61,23 @@ public final class TrackSpeeds {
 
     public static TrackSpeeds of(Track track, Profile profile) {
         TrackSpeeds none = new TrackSpeeds(Double.NaN, Double.NaN, Double.NaN);
-        List<TrackPoint> p = GpsSpikes.remove(track.points, profile);
+        // The points of all track segments with no spikes, and the first index of
+        // each track segment after the first one.
+        List<TrackPoint> p = new ArrayList<>();
+        List<Integer> starts = new ArrayList<>();
+        for (List<TrackPoint> segment : track.segments()) {
+            if (!p.isEmpty()) {
+                starts.add(p.size());
+            }
+            p.addAll(GpsSpikes.remove(segment, profile));
+        }
         int n = p.size();
         if (n < 2) {
             return none;
         }
         // along[i] is the distance from point 0 to point i. stop[i] is true
-        // if the step from point i - 1 to point i is a stop or a jump.
+        // if the step from point i - 1 to point i is a stop, a jump or the
+        // step between two track segments.
         double[] along = new double[n];
         boolean[] stop = new boolean[n];
         double movingM = 0;
@@ -79,7 +93,7 @@ public final class TrackSpeeds {
             long dt = b.timeMs - a.timeMs;
             along[i] = along[i - 1] + d;
             double v = dt <= 0 ? 0 : d * 1000.0 / dt;
-            stop[i] = v < STOP_MPS || v > jumpMps;
+            stop[i] = v < STOP_MPS || v > jumpMps || starts.contains(i);
             if (!stop[i]) {
                 movingM += d;
                 movingMs += dt;

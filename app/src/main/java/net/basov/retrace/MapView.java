@@ -13,6 +13,7 @@ import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -23,6 +24,7 @@ import net.basov.retrace.core.MapViewport;
 import net.basov.retrace.core.ScaleBar;
 import net.basov.retrace.core.TileMath;
 import net.basov.retrace.core.TrackPoint;
+import net.basov.retrace.core.Waypoint;
 
 // ----------------------------------------------------------------------
 // The map with OpenStreetMap tiles and the tracks
@@ -32,8 +34,12 @@ import net.basov.retrace.core.TrackPoint;
 // position, the ghost and a scale bar. For a way, it also draws the tracks
 // of the way below the reference track, each in its own color. The track
 // screen also marks the start of the reference track with an arrow and its
-// finish with a square. EndMarks gives the shapes. MapViewport does the math. TileLoader
-// gives the tiles. ScaleBar gives the length of the scale bar.
+// finish with a square. EndMarks gives the shapes. MapViewport does the
+// math. TileLoader gives the tiles. ScaleBar gives the length of the scale
+// bar.
+//
+// A track with track segments has no line from one track segment to the next. The
+// waypoints are small dots with their names.
 //
 // Gestures: move with one finger, zoom with two fingers, and zoom in with a
 // double tap. A move with the finger turns off the follow mode.
@@ -83,6 +89,9 @@ public final class MapView extends View {
     private final Paint positionPaint = fillPaint(R.color.map_position);
     private final Paint ghostPaint = fillPaint(R.color.map_ghost);
     private final Paint ringPaint = strokePaint(R.color.map_ring, 2);
+    private final Paint waypointPaint = fillPaint(R.color.map_waypoint);
+    private final Paint waypointText = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint waypointHalo = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint attributionPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint attributionBackground = fillPaint(R.color.map_attribution_background);
     private final Rect source = new Rect();
@@ -102,9 +111,16 @@ public final class MapView extends View {
     // The tracks in world coordinates.
     private double[] referenceX = new double[0];
     private double[] referenceY = new double[0];
+    // True at the first point of each track segment after the first one. The path
+    // then moves to the point with no line.
+    private boolean[] referenceBreak = new boolean[0];
     private double[] currentX = new double[0];
     private double[] currentY = new double[0];
+    private boolean[] currentBreak = new boolean[0];
     private int currentCount;
+    private double[] waypointX = new double[0];
+    private double[] waypointY = new double[0];
+    private String[] waypointNames = new String[0];
     private double[][] memberX = new double[0][];
     private double[][] memberY = new double[0][];
 
@@ -131,6 +147,13 @@ public final class MapView extends View {
         attribution = context.getString(R.string.osm_attribution);
         scalePaint = strokePaint(R.color.map_attribution_text, 2);
         scalePaint.setStrokeCap(Paint.Cap.BUTT);
+        waypointText.setColor(getResources().getColor(R.color.map_attribution_text, null));
+        waypointText.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 12,
+                getResources().getDisplayMetrics()));
+        waypointHalo.set(waypointText);
+        waypointHalo.setColor(getResources().getColor(R.color.map_attribution_background, null));
+        waypointHalo.setStyle(Paint.Style.STROKE);
+        waypointHalo.setStrokeWidth(3 * density);
         setBackgroundColor(getResources().getColor(R.color.map_background, null));
 
         loader.setListener(this::invalidate);
@@ -175,11 +198,36 @@ public final class MapView extends View {
     // ------------------------------------------------------------------
 
     void setReference(List<TrackPoint> points) {
+        setReference(points, new ArrayList<Integer>());
+    }
+
+    // A track with track segments. See Track.segmentStarts.
+    void setReference(List<TrackPoint> points, List<Integer> segmentStarts) {
         referenceX = new double[points.size()];
         referenceY = new double[points.size()];
+        referenceBreak = new boolean[points.size()];
         for (int i = 0; i < points.size(); i++) {
             referenceX[i] = TileMath.worldX(points.get(i).longitude);
             referenceY[i] = TileMath.worldY(points.get(i).latitude);
+        }
+        for (int start : segmentStarts) {
+            if (start >= 0 && start < points.size()) {
+                referenceBreak[start] = true;
+            }
+        }
+        invalidate();
+    }
+
+    void setWaypoints(List<Waypoint> waypoints) {
+        int n = waypoints.size();
+        waypointX = new double[n];
+        waypointY = new double[n];
+        waypointNames = new String[n];
+        for (int i = 0; i < n; i++) {
+            Waypoint w = waypoints.get(i);
+            waypointX[i] = TileMath.worldX(w.longitude);
+            waypointY[i] = TileMath.worldY(w.latitude);
+            waypointNames[i] = w.name;
         }
         invalidate();
     }
@@ -237,19 +285,26 @@ public final class MapView extends View {
         invalidate();
     }
 
-    // Adds one point to the current track. The arrays grow by doubling.
-    void addCurrent(TrackPoint p) {
-        addCurrentPoint(p, true);
+    // Adds one point to the current track. The arrays grow by doubling. A
+    // point with newSegment starts a new track segment.
+    void addCurrent(TrackPoint p, boolean newSegment) {
+        addCurrentPoint(p, newSegment, true);
     }
 
     private void addCurrentPoint(TrackPoint p, boolean draw) {
+        addCurrentPoint(p, false, draw);
+    }
+
+    private void addCurrentPoint(TrackPoint p, boolean newSegment, boolean draw) {
         if (currentCount == currentX.length) {
             int size = Math.max(256, currentCount * 2);
             currentX = Arrays.copyOf(currentX, size);
             currentY = Arrays.copyOf(currentY, size);
+            currentBreak = Arrays.copyOf(currentBreak, size);
         }
         currentX[currentCount] = TileMath.worldX(p.longitude);
         currentY[currentCount] = TileMath.worldY(p.latitude);
+        currentBreak[currentCount] = newSegment;
         currentCount++;
         if (draw) {
             invalidate();
@@ -398,13 +453,15 @@ public final class MapView extends View {
         drawTiles(canvas);
         for (int t = 0; t < memberX.length; t++) {
             memberPaint.setColor(memberColor(t));
-            drawTrack(canvas, memberX[t], memberY[t], memberX[t].length, memberPaint);
+            drawTrack(canvas, memberX[t], memberY[t], null, memberX[t].length, memberPaint);
         }
-        drawTrack(canvas, referenceX, referenceY, referenceX.length, referencePaint);
+        drawTrack(canvas, referenceX, referenceY, referenceBreak, referenceX.length,
+                referencePaint);
         if (endMarks) {
             drawEndMarks(canvas);
         }
-        drawTrack(canvas, currentX, currentY, currentCount, currentPaint);
+        drawTrack(canvas, currentX, currentY, currentBreak, currentCount, currentPaint);
+        drawWaypoints(canvas);
         drawMarker(canvas, ghostLat, ghostLon, ghostPaint, 6);
         drawMarker(canvas, positionLat, positionLon, positionPaint, 7);
         drawScale(canvas);
@@ -461,7 +518,9 @@ public final class MapView extends View {
         }
     }
 
-    private void drawTrack(Canvas canvas, double[] xs, double[] ys, int count, Paint paint) {
+    // A break of null is a track with one track segment.
+    private void drawTrack(Canvas canvas, double[] xs, double[] ys, boolean[] breaks, int count,
+                           Paint paint) {
         if (count < 2) {
             return;
         }
@@ -473,7 +532,12 @@ public final class MapView extends View {
             float x = (float) viewport.screenX(xs[i]);
             float y = (float) viewport.screenY(ys[i]);
             boolean lastPoint = i == count - 1;
-            if (lastPoint || Math.abs(x - lastX) + Math.abs(y - lastY) >= MIN_PATH_STEP_PX) {
+            if (breaks != null && breaks[i]) {
+                path.moveTo(x, y);
+                lastX = x;
+                lastY = y;
+            } else if (lastPoint
+                    || Math.abs(x - lastX) + Math.abs(y - lastY) >= MIN_PATH_STEP_PX) {
                 path.lineTo(x, y);
                 lastX = x;
                 lastY = y;
@@ -509,6 +573,21 @@ public final class MapView extends View {
         path.close();
         canvas.drawPath(path, startPaint);
         canvas.drawPath(path, ringPaint);
+    }
+
+    // A dot for each waypoint, and its name on a light halo at its right.
+    private void drawWaypoints(Canvas canvas) {
+        float r = 5 * density;
+        for (int i = 0; i < waypointX.length; i++) {
+            float x = (float) viewport.screenX(waypointX[i]);
+            float y = (float) viewport.screenY(waypointY[i]);
+            canvas.drawCircle(x, y, r, waypointPaint);
+            canvas.drawCircle(x, y, r, ringPaint);
+            float tx = x + r + 3 * density;
+            float ty = y + waypointText.getTextSize() / 3;
+            canvas.drawText(waypointNames[i], tx, ty, waypointHalo);
+            canvas.drawText(waypointNames[i], tx, ty, waypointText);
+        }
     }
 
     private void drawMarker(Canvas canvas, double lat, double lon, Paint fill, int radiusDp) {

@@ -13,6 +13,15 @@ import java.util.List;
 //
 // A way is a track with members: the file names of the tracks that
 // WayBuilder used for it. A recorded track has no members.
+//
+// A track can have more than one track segment. The trip screen starts a
+// new track segment when the user continues a trip after Stop.
+// segmentStarts holds the index of the first point of each track segment
+// after the first one. The list of points stays one list, thus the
+// comparison and the ways use all points. The length does not count the
+// step from one track segment to the next, and the map does not draw it.
+//
+// A track can also have waypoints. See Waypoint.
 public final class Track {
 
     public final String name;
@@ -26,6 +35,12 @@ public final class Track {
     // The file names of the tracks of a way. Empty for a recorded track.
     public final List<String> members;
 
+    // The index of the first point of each track segment after the first one, in
+    // increasing order. Empty for a track with one track segment.
+    public final List<Integer> segmentStarts;
+
+    public final List<Waypoint> waypoints;
+
     private final double distanceM;
 
     public Track(String name, Profile profile, List<TrackPoint> points) {
@@ -33,11 +48,32 @@ public final class Track {
     }
 
     public Track(String name, Profile profile, List<TrackPoint> points, List<String> members) {
+        this(name, profile, points, members, new ArrayList<Integer>(), new ArrayList<Waypoint>());
+    }
+
+    // A track segment start outside the points, or not after the start before it,
+    // is not used.
+    public Track(String name, Profile profile, List<TrackPoint> points, List<String> members,
+                 List<Integer> segmentStarts, List<Waypoint> waypoints) {
         this.name = name == null ? "" : name;
         this.profile = profile;
         this.points = Collections.unmodifiableList(new ArrayList<>(points));
         this.members = Collections.unmodifiableList(new ArrayList<>(members));
-        this.distanceM = sumDistance(GpsSpikes.remove(this.points, profile));
+        List<Integer> starts = new ArrayList<>();
+        int last = 0;
+        for (int start : segmentStarts) {
+            if (start > last && start < this.points.size()) {
+                starts.add(start);
+                last = start;
+            }
+        }
+        this.segmentStarts = Collections.unmodifiableList(starts);
+        this.waypoints = Collections.unmodifiableList(new ArrayList<>(waypoints));
+        double sum = 0;
+        for (List<TrackPoint> segment : segments()) {
+            sum += sumDistance(GpsSpikes.remove(segment, profile));
+        }
+        this.distanceM = sum;
     }
 
     public boolean isWay() {
@@ -46,12 +82,36 @@ public final class Track {
 
     // Returns the same points with a different name.
     public Track withName(String newName) {
-        return new Track(newName, profile, points, members);
+        return new Track(newName, profile, points, members, segmentStarts, waypoints);
     }
 
     // Returns the same points with different members.
     public Track withMembers(List<String> newMembers) {
-        return new Track(name, profile, points, newMembers);
+        return new Track(name, profile, points, newMembers, segmentStarts, waypoints);
+    }
+
+    // Returns the same points with a different profile.
+    public Track withProfile(Profile newProfile) {
+        return new Track(name, newProfile, points, members, segmentStarts, waypoints);
+    }
+
+    // Returns the same points with different waypoints.
+    public Track withWaypoints(List<Waypoint> newWaypoints) {
+        return new Track(name, profile, points, members, segmentStarts, newWaypoints);
+    }
+
+    // The points of each track segment. A track with no points has none.
+    public List<List<TrackPoint>> segments() {
+        List<List<TrackPoint>> out = new ArrayList<>();
+        int from = 0;
+        for (int start : segmentStarts) {
+            out.add(points.subList(from, start));
+            from = start;
+        }
+        if (from < points.size()) {
+            out.add(points.subList(from, points.size()));
+        }
+        return out;
     }
 
     // The same route in the opposite direction. The first point is the
@@ -60,7 +120,8 @@ public final class Track {
     // old time there. The new first point gets the old start time.
     //
     // This time is correct only on a flat route. Uphill and downhill, the
-    // speed in the opposite direction is different.
+    // speed in the opposite direction is different. The track segments are
+    // reversed too. The waypoints stay as they are.
     public Track reversed() {
         int n = points.size();
         long first = startTimeMs();
@@ -75,11 +136,16 @@ public final class Track {
                     ? first + (last - p.timeMs) : TrackPoint.NO_TIME;
             out.add(new TrackPoint(p.latitude, p.longitude, time, p.elevationM, p.accuracyM));
         }
-        return new Track(name, profile, out, members);
+        List<Integer> starts = new ArrayList<>();
+        for (int i = segmentStarts.size() - 1; i >= 0; i--) {
+            starts.add(n - segmentStarts.get(i));
+        }
+        return new Track(name, profile, out, members, starts, waypoints);
     }
 
     // The length of the track along its points, in meters. A GPS spike
-    // does not count. See GpsSpikes.
+    // does not count. See GpsSpikes. The step between two track segments does not
+    // count either.
     public double distanceM() {
         return distanceM;
     }

@@ -196,7 +196,7 @@ public final class TrackTest {
         check("empty", true, PointLog.read(new StringReader("")) == null);
         check("other file", true, PointLog.read(new StringReader("<gpx>\n")) == null);
         check("other format", true,
-                PointLog.read(new StringReader("RETRACE-LOG 2 walking 1\n")) == null);
+                PointLog.read(new StringReader("RETRACE-LOG 3 walking 1\n")) == null);
         PointLog.Content unknown = PointLog.read(new StringReader("RETRACE-LOG 1 hiking 1\n"));
         check("unknown profile", Profile.WALKING, unknown.profile);
     }

@@ -23,8 +23,12 @@ import org.xml.sax.helpers.DefaultHandler;
 //
 // The reader accepts GPX 1.0 and GPX 1.1 from other applications. It reads
 // the points of each track segment. A file with no track gives the points of
-// its routes. It ignores waypoints and each unknown element. It reads the
-// members of a way from the extension of GpxWriter.
+// its routes. It reads the waypoints with their names. It ignores each
+// unknown element. It reads the members of a way from the extension of
+// GpxWriter.
+//
+// All track segments of all tracks of a file go into one track.
+// An empty track segment is not a track segment.
 public final class GpxReader {
 
     private GpxReader() {
@@ -39,10 +43,11 @@ public final class GpxReader {
         } catch (SAXException | ParserConfigurationException e) {
             throw new IOException("not a GPX file: " + e.getMessage(), e);
         }
-        List<TrackPoint> points = handler.trackPoints.isEmpty()
-                ? handler.routePoints : handler.trackPoints;
+        boolean route = handler.trackPoints.isEmpty();
+        List<TrackPoint> points = route ? handler.routePoints : handler.trackPoints;
         String name = firstNonEmpty(handler.trackName, handler.metadataName, fallbackName);
-        return new Track(name, Profile.fromId(handler.trackType), points, handler.members);
+        return new Track(name, Profile.fromId(handler.trackType), points, handler.members,
+                route ? new ArrayList<Integer>() : handler.segmentStarts, handler.waypoints);
     }
 
     private static SAXParserFactory newFactory() {
@@ -83,10 +88,15 @@ public final class GpxReader {
         String trackName;
         String trackType;
         final List<String> members = new ArrayList<>();
+        final List<Integer> segmentStarts = new ArrayList<>();
+        final List<Waypoint> waypoints = new ArrayList<>();
 
         private final List<String> path = new ArrayList<>();
         private final StringBuilder text = new StringBuilder();
         private boolean inPoint;
+        // True after the start of a trkseg element, until its first point.
+        private boolean newSegment;
+        private String pointName;
         private double lat;
         private double lon;
         private double ele;
@@ -97,12 +107,16 @@ public final class GpxReader {
             String name = local(localName, qName);
             path.add(name);
             text.setLength(0);
-            if (name.equals("trkpt") || name.equals("rtept")) {
+            if (name.equals("trkseg")) {
+                newSegment = true;
+            }
+            if (name.equals("trkpt") || name.equals("rtept") || name.equals("wpt")) {
                 inPoint = true;
                 lat = parseDouble(attrs.getValue("lat"));
                 lon = parseDouble(attrs.getValue("lon"));
                 ele = Double.NaN;
                 time = TrackPoint.NO_TIME;
+                pointName = null;
             }
         }
 
@@ -121,12 +135,23 @@ public final class GpxReader {
                 ele = parseDouble(value);
             } else if (inPoint && name.equals("time")) {
                 time = parseTime(value);
-            } else if (name.equals("trkpt") || name.equals("rtept")) {
+            } else if (inPoint && name.equals("name") && parent.equals("wpt")) {
+                pointName = value;
+            } else if (name.equals("trkpt") || name.equals("rtept") || name.equals("wpt")) {
                 inPoint = false;
                 if (!Double.isNaN(lat) && !Double.isNaN(lon)
                         && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
-                    TrackPoint p = new TrackPoint(lat, lon, time, ele, Double.NaN);
-                    (name.equals("trkpt") ? trackPoints : routePoints).add(p);
+                    if (name.equals("wpt")) {
+                        waypoints.add(new Waypoint(lat, lon, time, ele, pointName));
+                    } else if (name.equals("trkpt")) {
+                        if (newSegment && !trackPoints.isEmpty()) {
+                            segmentStarts.add(trackPoints.size());
+                        }
+                        newSegment = false;
+                        trackPoints.add(new TrackPoint(lat, lon, time, ele, Double.NaN));
+                    } else {
+                        routePoints.add(new TrackPoint(lat, lon, time, ele, Double.NaN));
+                    }
                 }
             } else if (name.equals("name") && parent.equals("metadata") && metadataName == null) {
                 metadataName = value;

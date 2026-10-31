@@ -2,6 +2,7 @@ package net.basov.retrace.core;
 
 import java.io.IOException;
 import java.io.Writer;
+import java.util.List;
 
 // ----------------------------------------------------------------------
 // The GPX 1.1 writer
@@ -9,6 +10,9 @@ import java.io.Writer;
 //
 // The writer makes the text by hand. A GPX file of Retrace has a small and
 // fixed form. An XML library would add code and add no value.
+//
+// The waypoints come before the track, as GPX 1.1 demands. Each track segment of
+// the track is one trkseg element.
 //
 // The writer formats each number itself. Double.toString can write an
 // exponent, for example 1.0E-4. String.format is slow for many points.
@@ -47,34 +51,61 @@ public final class GpxWriter {
         }
         out.write("  </metadata>\n");
 
+        StringBuilder line = new StringBuilder(128);
+        for (Waypoint w : track.waypoints) {
+            line.setLength(0);
+            line.append("  <wpt");
+            appendPosition(line, w.latitude, w.longitude);
+            line.append('>');
+            appendElevationAndTime(line, w.elevationM, w.timeMs);
+            line.append("<name>").append(escape(w.name)).append("</name></wpt>\n");
+            out.write(line.toString());
+        }
+
         out.write("  <trk>\n");
         out.write("    <name>" + escape(track.name) + "</name>\n");
         if (track.profile != null) {
             out.write("    <type>" + track.profile.id + "</type>\n");
         }
-        out.write("    <trkseg>\n");
-        StringBuilder line = new StringBuilder(128);
-        for (TrackPoint p : track.points) {
-            line.setLength(0);
-            line.append("      <trkpt lat=\"");
-            appendFixed(line, p.latitude, COORDINATE_DECIMALS);
-            line.append("\" lon=\"");
-            appendFixed(line, p.longitude, COORDINATE_DECIMALS);
-            line.append("\">");
-            if (!Double.isNaN(p.elevationM) && !Double.isInfinite(p.elevationM)) {
-                line.append("<ele>");
-                appendFixed(line, p.elevationM, 1);
-                line.append("</ele>");
-            }
-            if (p.hasTime()) {
-                line.append("<time>").append(TimeText.isoUtc(p.timeMs)).append("</time>");
-            }
-            line.append("</trkpt>\n");
-            out.write(line.toString());
+        List<List<TrackPoint>> segments = track.segments();
+        if (segments.isEmpty()) {
+            segments.add(track.points);
         }
-        out.write("    </trkseg>\n");
+        for (List<TrackPoint> segment : segments) {
+            out.write("    <trkseg>\n");
+            for (TrackPoint p : segment) {
+                line.setLength(0);
+                line.append("      <trkpt");
+                appendPosition(line, p.latitude, p.longitude);
+                line.append('>');
+                appendElevationAndTime(line, p.elevationM, p.timeMs);
+                line.append("</trkpt>\n");
+                out.write(line.toString());
+            }
+            out.write("    </trkseg>\n");
+        }
         out.write("  </trk>\n");
         out.write("</gpx>\n");
+    }
+
+    private static void appendPosition(StringBuilder line, double lat, double lon) {
+        line.append(" lat=\"");
+        appendFixed(line, lat, COORDINATE_DECIMALS);
+        line.append("\" lon=\"");
+        appendFixed(line, lon, COORDINATE_DECIMALS);
+        line.append('"');
+    }
+
+    private static void appendElevationAndTime(StringBuilder line, double elevationM,
+                                               long timeMs) {
+        if (!Double.isNaN(elevationM) && !Double.isInfinite(elevationM)) {
+            line.append("<ele>");
+            appendFixed(line, elevationM, 1);
+            line.append("</ele>");
+        }
+        if (timeMs != TrackPoint.NO_TIME) {
+            line.append("<time>").append(TimeText.isoUtc(timeMs)).append("</time>");
+        }
     }
 
     // Writes a number with a fixed count of decimals and no exponent.

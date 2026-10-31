@@ -665,8 +665,8 @@ public final class MainActivity extends ThemedActivity {
         new AlertDialog.Builder(this)
                 .setTitle(R.string.import_profile_title)
                 .setSingleChoiceItems(labels, selected[0], (d, which) -> selected[0] = which)
-                .setPositiveButton(android.R.string.ok, (d, w) -> saveImport(new Track(
-                        checked.track.name, profiles[selected[0]], checked.track.points)))
+                .setPositiveButton(android.R.string.ok, (d, w) -> saveImport(
+                        checked.track.withProfile(profiles[selected[0]])))
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
     }

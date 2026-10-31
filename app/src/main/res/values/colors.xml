@@ -20,6 +20,7 @@
     <color name="map_member_5">#B300897B</color>
     <color name="map_member_6">#B36D4C41</color>
     <color name="map_ring">#FFFFFFFF</color>
+    <color name="map_waypoint">#FFAD1457</color>
     <color name="map_attribution_text">#FF333333</color>
     <color name="map_attribution_background">#B3FFFFFF</color>
     <color name="trip_ahead">#FF2E7D32</color>

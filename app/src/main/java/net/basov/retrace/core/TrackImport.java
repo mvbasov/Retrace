@@ -60,10 +60,22 @@ public final class TrackImport {
         if (raw.points.size() < 2) {
             return new Result(TOO_FEW_POINTS, null, false, null);
         }
+        // The track segments and the waypoints stay. The start of a track
+        // segment moves with the dropped points before it.
         List<TrackPoint> kept = new ArrayList<>();
+        List<Integer> starts = new ArrayList<>();
         long last = Long.MIN_VALUE;
-        for (TrackPoint p : raw.points) {
+        boolean newSegment = false;
+        for (int i = 0; i < raw.points.size(); i++) {
+            TrackPoint p = raw.points.get(i);
+            if (raw.segmentStarts.contains(i)) {
+                newSegment = true;
+            }
             if (p.hasTime() && p.timeMs > last) {
+                if (newSegment && !kept.isEmpty()) {
+                    starts.add(kept.size());
+                }
+                newSegment = false;
                 kept.add(p);
                 last = p.timeMs;
             }
@@ -73,7 +85,8 @@ public final class TrackImport {
         }
         boolean known = raw.profile != null;
         Profile profile = known ? raw.profile : guessProfile(kept);
-        return new Result(OK, new Track(raw.name, profile, kept), known, profile);
+        return new Result(OK, new Track(raw.name, profile, kept, raw.members, starts,
+                raw.waypoints), known, profile);
     }
 
     // The profile for the median speed of the moving parts. The points must

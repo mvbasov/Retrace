@@ -359,7 +359,7 @@ public final class RunActivity extends ThemedActivity {
                 s.replaySpeed) + "\n" + reference : reference);
         List<TrackPoint> fresh = TrackService.pointsFrom(shownPoints);
         for (TrackPoint p : fresh) {
-            map.addCurrent(p);
+            map.addCurrent(p, false);
         }
         shownPoints += fresh.size();
         if (!fresh.isEmpty()) {
@@ -514,7 +514,7 @@ public final class RunActivity extends ThemedActivity {
                 }
                 shownReferenceName = track.name;
                 setTitle(track.name);
-                map.setReference(track.points);
+                map.setReference(track.points, track.segmentStarts);
                 if (!cameraRestored && !map.isFollow()) {
                     map.showAll();
                 }

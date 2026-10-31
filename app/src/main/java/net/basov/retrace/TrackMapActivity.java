@@ -286,7 +286,8 @@ public final class TrackMapActivity extends ThemedActivity {
                     memberFrame.addView(WayMemberList.build(this, members, map, membersShown,
                             shown -> membersShown = shown));
                 }
-                map.setReference(result.points);
+                map.setReference(result.points, result.segmentStarts);
+                map.setWaypoints(result.waypoints);
                 if (fit) {
                     map.showAll();
                 }
