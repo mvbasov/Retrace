@@ -98,7 +98,7 @@ public final class ReplayTest {
                 5, TestTracks.START_MS, FixSource.NONE, 0, RecordingSnapshot.ERROR_NONE, reference,
                 selection,
                 false, null, MatchResult.UNKNOWN, speed > 0 ? "/replayed.gpx" : null,
-                speed > 0 ? "Replayed" : null, speed, 0);
+                speed > 0 ? "Replayed" : null, speed, 0, false, 0);
     }
 
     private static void check(String name, Object expected, Object actual) {

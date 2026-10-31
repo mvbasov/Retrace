@@ -5,6 +5,12 @@
     <!-- The list of tracks and the recording -->
     <string name="start_recording">Start</string>
     <string name="stop_recording">Stop</string>
+    <string name="trip_end">End</string>
+    <string name="trip_continue">Continue</string>
+    <string name="trip_paused">Stopped. Push Continue for a new track segment, or End to save the track.</string>
+    <string name="waypoint">Waypoint</string>
+    <string name="waypoint_added">Waypoint %1$s added.</string>
+    <string name="waypoint_no_position">No position yet. Retrace adds a waypoint after the first fix.</string>
     <string name="status_idle">Select a profile and push Start. Retrace then selects the reference track.</string>
     <string name="status_recording">Retrace records: %1$s\n%2$d points · %3$s · %4$s</string>
     <string name="waiting_for_gps">No GPS fix yet.</string>
@@ -126,6 +132,7 @@
     <!-- The map -->
     <string name="map_loading">Retrace reads the track.</string>
     <string name="map_zoom_in">+</string>
+    <string name="map_waypoint">+ Wpt</string>
     <string name="map_zoom_out">\u2212</string>
     <string name="map_show_all">All</string>
     <string name="map_follow">Me</string>

@@ -281,9 +281,18 @@ public final class MainActivity extends ThemedActivity {
     // Recording
     // ------------------------------------------------------------------
 
+    // Stop of a trip with the GPS pauses the trip and opens the trip screen.
+    // That screen has the buttons Continue and End. Stop of a replay ends it.
     private void onStartStop() {
-        if (TrackService.snapshot().recording) {
+        RecordingSnapshot s = TrackService.snapshot();
+        if (s.recording && s.isReplay()) {
             startService(new Intent(this, TrackService.class).setAction(TrackService.ACTION_STOP));
+        } else if (s.recording) {
+            if (!s.paused) {
+                startService(new Intent(this, TrackService.class)
+                        .setAction(TrackService.ACTION_PAUSE));
+            }
+            startActivity(new Intent(this, RunActivity.class));
         } else {
             pendingProfile = Profile.values()[profileSpinner.getSelectedItemPosition()];
             pendingReference = null;
@@ -481,6 +490,9 @@ public final class MainActivity extends ThemedActivity {
             String progress = getString(R.string.status_recording,
                     Labels.profile(this, s.profile), s.points,
                     Labels.distance(this, s.distanceM), elapsed);
+            if (s.paused) {
+                return progress + "\n" + getString(R.string.trip_paused) + open;
+            }
             if (!s.hasFix()) {
                 return progress + "\n" + getString(R.string.waiting_for_gps) + open;
             }

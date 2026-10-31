@@ -15,6 +15,7 @@ import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,6 +30,7 @@ import net.basov.retrace.core.Replay;
 import net.basov.retrace.core.Track;
 import net.basov.retrace.core.TrackMatcher;
 import net.basov.retrace.core.TrackPoint;
+import net.basov.retrace.core.Waypoint;
 
 // ----------------------------------------------------------------------
 // The trip screen
@@ -48,7 +50,12 @@ import net.basov.retrace.core.TrackPoint;
 // replay adds a line with the replayed track and the speed, and the menu
 // changes the speed.
 //
-// After the stop, the screen keeps the last values. The stop button then
+// Stop of a trip with the GPS ends the current track segment. The screen
+// then shows two buttons: Continue starts a new track segment, and End
+// saves the track. During a trip with the GPS, a small button at the bottom
+// right of the map adds a waypoint. The map shows the waypoints.
+//
+// After the end, the screen keeps the last values. The stop button then
 // closes the screen. After the stop of a replay, the Replay button beside
 // it starts the same replay again. The replay keeps the last selection of
 // the reference track and the last speed.
@@ -88,6 +95,11 @@ public final class RunActivity extends ThemedActivity {
     private Button stopButton;
     private Button replayButton;
     private Button followButton;
+    private Button continueButton;
+    private Button waypointButton;
+    // The count of waypoints on the map. A larger count in the snapshot
+    // gives a message with the name of the new waypoint.
+    private int shownWaypoints;
     private SourceDot sourceDot;
 
     private int shownPoints;
@@ -213,6 +225,15 @@ public final class RunActivity extends ThemedActivity {
                 Gravity.START | Gravity.TOP);
         dotCorner.setMargins(pad, pad, pad, pad);
         mapFrame.addView(sourceDot, dotCorner);
+        waypointButton = mapButton(R.string.map_waypoint);
+        waypointButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        waypointButton.setOnClickListener(v -> onWaypoint());
+        // Above the attribution of the map.
+        FrameLayout.LayoutParams waypointCorner = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.END | Gravity.BOTTOM);
+        waypointCorner.setMargins(pad, pad, pad, dp(28));
+        mapFrame.addView(waypointButton, waypointCorner);
 
         stopButton = new Button(this);
         stopButton.setText(R.string.stop_recording);
@@ -221,10 +242,16 @@ public final class RunActivity extends ThemedActivity {
         replayButton.setText(R.string.replay);
         replayButton.setVisibility(View.GONE);
         replayButton.setOnClickListener(v -> onReplayAgain());
+        continueButton = new Button(this);
+        continueButton.setText(R.string.trip_continue);
+        continueButton.setVisibility(View.GONE);
+        continueButton.setOnClickListener(v -> onContinue());
 
         LinearLayout bottom = new LinearLayout(this);
         bottom.setOrientation(LinearLayout.HORIZONTAL);
         bottom.addView(replayButton, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        bottom.addView(continueButton, new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         bottom.addView(stopButton, new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
@@ -249,12 +276,35 @@ public final class RunActivity extends ThemedActivity {
         }
     }
 
+    // Stop pauses a trip with the GPS. End and the Stop of a replay save or
+    // end the trip. After the end, the button closes the screen.
     private void onStopOrClose() {
-        if (TrackService.snapshot().recording) {
-            startService(new Intent(this, TrackService.class).setAction(TrackService.ACTION_STOP));
-        } else {
+        RecordingSnapshot s = TrackService.snapshot();
+        if (!s.recording) {
             finish();
+            return;
         }
+        boolean pause = !s.paused && !s.isReplay();
+        send(pause ? TrackService.ACTION_PAUSE : TrackService.ACTION_STOP);
+    }
+
+    // The screen hides the button until the next snapshot. Thus a second push
+    // does not send a second intent.
+    private void onContinue() {
+        continueButton.setVisibility(View.GONE);
+        send(TrackService.ACTION_CONTINUE);
+    }
+
+    private void onWaypoint() {
+        if (!TrackService.snapshot().hasFix()) {
+            Toast.makeText(this, R.string.waypoint_no_position, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        send(TrackService.ACTION_WAYPOINT);
+    }
+
+    private void send(String action) {
+        startService(new Intent(this, TrackService.class).setAction(action));
     }
 
     @Override
@@ -329,8 +379,12 @@ public final class RunActivity extends ThemedActivity {
             shownSpeed = s.replaySpeed;
             invalidateOptionsMenu();
         }
-        stopButton.setText(s.recording ? R.string.stop_recording : R.string.close);
-        sourceDot.setVisibility(s.recording && !s.isReplay() ? View.VISIBLE : View.GONE);
+        stopButton.setText(!s.recording ? R.string.close
+                : s.paused ? R.string.trip_end : R.string.stop_recording);
+        continueButton.setVisibility(s.recording && s.paused ? View.VISIBLE : View.GONE);
+        boolean live = s.recording && !s.isReplay();
+        waypointButton.setVisibility(live ? View.VISIBLE : View.GONE);
+        sourceDot.setVisibility(live ? View.VISIBLE : View.GONE);
         sourceDot.setSource(s.fixSource(System.currentTimeMillis()));
         replayButton.setVisibility(s.canReplayAgain() ? View.VISIBLE : View.GONE);
         if (s.recording) {
@@ -347,6 +401,10 @@ public final class RunActivity extends ThemedActivity {
             shownPoints = 0;
             map.setCurrent(new ArrayList<TrackPoint>());
             map.setFitPoints(new ArrayList<TrackPoint>());
+            // The waypoints of an open trip show with no message.
+            List<Waypoint> waypoints = TrackService.waypoints();
+            map.setWaypoints(waypoints);
+            shownWaypoints = waypoints.size();
             cameraRestored = restored;
             startCamera(s, !restored);
         }
@@ -358,10 +416,21 @@ public final class RunActivity extends ThemedActivity {
         referenceView.setText(s.isReplay() ? getString(R.string.replay_line, s.replayName,
                 s.replaySpeed) + "\n" + reference : reference);
         List<TrackPoint> fresh = TrackService.pointsFrom(shownPoints);
-        for (TrackPoint p : fresh) {
-            map.addCurrent(p, false);
+        List<Integer> starts = fresh.isEmpty()
+                ? new ArrayList<Integer>() : TrackService.segmentStarts();
+        for (int i = 0; i < fresh.size(); i++) {
+            map.addCurrent(fresh.get(i), starts.contains(shownPoints + i));
         }
         shownPoints += fresh.size();
+        if (s.waypointCount > shownWaypoints) {
+            List<Waypoint> waypoints = TrackService.waypoints();
+            map.setWaypoints(waypoints);
+            shownWaypoints = waypoints.size();
+            if (!waypoints.isEmpty()) {
+                Toast.makeText(this, getString(R.string.waypoint_added,
+                        waypoints.get(waypoints.size() - 1).name), Toast.LENGTH_SHORT).show();
+            }
+        }
         if (!fresh.isEmpty()) {
             TrackPoint last = fresh.get(fresh.size() - 1);
             map.setPosition(last.latitude, last.longitude);
@@ -379,7 +448,8 @@ public final class RunActivity extends ThemedActivity {
         if (m == null) {
             detail1.setText(s.hasFix() ? "" : getString(R.string.waiting_for_gps));
             detail2.setText("");
-            detail3.setText(s.recording ? "" : stoppedText(s));
+            detail3.setText(s.paused ? getString(R.string.trip_paused)
+                    : s.recording ? "" : stoppedText(s));
             map.setGhost(Double.NaN, Double.NaN);
             return;
         }
@@ -388,8 +458,12 @@ public final class RunActivity extends ThemedActivity {
         detail1.setText(compared ? TripText.ghost(this, m.deltaDistanceM) : "");
         detail2.setText(compared ? TripText.speeds(this, m) : "");
         String stopped = s.recording ? "" : stoppedText(s);
-        detail3.setText(m.state == TrackMatcher.State.ON_ROUTE
-                ? TripText.toFinish(this, m) : stopped);
+        if (s.paused) {
+            detail3.setText(R.string.trip_paused);
+        } else {
+            detail3.setText(m.state == TrackMatcher.State.ON_ROUTE
+                    ? TripText.toFinish(this, m) : stopped);
+        }
         if (m.started() && m.state != TrackMatcher.State.FINISHED) {
             map.setGhost(m.ghostLatitude, m.ghostLongitude);
         } else {

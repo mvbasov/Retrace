@@ -25,6 +25,7 @@ public final class TrackTest {
         theFilterDropsBadFixes();
         theFilterAddsTheDistance();
         aCoarseFixCanStartTheTrack();
+        aNewSegmentAddsNoDistance();
         aStopAddsLessDistance();
         theLogKeepsEachPoint();
         theLogIgnoresABrokenLine();
@@ -135,6 +136,21 @@ public final class TrackTest {
         check("gps", true, filter.accept(fix(400 * 1e-6, 4000, 5)));
         check("network after gps", false, filter.accept(fix(2000 * 1e-6, 5000, 60)));
         check("count", 2, filter.count());
+    }
+
+    // After Stop and Continue, the user can be at a different place. The
+    // first point of the new track segment comes at once, also near the
+    // last point. The step to it is not distance.
+    private static void aNewSegmentAddsNoDistance() {
+        RecordFilter filter = new RecordFilter(Profile.WALKING);
+        filter.accept(fix(0, 1000, 5));
+        filter.accept(fix(100 * 1e-6, 2000, 5));
+        double before = filter.distanceM();
+        filter.newSegment();
+        check("old time", false, filter.accept(fix(5000 * 1e-6, 2000, 5)));
+        check("near point", true, filter.accept(fix(5001 * 1e-6, 9000, 5)));
+        near("no distance", before, filter.distanceM(), 1e-9);
+        check("rule again", false, filter.accept(fix(5002 * 1e-6, 10000, 5)));
     }
 
     // A receiver that does not move gives fixes with an error of some

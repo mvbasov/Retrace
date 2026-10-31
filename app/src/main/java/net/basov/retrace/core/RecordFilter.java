@@ -21,6 +21,9 @@ package net.basov.retrace.core;
 // be noise only. Without this rule, the error of a receiver that does not
 // move makes a false line of many meters, mostly at the start. A stop of ten
 // minutes then adds a false distance to the track.
+//
+// After newSegment(), the next point starts a new track segment. It needs
+// no minimum step, and the step to it is not distance.
 public final class RecordFilter {
 
     // A network fix from Wi-Fi is usually inside this limit. A fix from the
@@ -30,6 +33,7 @@ public final class RecordFilter {
     private final Profile profile;
     private TrackPoint last;
     private boolean precise;
+    private boolean segmentBreak;
     private int count;
     private double distanceM;
 
@@ -48,20 +52,28 @@ public final class RecordFilter {
             if (fix.timeMs <= last.timeMs) {
                 return false;
             }
-            double step = Geo.distanceM(last, fix);
-            double minStep = known ? Math.max(profile.minDistanceM, fix.accuracyM)
-                    : profile.minDistanceM;
-            if (step < minStep) {
-                return false;
+            if (!segmentBreak) {
+                double step = Geo.distanceM(last, fix);
+                double minStep = known ? Math.max(profile.minDistanceM, fix.accuracyM)
+                        : profile.minDistanceM;
+                if (step < minStep) {
+                    return false;
+                }
+                distanceM += step;
             }
-            distanceM += step;
         }
+        segmentBreak = false;
         if (!known || fix.accuracyM <= profile.accuracyLimitM) {
             precise = true;
         }
         last = fix;
         count++;
         return true;
+    }
+
+    // The next accepted point starts a new track segment.
+    public void newSegment() {
+        segmentBreak = true;
     }
 
     public int count() {

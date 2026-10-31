@@ -97,6 +97,8 @@ The `core` package imports no Android package. Thus the tests run on the JVM.
 - A device with only one of the two providers records with that provider. On Android 6 to 8, the battery saving mode of the location turns off the GPS. A trip then records with the network location.
 - It drops a fix with bad accuracy and smooths the speed. The profile table gives the limits.
 - It writes each point to the log file during the trip. Thus a crash loses no data.
+- Stop of a trip with the GPS ends the current track segment and stops the fixes. The trip stays open, and the elapsed time continues. Continue gets the fixes again, and the next point starts a new track segment. It needs no minimum step, and the step to it is not distance. End saves the track. A replay has no pause.
+- The Waypoint button adds a waypoint at the last smoothed fix, with the next automatic name: wpt01, wpt02 and so on. The service writes it to the log file at once.
 - The service does not restart after Android stops the process. The next start of MainActivity saves the log file as a track.
 - The notification shows the live result, for example "0:42 ahead · 3.2 km to the finish".
 
@@ -228,7 +230,9 @@ The OpenStreetMap tile usage policy for `tile.openstreetmap.org` has these rules
   - `GpsReadiness` compares the accuracy with the limit of the selected profile. The rule agrees with `RecordFilter` after the first precise point.
   - The receiver also starts the network location of Android. It does not use the fused location, because it prepares the GPS receiver for the trip. While the receiver runs, a dot shows the source of the fixes. See `FixSource`.
   - The receiver stops after a push on **Stop GPS**, at the start of a trip, when the list screen closes, and after 10 minutes. It uses much power.
-- **RunActivity**, the trip screen: the map and a panel with large numbers. During a trip with the GPS, a dot at the top left of the map shows the source of the fixes. The panel shows Δt, Δs, and on route or off route. It also shows the speed compared with the reference track, the distance to the finish and the time to the finish.
+- **RunActivity**, the trip screen: the map and a panel with large numbers. During a trip with the GPS, a dot at the top left of the map shows the source of the fixes.
+  - The button **+ Wpt** at the bottom right of the map adds a waypoint. A short message tells its name.
+  - **Stop** pauses a trip with the GPS. The screen then shows **Continue** and **End**. After the end, **Close** closes the screen. The notification has the same buttons, and also **Waypoint**. The panel shows Δt, Δs, and on route or off route. It also shows the speed compared with the reference track, the distance to the finish and the time to the finish.
   - The large Δt is smoothed by `DeltaSmoother`, with a time constant of two times the speed smoothing window of the profile. At the finish, the panel shows the exact result.
   - The text is green while you are ahead, and red while you are behind or off route.
   - The screen stays on while the trip screen is visible.

@@ -13,6 +13,9 @@ package net.basov.retrace.core;
 // without a reference track has null and UNKNOWN there. The selection field
 // tells how the trip got its reference track.
 //
+// A trip with the GPS can pause after Stop. The service then gets no fixes.
+// Continue starts a new track segment, and End finishes the trip.
+//
 // A replay is a trip with the points of a saved track. It has the name of
 // that track and its speed. Its elapsed time comes from the times of the
 // points, not from the clock of the device.
@@ -43,7 +46,7 @@ public final class RecordingSnapshot {
     public static final RecordingSnapshot IDLE =
             new RecordingSnapshot(false, null, 0, 0, 0, Double.NaN, TrackPoint.NO_TIME,
                     FixSource.NONE, 0, ERROR_NONE,
-                    null, SELECTION_OFF, false, null, MatchResult.UNKNOWN, null, null, 0, 0);
+                    null, SELECTION_OFF, false, null, MatchResult.UNKNOWN, null, null, 0, 0, false, 0);
 
     public final boolean recording;
     public final Profile profile;
@@ -96,11 +99,19 @@ public final class RecordingSnapshot {
     // The time from the first to the last replayed point.
     public final long replayElapsedMs;
 
+    // True after Stop of a trip with the GPS, until Continue or End. The
+    // field recording stays true.
+    public final boolean paused;
+
+    // The count of the waypoints of the trip.
+    public final int waypointCount;
+
     public RecordingSnapshot(boolean recording, Profile profile, long startTimeMs, int points,
                              double distanceM, double lastAccuracyM, long lastFixTimeMs,
                              int lastFixSource, int savedCount, int error, String referencePath, int selection,
                              boolean referenceReversed, MatchResult match, long smoothedDeltaMs, String replayPath,
-                             String replayName, int replaySpeed, long replayElapsedMs) {
+                             String replayName, int replaySpeed, long replayElapsedMs,
+                             boolean paused, int waypointCount) {
         this.recording = recording;
         this.profile = profile;
         this.startTimeMs = startTimeMs;
@@ -120,6 +131,8 @@ public final class RecordingSnapshot {
         this.replayName = replayName;
         this.replaySpeed = replaySpeed;
         this.replayElapsedMs = replayElapsedMs;
+        this.paused = paused;
+        this.waypointCount = waypointCount;
     }
 
     public boolean isReplay() {

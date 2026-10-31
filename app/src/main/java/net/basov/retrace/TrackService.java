@@ -42,14 +42,23 @@ import net.basov.retrace.core.Replay;
 import net.basov.retrace.core.Track;
 import net.basov.retrace.core.TrackMatcher;
 import net.basov.retrace.core.TrackPoint;
+import net.basov.retrace.core.Waypoint;
 
 // ----------------------------------------------------------------------
 // The recording of the current track, and the comparison
 // ----------------------------------------------------------------------
 //
 // A foreground service with a notification. It continues to record when the
-// screen is off. MainActivity starts it with ACTION_START and stops it with
-// ACTION_STOP. The stop button of the notification also sends ACTION_STOP.
+// screen is off. MainActivity starts it with ACTION_START.
+//
+// ACTION_PAUSE is the Stop button of a trip with the GPS. The service ends
+// the current track segment and stops the fixes, but the trip stays open.
+// ACTION_CONTINUE gets the fixes again, and the next point starts a new
+// track segment. ACTION_STOP is the End button: it saves the track. The
+// notification has the same buttons. A replay has no pause: Stop ends it.
+//
+// ACTION_WAYPOINT adds a waypoint at the last position, with the next
+// automatic name. It goes into the log file at once. See Waypoint.
 //
 // With EXTRA_REFERENCE, the service compares the trip with that track. With
 // EXTRA_REVERSED too, the trip follows that track in the opposite direction.
@@ -96,6 +105,9 @@ public final class TrackService extends Service {
 
     static final String ACTION_START = "net.basov.retrace.action.START";
     static final String ACTION_STOP = "net.basov.retrace.action.STOP";
+    static final String ACTION_PAUSE = "net.basov.retrace.action.PAUSE";
+    static final String ACTION_CONTINUE = "net.basov.retrace.action.CONTINUE";
+    static final String ACTION_WAYPOINT = "net.basov.retrace.action.WAYPOINT";
     static final String ACTION_SELECT = "net.basov.retrace.action.SELECT";
     static final String EXTRA_PROFILE = "net.basov.retrace.extra.PROFILE";
     static final String EXTRA_REFERENCE = "net.basov.retrace.extra.REFERENCE";
@@ -138,6 +150,10 @@ public final class TrackService extends Service {
     // The points of the current track, for the map of the trip screen. The
     // worker thread adds them. The activity reads a copy.
     private static final List<TrackPoint> POINTS = new ArrayList<>();
+    // The index in POINTS of the first point of each track segment after the
+    // first one, and the waypoints. The lock of POINTS guards them too.
+    private static final List<Integer> SEGMENT_STARTS = new ArrayList<>();
+    private static final List<Waypoint> WAYPOINTS = new ArrayList<>();
 
     // The last finished trip that can join its way, or null.
     private static final AtomicReference<WayUpdater.Offer> WAY_OFFER = new AtomicReference<>();
@@ -165,6 +181,18 @@ public final class TrackService extends Service {
         }
     }
 
+    static List<Integer> segmentStarts() {
+        synchronized (POINTS) {
+            return new ArrayList<>(SEGMENT_STARTS);
+        }
+    }
+
+    static List<Waypoint> waypoints() {
+        synchronized (POINTS) {
+            return new ArrayList<>(WAYPOINTS);
+        }
+    }
+
     private HandlerThread thread;
     private Handler worker;
     private LocationManager locationManager;
@@ -187,6 +215,14 @@ public final class TrackService extends Service {
     private int lastFixSource = FixSource.NONE;
     private long lastNotificationMs;
     private int error = RecordingSnapshot.ERROR_NONE;
+    // The pause after Stop. The first point after Continue starts a new
+    // track segment.
+    private boolean paused;
+    private boolean newSegmentPending;
+    // The last smoothed fix, also one that the filter did not keep. A
+    // waypoint goes there.
+    private TrackPoint lastPosition;
+    private int waypointCount;
 
     private String referencePath;
     // True if the trip follows the reference track in the opposite direction.
@@ -261,7 +297,7 @@ public final class TrackService extends Service {
                     reference, reference == null ? RecordingSnapshot.SELECTION_SEARCH
                             : RecordingSnapshot.SELECTION_MANUAL, reference != null && reversed,
                     null, MatchResult.UNKNOWN,
-                    null, null, 0, 0);
+                    null, null, 0, 0, false, 0);
             if (!enterForeground(notification(first))) {
                 snapshot = withError(RecordingSnapshot.ERROR_NO_PERMISSION);
                 stopSelf();
@@ -270,6 +306,12 @@ public final class TrackService extends Service {
             worker.post(() -> begin(p, start, reference, reversed));
         } else if (ACTION_STOP.equals(action)) {
             worker.post(() -> finish(true));
+        } else if (ACTION_PAUSE.equals(action)) {
+            worker.post(() -> duringTrip(this::pause));
+        } else if (ACTION_CONTINUE.equals(action)) {
+            worker.post(() -> duringTrip(this::resume));
+        } else if (ACTION_WAYPOINT.equals(action)) {
+            worker.post(() -> duringTrip(this::addWaypoint));
         } else if (ACTION_REPLAY.equals(action)) {
             final String path = intent.getStringExtra(EXTRA_REPLAY);
             final String reference = intent.getStringExtra(EXTRA_REFERENCE);
@@ -396,6 +438,10 @@ public final class TrackService extends Service {
         lastAccuracyM = Double.NaN;
         lastFixTimeMs = TrackPoint.NO_TIME;
         lastFixSource = FixSource.NONE;
+        paused = false;
+        newSegmentPending = false;
+        lastPosition = null;
+        waypointCount = 0;
         error = RecordingSnapshot.ERROR_NONE;
         replaySpeed = 0;
         replayPath = null;
@@ -405,6 +451,8 @@ public final class TrackService extends Service {
         replayElapsedMs = 0;
         synchronized (POINTS) {
             POINTS.clear();
+            SEGMENT_STARTS.clear();
+            WAYPOINTS.clear();
         }
         resetComparison(p);
     }
@@ -552,7 +600,7 @@ public final class TrackService extends Service {
     // into the snapshot only, thus the screen still shows a working source.
     // A replay does not come here, because a saved track is already smooth.
     private void onFix(Location location) {
-        if (!recording) {
+        if (!recording || paused) {
             return;
         }
         long now = SystemClock.elapsedRealtime();
@@ -585,6 +633,7 @@ public final class TrackService extends Service {
             publish();
             return;
         }
+        lastPosition = smoothed;
         onPoint(smoothed);
     }
 
@@ -597,8 +646,14 @@ public final class TrackService extends Service {
 
         boolean finishNow = false;
         if (filter.accept(fix)) {
+            boolean segmentStart = newSegmentPending && filter.count() > 1;
+            newSegmentPending = false;
             if (live) {
                 try {
+                    if (segmentStart) {
+                        log.write(PointLog.segmentLine());
+                        log.write('\n');
+                    }
                     log.write(PointLog.line(fix));
                     log.write('\n');
                     log.flush();
@@ -608,6 +663,9 @@ public final class TrackService extends Service {
                 }
             }
             synchronized (POINTS) {
+                if (segmentStart) {
+                    SEGMENT_STARTS.add(POINTS.size());
+                }
                 POINTS.add(fix);
             }
             finishNow = compare(fix);
@@ -695,20 +753,100 @@ public final class TrackService extends Service {
         return false;
     }
 
+    // Worker thread. Stop of a trip with the GPS: the current track segment
+    // ends, and the fixes stop. The trip stays open. A replay ends at once.
+    private void pause() {
+        if (!recording || paused) {
+            return;
+        }
+        if (replaySpeed > 0) {
+            finish(true);
+            return;
+        }
+        stopFixes();
+        paused = true;
+        newSegmentPending = true;
+        filter.newSegment();
+        // The new track segment can start far away. The old estimate of the
+        // speed must not pull its first fixes.
+        fixSmoother = new FixSmoother(profile);
+        lastFixSource = FixSource.NONE;
+        publishAndNotify();
+    }
+
+    // Worker thread. Continue after Stop: the fixes come again.
+    private void resume() {
+        if (!recording || !paused) {
+            return;
+        }
+        paused = false;
+        int result = requestFixes();
+        if (result != RecordingSnapshot.ERROR_NONE) {
+            stopWithError(result);
+            return;
+        }
+        publishAndNotify();
+    }
+
+    // Worker thread. A waypoint at the last position. Before the first fix,
+    // the trip has no position, and the push does nothing. The time of the
+    // waypoint is the time of that position.
+    private void addWaypoint() {
+        if (!recording || replaySpeed > 0 || lastPosition == null) {
+            return;
+        }
+        Waypoint w = Waypoint.at(lastPosition, Waypoint.autoName(waypointCount + 1));
+        try {
+            log.write(PointLog.waypointLine(w));
+            log.write('\n');
+            log.flush();
+        } catch (IOException e) {
+            stopWithError(RecordingSnapshot.ERROR_STORAGE);
+            return;
+        }
+        waypointCount++;
+        synchronized (POINTS) {
+            WAYPOINTS.add(w);
+        }
+        publishAndNotify();
+    }
+
+    // Worker thread. A button of an old notification can start the service
+    // with no trip. The service then stops again.
+    private void duringTrip(Runnable work) {
+        if (recording) {
+            work.run();
+        } else {
+            finish(true);
+        }
+    }
+
+    private void publishAndNotify() {
+        publish();
+        lastNotificationMs = System.currentTimeMillis();
+        notificationManager.notify(NOTIFICATION_ID, notification(snapshot));
+    }
+
+    // Worker thread. Stops the location updates of a trip with the GPS.
+    private void stopFixes() {
+        locationManager.removeUpdates(listener);
+        if (Build.VERSION.SDK_INT >= 31 && fused != null) {
+            FusedFixes.stop(locationManager, fused);
+        }
+        fused = null;
+    }
+
     // Worker thread. Stops the GPS updates and saves the track. The last
     // snapshot keeps the comparison, thus the trip screen shows the result.
     private void finish(boolean stopService) {
         boolean saved = false;
         if (recording) {
             recording = false;
+            paused = false;
             if (replaySpeed > 0) {
                 worker.removeCallbacks(replayStep);
             } else {
-                locationManager.removeUpdates(listener);
-                if (Build.VERSION.SDK_INT >= 31 && fused != null) {
-                    FusedFixes.stop(locationManager, fused);
-                }
-                fused = null;
+                stopFixes();
                 closeLog();
                 try {
                     File savedFile = store.saveLog();
@@ -726,7 +864,8 @@ public final class TrackService extends Service {
                 filter.distanceM(), lastAccuracyM, lastFixTimeMs, lastFixSource,
                 last.savedCount + (saved ? 1 : 0), error, referencePath, selection,
                 referenceReversed, match,
-                smoothedDeltaMs, replayPath, replayName, replaySpeed, replayElapsedMs);
+                smoothedDeltaMs, replayPath, replayName, replaySpeed, replayElapsedMs, false,
+                waypointCount);
         if (stopService) {
             leaveForeground();
             stopSelf();
@@ -770,16 +909,15 @@ public final class TrackService extends Service {
                 filter.distanceM(), lastAccuracyM, lastFixTimeMs, lastFixSource,
                 snapshot.savedCount, error,
                 referencePath, selection, referenceReversed, match, smoothedDeltaMs, replayPath,
-                replayName, replaySpeed,
-                replayElapsedMs);
+                replayName, replaySpeed, replayElapsedMs, paused, waypointCount);
     }
 
     private static RecordingSnapshot withError(int code) {
         RecordingSnapshot s = snapshot;
         return new RecordingSnapshot(false, s.profile, s.startTimeMs, 0, 0, Double.NaN,
-                TrackPoint.NO_TIME, FixSource.NONE, s.savedCount, code, null, RecordingSnapshot.SELECTION_OFF, false,
-                null,
-                MatchResult.UNKNOWN, null, null, 0, 0);
+                TrackPoint.NO_TIME, FixSource.NONE, s.savedCount, code, null,
+                RecordingSnapshot.SELECTION_OFF, false, null, MatchResult.UNKNOWN, null, null, 0, 0,
+                false, 0);
     }
 
     @SuppressWarnings("deprecation")
@@ -838,22 +976,29 @@ public final class TrackService extends Service {
         PendingIntent openIntent = PendingIntent.getActivity(this, 0, open,
                 PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
 
-        Intent stop = new Intent(this, TrackService.class).setAction(ACTION_STOP);
-        PendingIntent stopIntent = PendingIntent.getService(this, 1, stop,
-                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
-        Notification.Action stopAction = new Notification.Action.Builder(
-                Icon.createWithResource(this, R.drawable.ic_stop),
-                getString(R.string.stop_recording), stopIntent).build();
+        String text;
+        if (s.paused) {
+            text = getString(R.string.trip_paused);
+        } else if (s.points == 0 && s.match == null) {
+            text = getString(R.string.waiting_for_gps);
+        } else {
+            text = TripText.notification(this, s);
+        }
 
-        String text = s.points == 0 && s.match == null
-                ? getString(R.string.waiting_for_gps) : TripText.notification(this, s);
-
-        return builder()
+        // During the trip: Stop and Waypoint. After Stop: Continue and End.
+        Notification.Builder b = builder();
+        if (s.paused) {
+            b.addAction(action(ACTION_CONTINUE, 3, R.drawable.ic_continue, R.string.trip_continue));
+            b.addAction(action(ACTION_STOP, 1, R.drawable.ic_stop, R.string.trip_end));
+        } else {
+            b.addAction(action(ACTION_PAUSE, 2, R.drawable.ic_stop, R.string.stop_recording));
+            b.addAction(action(ACTION_WAYPOINT, 4, R.drawable.ic_waypoint, R.string.waypoint));
+        }
+        return b
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(getString(R.string.notification_title, Labels.profile(this, s.profile)))
                 .setContentText(text)
                 .setContentIntent(openIntent)
-                .addAction(stopAction)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setShowWhen(true)
@@ -861,6 +1006,16 @@ public final class TrackService extends Service {
                 .setUsesChronometer(true)
                 .setCategory(Notification.CATEGORY_SERVICE)
                 .build();
+    }
+
+    // A button of the notification. Each action has its own request code,
+    // thus Android keeps the intents apart.
+    private Notification.Action action(String name, int requestCode, int icon, int label) {
+        Intent intent = new Intent(this, TrackService.class).setAction(name);
+        PendingIntent pending = PendingIntent.getService(this, requestCode, intent,
+                PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+        return new Notification.Action.Builder(Icon.createWithResource(this, icon),
+                getString(label), pending).build();
     }
 
     @SuppressWarnings("deprecation")
