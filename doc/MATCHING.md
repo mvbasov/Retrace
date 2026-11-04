@@ -20,6 +20,7 @@ The plan in [PLAN.md](PLAN.md) gives the rules in short form, in section 5.4. Th
 | `DeltaSmoother` | `core` | Smooths the time difference for the screen. |
 | `Geo` | `core` | The distance between two positions on the Earth. |
 | `ReferenceSelector` | `core` | During the automatic selection, it runs one `TrackMatcher` for each candidate. See section 5.5 of the plan. |
+| `RouteAgreement` | `core` | Tells if the trip differs from a candidate or from the automatic reference track. Then the comparison stops. |
 | `Profile` | `core` | The limits of walking, running, cycling and driving. See section 11. |
 
 The package `core` imports no Android package. Thus the tests run all of this math on the JVM.
@@ -516,5 +517,6 @@ The tests of this math are in `test/java/net/basov/retrace/core/`:
 - `TrackMatcherTest` runs the matcher on invented tracks. The routes are a straight line, a route with corners, a route out and back, a loop and a figure eight. Other tests have a join, a wait at the start, a GPS gap and a route with no times.
 - `DeltaSmootherTest` checks the smoothing.
 - `ReferenceSelectorTest` checks the automatic selection with many matchers.
+- `RouteAgreementTest` checks that a repeat of a route keeps its comparison, and that a different route stops it.
 
 `TestTracks` makes the invented tracks. It adds noise with a slow drift and a fast part, the same as a real GPS receiver. The tests use no real track.

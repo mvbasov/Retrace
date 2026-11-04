@@ -38,6 +38,7 @@ import net.basov.retrace.core.Profile;
 import net.basov.retrace.core.RecordFilter;
 import net.basov.retrace.core.RecordingSnapshot;
 import net.basov.retrace.core.ReferenceSelector;
+import net.basov.retrace.core.RouteAgreement;
 import net.basov.retrace.core.Replay;
 import net.basov.retrace.core.Track;
 import net.basov.retrace.core.TrackMatcher;
@@ -67,7 +68,8 @@ import net.basov.retrace.core.Waypoint;
 // Without it, ReferenceSelector selects the reference track. At the first
 // point, the service reads the saved tracks of the profile, and keeps the
 // tracks with a start near that point. If no track starts there, the trip
-// has no comparison.
+// has no comparison. If the trip later goes away from the automatic
+// reference track, the comparison stops. See RouteAgreement.
 //
 // From Android 12, the service gets the fused location of Android. See
 // FusedFixes. A device with no fused provider, and an older Android, use
@@ -235,6 +237,9 @@ public final class TrackService extends Service {
     private ReferenceSelector selector;
     private TrackMatcher matcher;
     private DeltaSmoother smoother;
+    // The check of an automatic reference track after the selection, or
+    // null. See RouteAgreement.
+    private RouteAgreement agreement;
     private MatchResult match;
     private long smoothedDeltaMs = MatchResult.UNKNOWN;
     private boolean finishSignaled;
@@ -521,6 +526,7 @@ public final class TrackService extends Service {
         selection = RecordingSnapshot.SELECTION_OFF;
         selector = null;
         matcher = null;
+        agreement = null;
         match = null;
         smoother = DeltaSmoother.forProfile(p);
         smoothedDeltaMs = MatchResult.UNKNOWN;
@@ -704,7 +710,22 @@ public final class TrackService extends Service {
         if (matcher == null) {
             return false;
         }
-        return follow(fix, matcher.update(fix));
+        MatchResult result = matcher.update(fix);
+        if (agreement != null) {
+            agreement.add(fix, result);
+            if (agreement.differs()) {
+                stopDifferentComparison();
+                return false;
+            }
+        }
+        return follow(fix, result);
+    }
+
+    // Worker thread. The trip goes away from its automatic reference track.
+    // The comparison stops, and the trip continues as a new route.
+    private void stopDifferentComparison() {
+        resetComparison(profile);
+        selection = RecordingSnapshot.SELECTION_NOT_FOUND;
     }
 
     // Worker thread. The temporary reference track can change at each point.
@@ -732,6 +753,7 @@ public final class TrackService extends Service {
         MatchResult result = selector.currentResult();
         if (state == ReferenceSelector.State.SELECTED) {
             matcher = selector.selectedMatcher();
+            agreement = selector.selectedAgreement();
             selector = null;
             selection = RecordingSnapshot.SELECTION_AUTOMATIC;
         }

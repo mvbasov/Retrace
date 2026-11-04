@@ -181,8 +181,14 @@ Automatic selection:
    - Then the same direction wins over the opposite direction.
    - Then the newest track wins, and the trip races the last trip on that route.
 7. If no candidate is valid after three decision distances, Retrace records a new route with no comparison.
+8. `RouteAgreement` checks each candidate and the selected reference track. The trip and a route differ in two cases:
+   - The trip is 4 off-route limits off the route in all, and more off the route than on it. For walking, this is 100 m.
+   - The trip comes to the finish with less than half of the route on the route.
+9. A candidate that differs is out of the selection. When all candidates differ, Retrace records a new route at once. When the automatic reference track differs after the selection, the comparison stops. The trip screen then tells that no saved track agrees with the trip.
 
-Limit: two routes with the same first part. The selection can come before the routes go apart. Then the newest track wins, also if the trip later follows the other route. A manual selection corrects this.
+Limit: two routes with the same first part. The selection can come before the routes go apart. Then the comparison stops after the trip leaves the selected route, also if the trip follows the other route. A manual selection then gives the other route. A reference track of a manual selection never stops.
+
+Example: a short loop and a long route with the same start and the same first 40 m. The long trip selects the loop after some meters, because the decision distance of a short route is short. The comparison stops after about 100 m off the loop. A trip on the loop comes back to its start. That place is the finish of the long route in the opposite direction. Without the coverage rule, the loop finishes the long route after 90 m.
 
 Manual selection:
 

@@ -75,14 +75,17 @@ public final class ReferenceSelectorTest {
         check("east: track", "east", r.selected);
     }
 
-    // No saved track goes south. After three decision distances, the trip
-    // has no reference track.
+    // No saved track goes south. Each candidate differs from the trip after
+    // LOST_FACTOR off-route limits off its route. Then the trip has no
+    // reference track, before three decision distances.
     private static void aNewRouteGivesNoReference() {
         Result r = run(trip(SOUTH, 103, 0));
         check("south: state", ReferenceSelector.State.NONE, r.state);
         check("south: no track", null, r.selected);
-        near("south: give up place", ReferenceSelector.GIVE_UP_FACTOR * r.decisionM,
-                r.decidedAtM, 30);
+        double lost = RouteAgreement.LOST_FACTOR * Profile.WALKING.offRouteM;
+        check("south: after the lost distance", true, r.decidedAtM >= lost);
+        check("south: before the give up", true,
+                r.decidedAtM < ReferenceSelector.GIVE_UP_FACTOR * r.decisionM);
     }
 
     private static void noCandidateGivesNoReference() {

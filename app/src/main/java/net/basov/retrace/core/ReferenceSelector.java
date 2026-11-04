@@ -37,6 +37,11 @@ import java.util.List;
 // If no candidate is valid after GIVE_UP_FACTOR times the decision distance,
 // the trip has no reference track. Retrace then records a new route.
 //
+// A candidate that differs from the trip is out of the selection. See
+// RouteAgreement. It does not become the temporary reference track again.
+// When all candidates differ, the selection stops at once. After the
+// selection, TrackService continues the check with selectedAgreement().
+//
 // The matcher of the selected candidate has all the points of the trip.
 // Thus the comparison continues with no gap after the selection.
 //
@@ -97,6 +102,7 @@ public final class ReferenceSelector {
         final TrackMatcher matcher;
         final double routeDistanceM;
         MatchResult last;
+        final RouteAgreement agreement;
         double crossSum;
         int crossCount;
         double firstAlong = Double.NaN;
@@ -105,6 +111,7 @@ public final class ReferenceSelector {
             this.candidate = candidate;
             this.matcher = new TrackMatcher(candidate.track, profile);
             this.routeDistanceM = routeDistanceM;
+            this.agreement = new RouteAgreement(profile);
         }
 
         boolean onRoute() {
@@ -213,6 +220,12 @@ public final class ReferenceSelector {
         return state == State.SELECTED ? current.matcher : null;
     }
 
+    // The check of the selected candidate, with the trip so far. Null before
+    // the selection.
+    public RouteAgreement selectedAgreement() {
+        return state == State.SELECTED ? current.agreement : null;
+    }
+
     double decisionM() {
         return decisionM;
     }
@@ -232,8 +245,14 @@ public final class ReferenceSelector {
         lastFix = fix;
 
         boolean decide = false;
+        boolean anyAgrees = false;
         for (Trial t : trials) {
             t.last = t.matcher.update(fix);
+            t.agreement.add(fix, t.last);
+            if (t.agreement.differs()) {
+                continue;
+            }
+            anyAgrees = true;
             if (t.last.state == TrackMatcher.State.ON_ROUTE) {
                 if (Double.isNaN(t.firstAlong)) {
                     t.firstAlong = t.last.alongM;
@@ -246,6 +265,11 @@ public final class ReferenceSelector {
             }
         }
 
+        if (!anyAgrees) {
+            state = State.NONE;
+            current = null;
+            return state;
+        }
         Trial best = best();
         if (decide || travelledM >= GIVE_UP_FACTOR * decisionM) {
             if (best == null) {
@@ -268,6 +292,9 @@ public final class ReferenceSelector {
         List<Trial> valid = new ArrayList<>();
         double bestScore = Double.POSITIVE_INFINITY;
         for (Trial t : trials) {
+            if (t.agreement.differs()) {
+                continue;
+            }
             if (t.onRoute() && t.progress() >= MIN_PROGRESS * Math.min(decisionM, travelledM)
                     && t.progress() > 0) {
                 valid.add(t);
@@ -296,11 +323,15 @@ public final class ReferenceSelector {
         });
     }
 
-    // The candidate with the nearest route. Of two equal distances, the
-    // first candidate wins. nearRoute() puts the same direction first.
+    // The candidate with the nearest route, of the candidates that do not
+    // differ. Of two equal distances, the first candidate wins. nearRoute()
+    // puts the same direction first.
     private Trial nearestRoute() {
         Trial nearest = null;
         for (Trial t : trials) {
+            if (t.agreement.differs()) {
+                continue;
+            }
             if (nearest == null || t.routeDistanceM < nearest.routeDistanceM) {
                 nearest = t;
             }
