@@ -46,7 +46,8 @@ public final class RecordingSnapshot {
     public static final RecordingSnapshot IDLE =
             new RecordingSnapshot(false, null, 0, 0, 0, Double.NaN, TrackPoint.NO_TIME,
                     FixSource.NONE, 0, ERROR_NONE,
-                    null, SELECTION_OFF, false, null, MatchResult.UNKNOWN, null, null, 0, 0, false, 0);
+                    null, SELECTION_OFF, false, null, MatchResult.UNKNOWN, null, null, 0, 0, false, 0,
+                    false, null);
 
     public final boolean recording;
     public final Profile profile;
@@ -106,12 +107,22 @@ public final class RecordingSnapshot {
     // The count of the waypoints of the trip.
     public final int waypointCount;
 
+    // True while the service gets fixes. During the pause, the user can turn
+    // the fixes off and on again. A replay has false.
+    public final boolean fixesOn;
+
+    // The last smoothed fix of a trip with the GPS, also during the pause.
+    // The fixes of the pause do not go into the track, but the trip screen
+    // shows this position. Null before the first fix.
+    public final TrackPoint position;
+
     public RecordingSnapshot(boolean recording, Profile profile, long startTimeMs, int points,
                              double distanceM, double lastAccuracyM, long lastFixTimeMs,
                              int lastFixSource, int savedCount, int error, String referencePath, int selection,
                              boolean referenceReversed, MatchResult match, long smoothedDeltaMs, String replayPath,
                              String replayName, int replaySpeed, long replayElapsedMs,
-                             boolean paused, int waypointCount) {
+                             boolean paused, int waypointCount, boolean fixesOn,
+                             TrackPoint position) {
         this.recording = recording;
         this.profile = profile;
         this.startTimeMs = startTimeMs;
@@ -133,6 +144,8 @@ public final class RecordingSnapshot {
         this.replayElapsedMs = replayElapsedMs;
         this.paused = paused;
         this.waypointCount = waypointCount;
+        this.fixesOn = fixesOn;
+        this.position = position;
     }
 
     public boolean isReplay() {

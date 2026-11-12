@@ -54,10 +54,17 @@ import net.basov.retrace.core.Waypoint;
 //
 // ACTION_PAUSE is the Stop button of a trip with the GPS. The service ends
 // the current track segment, but the trip stays open. The GPS stays on, thus
-// it keeps its fix for Continue. During the pause, the fixes go to the dot
-// and to the position of a waypoint, but not into the track. ACTION_CONTINUE
-// starts a new track segment at the next point. ACTION_STOP is the End
-// button: it stops the GPS and saves the track. The
+// it keeps its fix for Continue. During the pause, the fixes do not go into
+// the track. They go to the dot, to the position on the map and to the
+// position of a waypoint. ACTION_CONTINUE starts a new track segment at the next
+// point. ACTION_STOP is the End button: it stops the GPS and saves the
+// track.
+//
+// The fused provider turns the GPS receiver off when the device does not
+// move. Thus, during the pause of a trip with the fused provider, the
+// service also requests the fixes of the GPS directly. ACTION_PAUSE_FIXES
+// turns all fixes of the pause off, and on again. Each pause starts with
+// the fixes on. The
 // notification has the same buttons. A replay has no pause: Stop ends it.
 //
 // ACTION_WAYPOINT adds a waypoint at the last position, with the next
@@ -112,6 +119,7 @@ public final class TrackService extends Service {
     static final String ACTION_PAUSE = "net.basov.retrace.action.PAUSE";
     static final String ACTION_CONTINUE = "net.basov.retrace.action.CONTINUE";
     static final String ACTION_WAYPOINT = "net.basov.retrace.action.WAYPOINT";
+    static final String ACTION_PAUSE_FIXES = "net.basov.retrace.action.PAUSE_FIXES";
     static final String ACTION_SELECT = "net.basov.retrace.action.SELECT";
     static final String EXTRA_PROFILE = "net.basov.retrace.extra.PROFILE";
     static final String EXTRA_REFERENCE = "net.basov.retrace.extra.REFERENCE";
@@ -227,6 +235,10 @@ public final class TrackService extends Service {
     // waypoint goes there.
     private TrackPoint lastPosition;
     private int waypointCount;
+    // True while the service gets fixes.
+    private boolean fixesOn;
+    // True while the extra GPS request of a pause is on.
+    private boolean pauseGpsOn;
 
     private String referencePath;
     // True if the trip follows the reference track in the opposite direction.
@@ -253,7 +265,14 @@ public final class TrackService extends Service {
     private long replayElapsedMs;
     private final Runnable replayStep = this::replayNext;
 
-    private final LocationListener listener = new LocationListener() {
+    private final LocationListener listener = new PassFixes();
+
+    // The extra GPS request of a pause has its own listener. Thus Continue
+    // can remove it and keep the fused request.
+    private final LocationListener pauseGpsListener = new PassFixes();
+
+    // Gives each fix to onFix() on the worker thread.
+    private final class PassFixes implements LocationListener {
         @Override
         public void onLocationChanged(Location location) {
             onFix(location);
@@ -272,7 +291,7 @@ public final class TrackService extends Service {
         @Override
         public void onProviderDisabled(String provider) {
         }
-    };
+    }
 
     @Override
     public void onCreate() {
@@ -304,7 +323,7 @@ public final class TrackService extends Service {
                     reference, reference == null ? RecordingSnapshot.SELECTION_SEARCH
                             : RecordingSnapshot.SELECTION_MANUAL, reference != null && reversed,
                     null, MatchResult.UNKNOWN,
-                    null, null, 0, 0, false, 0);
+                    null, null, 0, 0, false, 0, false, null);
             if (!enterForeground(notification(first))) {
                 snapshot = withError(RecordingSnapshot.ERROR_NO_PERMISSION);
                 stopSelf();
@@ -319,6 +338,8 @@ public final class TrackService extends Service {
             worker.post(() -> duringTrip(this::resume));
         } else if (ACTION_WAYPOINT.equals(action)) {
             worker.post(() -> duringTrip(this::addWaypoint));
+        } else if (ACTION_PAUSE_FIXES.equals(action)) {
+            worker.post(() -> duringTrip(this::togglePauseFixes));
         } else if (ACTION_REPLAY.equals(action)) {
             final String path = intent.getStringExtra(EXTRA_REPLAY);
             final String reference = intent.getStringExtra(EXTRA_REFERENCE);
@@ -400,6 +421,7 @@ public final class TrackService extends Service {
             stopWithError(result);
             return;
         }
+        fixesOn = true;
         publish();
     }
 
@@ -448,6 +470,7 @@ public final class TrackService extends Service {
         paused = false;
         newSegmentPending = false;
         lastPosition = null;
+        fixesOn = false;
         waypointCount = 0;
         error = RecordingSnapshot.ERROR_NONE;
         replaySpeed = 0;
@@ -799,17 +822,70 @@ public final class TrackService extends Service {
         paused = true;
         newSegmentPending = true;
         filter.newSegment();
+        startPauseGps();
         publishAndNotify();
     }
 
     // Worker thread. Continue after Stop: the next point starts a new track
-    // segment.
+    // segment. If the user turned the fixes off, they start again.
     private void resume() {
         if (!recording || !paused) {
             return;
         }
+        stopPauseGps();
+        if (!fixesOn) {
+            int result = requestFixes();
+            if (result != RecordingSnapshot.ERROR_NONE) {
+                stopWithError(result);
+                return;
+            }
+            fixesOn = true;
+        }
         paused = false;
         publishAndNotify();
+    }
+
+    // Worker thread. The button of the pause that turns the fixes off and on.
+    private void togglePauseFixes() {
+        if (!paused) {
+            return;
+        }
+        if (fixesOn) {
+            stopFixes();
+            fixesOn = false;
+            lastFixSource = FixSource.NONE;
+        } else {
+            int result = requestFixes();
+            if (result != RecordingSnapshot.ERROR_NONE) {
+                stopWithError(result);
+                return;
+            }
+            fixesOn = true;
+            startPauseGps();
+        }
+        publishAndNotify();
+    }
+
+    // Worker thread. With the fused provider, the pause also requests the
+    // GPS. With the GPS and the network, the GPS is on already.
+    private void startPauseGps() {
+        if (fused == null || pauseGpsOn) {
+            return;
+        }
+        try {
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, FIX_INTERVAL_MS,
+                    0f, pauseGpsListener, thread.getLooper());
+            pauseGpsOn = true;
+        } catch (SecurityException | IllegalArgumentException e) {
+            // The fused fixes continue alone.
+        }
+    }
+
+    private void stopPauseGps() {
+        if (pauseGpsOn) {
+            locationManager.removeUpdates(pauseGpsListener);
+            pauseGpsOn = false;
+        }
     }
 
     // Worker thread. A waypoint at the last position. Before the first fix,
@@ -853,6 +929,7 @@ public final class TrackService extends Service {
 
     // Worker thread. Stops the location updates of a trip with the GPS.
     private void stopFixes() {
+        stopPauseGps();
         locationManager.removeUpdates(listener);
         if (Build.VERSION.SDK_INT >= 31 && fused != null) {
             FusedFixes.stop(locationManager, fused);
@@ -867,6 +944,7 @@ public final class TrackService extends Service {
         if (recording) {
             recording = false;
             paused = false;
+            fixesOn = false;
             if (replaySpeed > 0) {
                 worker.removeCallbacks(replayStep);
             } else {
@@ -889,7 +967,7 @@ public final class TrackService extends Service {
                 last.savedCount + (saved ? 1 : 0), error, referencePath, selection,
                 referenceReversed, match,
                 smoothedDeltaMs, replayPath, replayName, replaySpeed, replayElapsedMs, false,
-                waypointCount);
+                waypointCount, false, lastPosition);
         if (stopService) {
             leaveForeground();
             stopSelf();
@@ -933,7 +1011,8 @@ public final class TrackService extends Service {
                 filter.distanceM(), lastAccuracyM, lastFixTimeMs, lastFixSource,
                 snapshot.savedCount, error,
                 referencePath, selection, referenceReversed, match, smoothedDeltaMs, replayPath,
-                replayName, replaySpeed, replayElapsedMs, paused, waypointCount);
+                replayName, replaySpeed, replayElapsedMs, paused, waypointCount, fixesOn,
+                lastPosition);
     }
 
     private static RecordingSnapshot withError(int code) {
@@ -941,7 +1020,7 @@ public final class TrackService extends Service {
         return new RecordingSnapshot(false, s.profile, s.startTimeMs, 0, 0, Double.NaN,
                 TrackPoint.NO_TIME, FixSource.NONE, s.savedCount, code, null,
                 RecordingSnapshot.SELECTION_OFF, false, null, MatchResult.UNKNOWN, null, null, 0, 0,
-                false, 0);
+                false, 0, false, null);
     }
 
     @SuppressWarnings("deprecation")

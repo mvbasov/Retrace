@@ -65,7 +65,7 @@ public final class FixSourceTest {
         RecordingSnapshot s = new RecordingSnapshot(true, Profile.WALKING, t, 1, 0, 5, t,
                 FixSource.GPS, 0, RecordingSnapshot.ERROR_NONE, null,
                 RecordingSnapshot.SELECTION_OFF, false, null, MatchResult.UNKNOWN, null, null, 0, 0,
-                false, 0);
+                false, 0, true, null);
         check("fresh", FixSource.GPS, s.fixSource(t + 1000));
         check("old", FixSource.NONE, s.fixSource(t + FixSource.GPS_FRESH_MS + 1));
     }

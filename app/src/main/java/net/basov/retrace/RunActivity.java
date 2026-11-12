@@ -51,8 +51,10 @@ import net.basov.retrace.core.Waypoint;
 // changes the speed.
 //
 // Stop of a trip with the GPS ends the current track segment. The screen
-// then shows two buttons: Continue starts a new track segment, and End
-// saves the track. During a trip with the GPS, a small button at the bottom
+// then shows three buttons: Continue starts a new track segment, End saves
+// the track, and GPS off turns the fixes of the pause off. During the
+// pause, the position on the map follows the fixes, but the track does not
+// grow. During a trip with the GPS, a small button at the bottom
 // right of the map adds a waypoint. The map shows the waypoints.
 //
 // After the end, the screen keeps the last values. The stop button then
@@ -96,6 +98,7 @@ public final class RunActivity extends ThemedActivity {
     private Button replayButton;
     private Button followButton;
     private Button continueButton;
+    private Button pauseFixesButton;
     private Button waypointButton;
     // The count of waypoints on the map. A larger count in the snapshot
     // gives a message with the name of the new waypoint.
@@ -246,12 +249,18 @@ public final class RunActivity extends ThemedActivity {
         continueButton.setText(R.string.trip_continue);
         continueButton.setVisibility(View.GONE);
         continueButton.setOnClickListener(v -> onContinue());
+        pauseFixesButton = new Button(this);
+        pauseFixesButton.setText(R.string.trip_gps_off);
+        pauseFixesButton.setVisibility(View.GONE);
+        pauseFixesButton.setOnClickListener(v -> send(TrackService.ACTION_PAUSE_FIXES));
 
         LinearLayout bottom = new LinearLayout(this);
         bottom.setOrientation(LinearLayout.HORIZONTAL);
         bottom.addView(replayButton, new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         bottom.addView(continueButton, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        bottom.addView(pauseFixesButton, new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         bottom.addView(stopButton, new LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
@@ -382,6 +391,8 @@ public final class RunActivity extends ThemedActivity {
         stopButton.setText(!s.recording ? R.string.close
                 : s.paused ? R.string.trip_end : R.string.stop_recording);
         continueButton.setVisibility(s.recording && s.paused ? View.VISIBLE : View.GONE);
+        pauseFixesButton.setVisibility(s.recording && s.paused ? View.VISIBLE : View.GONE);
+        pauseFixesButton.setText(s.fixesOn ? R.string.trip_gps_off : R.string.trip_gps_on);
         boolean live = s.recording && !s.isReplay();
         waypointButton.setVisibility(live ? View.VISIBLE : View.GONE);
         sourceDot.setVisibility(live ? View.VISIBLE : View.GONE);
@@ -430,6 +441,9 @@ public final class RunActivity extends ThemedActivity {
                 Toast.makeText(this, getString(R.string.waypoint_added,
                         waypoints.get(waypoints.size() - 1).name), Toast.LENGTH_SHORT).show();
             }
+        }
+        if (s.paused && s.fixesOn && s.position != null) {
+            map.setPosition(s.position.latitude, s.position.longitude);
         }
         if (!fresh.isEmpty()) {
             TrackPoint last = fresh.get(fresh.size() - 1);
