@@ -51,10 +51,11 @@ import net.basov.retrace.core.Waypoint;
 // screen is off. MainActivity starts it with ACTION_START.
 //
 // ACTION_PAUSE is the Stop button of a trip with the GPS. The service ends
-// the current track segment, but the trip stays open. The GPS stays on, thus
-// it keeps its fix for Continue. During the pause, the fixes do not go into
-// the track. They go to the dot, to the position on the map and to the
-// position of a waypoint. ACTION_CONTINUE starts a new track segment at
+// the current track segment, but the trip stays open. The comparison does
+// not count the time of the pause. See TripComparison.addPause(). The GPS
+// stays on, thus it keeps its fix for Continue. During the pause, the fixes
+// do not go into the track. They go to the dot, to the position on the map
+// and to the position of a waypoint. ACTION_CONTINUE starts a new track segment at
 // the next point. ACTION_STOP is the End button: it stops the GPS and saves
 // the track.
 //
@@ -241,6 +242,9 @@ public final class TrackService extends Service {
     private boolean fixesOn;
     // True while the extra GPS request of a pause is on.
     private boolean pauseGpsOn;
+    // The clock since the boot at the start of the pause. It does not jump
+    // when the user changes the time of the device.
+    private long pauseClockMs;
 
     // The reference track, the selection and the comparison. It changes on
     // the worker thread only.
@@ -497,6 +501,7 @@ public final class TrackService extends Service {
             WAYPOINTS.clear();
         }
         comparison.reset(p);
+        comparison.clearPauses();
         comparison.setExcluded(null);
     }
 
@@ -684,6 +689,7 @@ public final class TrackService extends Service {
         // The fixes continue. FixSmoother follows them during the pause,
         // thus its estimate is current at Continue.
         paused = true;
+        pauseClockMs = SystemClock.elapsedRealtime();
         newSegmentPending = true;
         filter.newSegment();
         startPauseGps();
@@ -705,6 +711,8 @@ public final class TrackService extends Service {
             }
             fixesOn = true;
         }
+        // The comparison does not count the time of the pause.
+        comparison.addPause(SystemClock.elapsedRealtime() - pauseClockMs);
         paused = false;
         publishAndNotify();
     }

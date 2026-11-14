@@ -22,6 +22,8 @@ public final class TripComparisonTest {
     private static final int SEEDS = 10;
 
     private static final double[][] NORTH = {{0, 0}, {0, 1000}};
+    private static final double[][] NORTH_1200 = {{0, 0}, {0, 1200}};
+    private static final long PAUSE_MS = 600_000;
     private static final double[][] FAR = {{3000, 3000}, {3000, 4000}};
     // The routes of RouteAgreementTest: a short loop, and a long route with
     // the same first 40 m.
@@ -39,6 +41,10 @@ public final class TripComparisonTest {
         aSelectionAfterTheFinishGivesNoSignal();
         theReplayedTrackIsNeverItsOwnReference();
         anUnreadableTrackGivesNoComparison();
+        aPauseCountsWithNoAddPause();
+        aPauseDoesNotCountWithAddPause();
+        aSelectionKeepsThePause();
+        clearPausesStartsAgain();
 
         if (failures > 0) {
             System.out.println("TripComparisonTest: " + failures + " check(s) failed");
@@ -181,6 +187,64 @@ public final class TripComparisonTest {
         check("unreadable: no signal", false, any);
     }
 
+    // Without addPause, a stop of ten minutes is ten minutes behind the
+    // reference track at the finish. The other pause tests compare with it.
+    private static void aPauseCountsWithNoAddPause() {
+        for (long seed = 1; seed <= SEEDS; seed++) {
+            TripComparison c = comparison("ref", walk(NORTH_1200, 900 + seed, 1));
+            c.setReference("ref", false);
+            List<TrackPoint> trip = pausedTrip(1000 + seed);
+            for (TrackPoint p : trip) {
+                c.add(p);
+            }
+            near("no addPause " + seed, PAUSE_MS, finishDelta(c), 30_000);
+        }
+    }
+
+    // After Stop and Continue, the service calls addPause with the time of
+    // the pause. The difference at the finish then does not count it.
+    private static void aPauseDoesNotCountWithAddPause() {
+        for (long seed = 1; seed <= SEEDS; seed++) {
+            TripComparison c = comparison("ref", walk(NORTH_1200, 900 + seed, 1));
+            c.setReference("ref", false);
+            addWithPause(c, pausedTrip(1000 + seed));
+            near("addPause " + seed, 0, finishDelta(c), 30_000);
+        }
+    }
+
+    // A new selection gives all points again. The points after the pause
+    // must get the same shift again.
+    private static void aSelectionKeepsThePause() {
+        for (long seed = 1; seed <= SEEDS; seed++) {
+            TripComparison c = comparison("ref", walk(NORTH_1200, 900 + seed, 1));
+            c.setReference("ref", false);
+            List<TrackPoint> trip = pausedTrip(1000 + seed);
+            addWithPause(c, trip);
+            long before = finishDelta(c);
+            c.select("ref", false, false, trip);
+            near("select " + seed, before, finishDelta(c), 1000);
+        }
+    }
+
+    // A new trip has no pause of the trip before it.
+    private static void clearPausesStartsAgain() {
+        for (long seed = 1; seed <= SEEDS; seed++) {
+            TripComparison c = comparison("ref", walk(NORTH_1200, 900 + seed, 1));
+            c.setReference("ref", false);
+            addWithPause(c, pausedTrip(1000 + seed));
+            c.reset(Profile.WALKING);
+            c.clearPauses();
+            c.setReference("ref", false);
+            List<TrackPoint> trip = TestTracks.recorded(TestTracks.noisy(TestTracks.ideal(
+                    NORTH_1200, 1.4, TestTracks.START_MS + 11 * DAY_MS, 0), 1100 + seed, SIGMA),
+                    Profile.WALKING);
+            for (TrackPoint p : trip) {
+                c.add(p);
+            }
+            near("cleared " + seed, 0, finishDelta(c), 30_000);
+        }
+    }
+
     // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
@@ -202,6 +266,50 @@ public final class TripComparisonTest {
                 throw new IOException("no track " + id);
             }
             return t;
+        }
+    }
+
+    // A walk on the route of 1200 m at the speed of the reference track,
+    // with a pause of PAUSE_MS at 600 m. Each point after the pause has
+    // PAUSE_MS more.
+    private static List<TrackPoint> pausedTrip(long seed) {
+        List<TrackPoint> walked = TestTracks.recorded(TestTracks.noisy(TestTracks.ideal(
+                NORTH_1200, 1.4, TestTracks.START_MS + 10 * DAY_MS, 0), seed, SIGMA),
+                Profile.WALKING);
+        List<TrackPoint> out = new ArrayList<>();
+        boolean after = false;
+        for (TrackPoint p : walked) {
+            after |= Geo.distanceM(walked.get(0), p) >= 600;
+            out.add(after ? new TrackPoint(p.latitude, p.longitude, p.timeMs + PAUSE_MS,
+                    p.elevationM, p.accuracyM) : p);
+        }
+        return out;
+    }
+
+    // Gives the points to add(), with addPause before the first point
+    // after the pause, the same as TrackService.
+    private static void addWithPause(TripComparison c, List<TrackPoint> trip) {
+        for (int i = 0; i < trip.size(); i++) {
+            if (i > 0 && trip.get(i).timeMs - trip.get(i - 1).timeMs > PAUSE_MS / 2) {
+                c.addPause(PAUSE_MS);
+            }
+            c.add(trip.get(i));
+        }
+    }
+
+    // The difference at the finish. The trip must reach the finish.
+    private static long finishDelta(TripComparison c) {
+        if (c.match() == null || c.match().state != TrackMatcher.State.FINISHED) {
+            return Long.MIN_VALUE;
+        }
+        return c.match().deltaTimeMs;
+    }
+
+    private static void near(String name, double expected, double actual, double tolerance) {
+        if (Math.abs(expected - actual) > tolerance) {
+            failures++;
+            System.out.println("FAIL " + name + ": expected " + expected + " +- " + tolerance
+                    + ", got " + actual);
         }
     }
 

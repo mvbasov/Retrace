@@ -28,6 +28,13 @@ import java.util.List;
 //
 // A replay excludes its own track with setExcluded(), because a track
 // always agrees with itself.
+//
+// The time of a pause does not count. After Stop and Continue, TrackService
+// calls addPause() with the time of the pause. Each later point goes to the
+// matcher with its time less the sum of the pauses before it. The saved
+// points keep the real time. select() gives the points again with the same
+// shifts, thus reset() keeps the pauses. clearPauses() removes them at the
+// start of a new trip.
 public final class TripComparison {
 
     private final TrackSource source;
@@ -52,6 +59,16 @@ public final class TripComparison {
     private long smoothedDeltaMs = MatchResult.UNKNOWN;
     private boolean finishSignaled;
 
+    // The index of the first point after each pause, and the sum of the
+    // pauses up to that point, in the same sequence.
+    private final List<Integer> shiftStarts = new ArrayList<>();
+    private final List<Long> shifts = new ArrayList<>();
+    // The count of the points of the trip that add() got. It is the index of
+    // the next point in the list of TrackService. reset() does not change
+    // it, because a comparison can stop during the trip. select() and
+    // clearPauses() set it to zero, because the points then start again.
+    private int added;
+
     public TripComparison(TrackSource source) {
         this.source = source;
     }
@@ -71,6 +88,20 @@ public final class TripComparison {
         smoother = DeltaSmoother.forProfile(p);
         smoothedDeltaMs = MatchResult.UNKNOWN;
         finishSignaled = false;
+    }
+
+    // Removes the pauses. TrackService calls it at the start of a trip.
+    public void clearPauses() {
+        shiftStarts.clear();
+        shifts.clear();
+        added = 0;
+    }
+
+    // A pause of the trip. The next point that add() gets starts the shift.
+    public void addPause(long pausedMs) {
+        long total = shifts.isEmpty() ? 0 : shifts.get(shifts.size() - 1);
+        shiftStarts.add(added);
+        shifts.add(total + Math.max(0, pausedMs));
     }
 
     public void setExcluded(String id) {
@@ -104,6 +135,7 @@ public final class TripComparison {
     // again.
     public void select(String id, boolean reversed, boolean automatic, List<TrackPoint> points) {
         reset(profile);
+        added = 0;
         if (automatic) {
             selection = RecordingSnapshot.SELECTION_SEARCH;
         } else if (id != null) {
@@ -117,24 +149,36 @@ public final class TripComparison {
     // Gives the point to the matcher, or to the selector during the
     // automatic selection. Returns true at the first point of the finish.
     public boolean add(TrackPoint fix) {
+        long shift = shiftAt(added++);
+        TrackPoint p = shift == 0 || !fix.hasTime() ? fix : new TrackPoint(fix.latitude,
+                fix.longitude, fix.timeMs - shift, fix.elevationM, fix.accuracyM);
         if (selection == RecordingSnapshot.SELECTION_SEARCH) {
-            startSearch(fix);
+            startSearch(p);
         }
         if (selector != null) {
-            return compareCandidates(fix);
+            return compareCandidates(p);
         }
         if (matcher == null) {
             return false;
         }
-        MatchResult result = matcher.update(fix);
+        MatchResult result = matcher.update(p);
         if (agreement != null) {
-            agreement.add(fix, result);
+            agreement.add(p, result);
             if (agreement.differs()) {
                 stopDifferentComparison();
                 return false;
             }
         }
-        return follow(fix, result);
+        return follow(p, result);
+    }
+
+    // The sum of the pauses before the point with this index.
+    private long shiftAt(int index) {
+        long shift = 0;
+        for (int k = 0; k < shiftStarts.size() && shiftStarts.get(k) <= index; k++) {
+            shift = shifts.get(k);
+        }
+        return shift;
     }
 
     public String referenceId() {

@@ -49,17 +49,16 @@ Use only invented tracks from `TestTracks`. Do not add a real track. Check a cha
 
 | Task | Type | Size | Section |
 | --- | --- | --- | --- |
-| 7. Do not count the pause in the comparison | Feature | Medium | 5 |
 | 11. Search for a different route after the trip leaves the route | Feature | Medium | 5 |
 
 The maintainer declined task 10, a Russian translation. Do not do it.
 
 ### 3.1 The sequence
 
-Do the tasks in this sequence: 7, 11.
+Do the task that stays: 11.
 
 - After patch 58, each push compiles the Android classes. Thus a fault in an Android class shows in the test workflow of GitHub. Look at its result after each push.
-- Task 7 and task 11 change `TripComparison`. Add their tests to `TripComparisonTest`.
+- Task 11 changes `TripComparison`. Add its tests to `TripComparisonTest`.
 
 ---
 
@@ -72,73 +71,6 @@ Patches 54 to 64 did each task of this section.
 ## 5. Tasks that the maintainer approved
 
 The maintainer approved these tasks on 2026-11-14. Do not ask again. The maintainer asked for task 11 on the same day.
-
-### Task 7. Do not count the pause in the comparison
-
-**The goal.** After Stop and Continue, the difference to the reference track does not count the time of the pause. The saved points, the log file and the GPX file keep the real time. The elapsed time on the trip screen and in the notification stays the clock time.
-
-It changes `TripComparison`, which patch 63 made.
-
-**Part A: `TripComparison`.** File: `app/src/main/java/net/basov/retrace/core/TripComparison.java`.
-
-1. Add three fields:
-
-   ```java
-   // The index of the first point after each pause, and the sum of the
-   // pauses up to that point, in the same sequence.
-   private final List<Integer> shiftStarts = new ArrayList<>();
-   private final List<Long> shifts = new ArrayList<>();
-   // The count of the points that add() got since the last reset.
-   private int added;
-   ```
-
-2. In `reset(Profile p)`, set `added = 0`. Do not clear the two lists there. `select()` calls `reset()` and then gives all points again. The points after a pause must get the same shift again.
-3. Add a method `clearPauses()` that clears the two lists. `TrackService.resetTrip()` calls it at the start of each trip and each replay.
-4. Add a method `addPause(long pausedMs)`. The next point that `add()` gets starts the new shift:
-
-   ```java
-   public void addPause(long pausedMs) {
-       long total = shifts.isEmpty() ? 0 : shifts.get(shifts.size() - 1);
-       shiftStarts.add(added);
-       shifts.add(total + Math.max(0, pausedMs));
-   }
-   ```
-
-5. Add a private method `long shiftAt(int index)`. It returns the shift of the last start that is not after the index, or 0.
-6. At the start of `add(TrackPoint fix)`, make the shifted point and use it in place of `fix` in the whole method:
-
-   ```java
-   long shift = shiftAt(added++);
-   TrackPoint p = shift == 0 || !fix.hasTime() ? fix : new TrackPoint(fix.latitude,
-           fix.longitude, fix.timeMs - shift, fix.elevationM, fix.accuracyM);
-   ```
-
-   `follow()` also gets `p`. Thus `DeltaSmoother` uses the shifted time too.
-7. Update the banner comment of the class.
-
-**Part B: `TrackService`.**
-
-1. Add a field `private long pauseClockMs;`.
-2. In `pause()`, after `paused = true;`, set `pauseClockMs = SystemClock.elapsedRealtime();`.
-3. In `resume()`, before `paused = false;`, call `comparison.addPause(SystemClock.elapsedRealtime() - pauseClockMs);`.
-4. In `resetTrip()`, call `comparison.clearPauses();`.
-
-The clock since the boot does not jump when the user changes the time of the device. The fixes of a pause do not go to the comparison. Thus the index of `add()` agrees with the index of `POINTS`.
-
-**Tests.** Add these cases to `TripComparisonTest`. Use walking, 1.4 m/s, a straight route of 1200 m, 4 m noise and 10 seeds.
-
-| Case | Check |
-| --- | --- |
-| The trip has a pause of 600 s at 600 m: each later point has 600 000 ms more. No `addPause`. | The difference at the finish is about +600 s, with a tolerance of 30 s. |
-| The same trip with `addPause(600000)` before the first point after the pause. | The difference at the finish is about 0 s, with a tolerance of 30 s. |
-| The same trip with the pause, then `select()` with the same reference track. | The difference at the finish is the same as in the second case, with a tolerance of 1 s. |
-| `clearPauses()`, then a new trip with no pause. | The difference at the finish is about 0 s. |
-
-**Documents.** In section 5.1 of `doc/PLAN.md`, change "the elapsed time continues" in the paragraph of Stop. The new text: the elapsed time on the screen continues, but the comparison does not count the time of the pause. Add the same sentence to `README.md`.
-
-**Done when:** `test/run.sh` passes with the new cases.
-
----
 
 ### Task 11. Search for a different route after the trip leaves the route
 
@@ -202,7 +134,7 @@ On a long route, the rule "more off the route than on it" can stay false for a l
    The code after it then starts the search at this point. `ReferenceSelector` can join a route in the middle, thus the trip can join a different route at any place.
 7. Add a paragraph about the new search to the banner comment.
 
-If task 7 is done, `add()` already makes a shifted point. Use the original point `fix` for the distance. The time has no effect on the distance.
+`add()` makes a shifted point for the pauses. Use the original point `fix` for the distance. The time has no effect on the distance.
 
 **Part C: `TrackService` and the screen.** No change of code is necessary. The trip screen already shows the name of the new temporary reference track. Read `RunActivity` to make sure. If the screen keeps the text "No saved track agrees with this trip" after a new selection, correct that.
 
@@ -216,6 +148,8 @@ If task 7 is done, `add()` already makes a shifted point. Use the original point
 | The same trip after `select(null, false, false)`, the choice "No comparison". | The selection stays `SELECTION_OFF` to the end. |
 | The same trip with the manual reference track A. | The selection stays `SELECTION_MANUAL`, with id A, to the end. |
 | The trip starts at (0, -400) and goes north on route A. The automatic selection. | At the first point, the selection is `SELECTION_NOT_FOUND`. At the end, the reference id is A. |
+
+Add one more case for the pauses. The automatic comparison with route A stops, and the trip pauses for 600 s. Then it joins route B. The difference at the finish of B does not count the pause. `reset()` must not change the count of points in `TripComparison`. See the comment of the field `added`.
 
 Also run `RouteAgreementTest`. The case `aShortDetourOnALongRouteAgrees` must still pass. Its detour is shorter than 500 m.
 
@@ -232,8 +166,9 @@ These points are correct behavior for now. Do not change them without a request.
 - **An out-and-back route on one line.** The two directions are the same line at the start. The selection takes the opposite direction in about one trip of ten. The route and the distance are then correct, and only the times of the reference track differ.
 - **A reference track with two or more track segments.** `TrackMatcher` and `WayBuilder` use all points as one line. The step between two track segments is a straight line with the time of the pause.
 - **A waypoint with the GPS off.** During the pause with GPS off, a new waypoint goes to the last known position.
-- **The elapsed time of the notification and of the trip screen** continues during the pause. After task 7, only the comparison does not count the pause.
-- **A movement during the pause.** Task 7 removes the time of the pause, not its distance. If the user travels far during the pause, the matcher sees a large step in a short time.
+- **The elapsed time of the notification and of the trip screen** continues during the pause. Only the comparison does not count the pause.
+- **A replay of a track with a pause** counts the time of the pause. The saved track has no record of the pause. The time between two track segments has the pause and a normal step, and the replay cannot tell them apart.
+- **A movement during the pause.** The comparison removes the time of the pause, not its distance. If the user travels far during the pause, the matcher sees a large step in a short time.
 
 These parts did not get a review in depth. A later review can start here:
 
