@@ -28,7 +28,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
-import net.basov.retrace.core.DeltaSmoother;
 import net.basov.retrace.core.FixSelector;
 import net.basov.retrace.core.FixSmoother;
 import net.basov.retrace.core.FixSource;
@@ -37,12 +36,11 @@ import net.basov.retrace.core.PointLog;
 import net.basov.retrace.core.Profile;
 import net.basov.retrace.core.RecordFilter;
 import net.basov.retrace.core.RecordingSnapshot;
-import net.basov.retrace.core.ReferenceSelector;
-import net.basov.retrace.core.RouteAgreement;
 import net.basov.retrace.core.Replay;
 import net.basov.retrace.core.Track;
-import net.basov.retrace.core.TrackMatcher;
 import net.basov.retrace.core.TrackPoint;
+import net.basov.retrace.core.TrackSource;
+import net.basov.retrace.core.TripComparison;
 import net.basov.retrace.core.Waypoint;
 
 // ----------------------------------------------------------------------
@@ -72,13 +70,14 @@ import net.basov.retrace.core.Waypoint;
 // ACTION_WAYPOINT adds a waypoint at the last position, with the next
 // automatic name. It goes into the log file at once. See Waypoint.
 //
+// TripComparison holds the comparison: the reference track, the selection,
+// the matcher and the finish signal. The service gives it the saved tracks
+// of TrackStore, with the path of a file as the id of a track.
+//
 // With EXTRA_REFERENCE, the service compares the trip with that track. With
 // EXTRA_REVERSED too, the trip follows that track in the opposite direction.
-// Without it, ReferenceSelector selects the reference track. At the first
-// point, the service reads the saved tracks of the profile, and keeps the
-// tracks with a start near that point. If no track starts there, the trip
-// has no comparison. If the trip later goes away from the automatic
-// reference track, the comparison stops. See RouteAgreement.
+// Without it, the automatic selection of TripComparison selects the
+// reference track at the first point.
 //
 // From Android 12, the service gets the fused location of Android. See
 // FusedFixes. A device with no fused provider, and an older Android, use
@@ -88,12 +87,12 @@ import net.basov.retrace.core.Waypoint;
 // of the two providers records with that provider.
 //
 // FixSmoother smooths each fix and drops the GPS spikes. Each point that
-// RecordFilter accepts goes to TrackMatcher. The notification and the trip
+// RecordFilter accepts goes to TripComparison. The notification and the trip
 // screen show the result. At the finish, the device vibrates.
 // The recording continues until the user stops it.
 //
 // ACTION_SELECT changes the reference track during the trip. The service
-// then gives all the points of the trip to the new matcher again. Thus the
+// then gives all the points of the trip to TripComparison again. Thus the
 // comparison continues as if the trip started with that track. A manual
 // selection stops the automatic selection.
 //
@@ -243,21 +242,9 @@ public final class TrackService extends Service {
     // True while the extra GPS request of a pause is on.
     private boolean pauseGpsOn;
 
-    private String referencePath;
-    // True if the trip follows the reference track in the opposite direction.
-    private boolean referenceReversed;
-    // The name of the reference track if it is a way, or null.
-    private String referenceWayName;
-    private int selection = RecordingSnapshot.SELECTION_OFF;
-    private ReferenceSelector selector;
-    private TrackMatcher matcher;
-    private DeltaSmoother smoother;
-    // The check of an automatic reference track after the selection, or
-    // null. See RouteAgreement.
-    private RouteAgreement agreement;
-    private MatchResult match;
-    private long smoothedDeltaMs = MatchResult.UNKNOWN;
-    private boolean finishSignaled;
+    // The reference track, the selection and the comparison. It changes on
+    // the worker thread only.
+    private TripComparison comparison;
 
     // The replay. A speed of 0 is a trip with the GPS.
     private int replaySpeed;
@@ -274,6 +261,24 @@ public final class TrackService extends Service {
     // The extra GPS request of a pause has its own listener. Thus Continue
     // can remove it and keep the fused request.
     private final LocationListener pauseGpsListener = new PassFixes();
+
+    // The saved tracks of TrackStore for the comparison. The id of a track
+    // is the path of its file.
+    private final class StoreTracks implements TrackSource {
+        @Override
+        public List<String> near(TrackPoint fix, double limitM) {
+            List<String> ids = new ArrayList<>();
+            for (File f : store.filesNear(fix, limitM)) {
+                ids.add(f.getPath());
+            }
+            return ids;
+        }
+
+        @Override
+        public Track load(String id) throws IOException {
+            return store.load(new File(id));
+        }
+    }
 
     // Gives each fix to onFix() on the worker thread.
     private final class PassFixes implements LocationListener {
@@ -307,6 +312,7 @@ public final class TrackService extends Service {
         locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
         notificationManager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
         store = new TrackStore(this);
+        comparison = new TripComparison(new StoreTracks());
         createChannel();
     }
 
@@ -408,9 +414,9 @@ public final class TrackService extends Service {
         }
         resetTrip(p, start);
         if (reference == null) {
-            selection = RecordingSnapshot.SELECTION_SEARCH;
+            comparison.searchAutomatically();
         } else {
-            loadReference(reference, reversed);
+            comparison.setReference(reference, reversed);
         }
 
         try {
@@ -490,7 +496,8 @@ public final class TrackService extends Service {
             SEGMENT_STARTS.clear();
             WAYPOINTS.clear();
         }
-        resetComparison(p);
+        comparison.reset(p);
+        comparison.setExcluded(null);
     }
 
     // Worker thread. Returns false if Retrace cannot read the track. The
@@ -511,13 +518,16 @@ public final class TrackService extends Service {
         resetTrip(Replay.profileFor(track.profile), System.currentTimeMillis());
         replaySpeed = Math.max(1, speed);
         replayPath = path;
+        // The replayed track always agrees with itself. It is not a
+        // candidate for its own replay.
+        comparison.setExcluded(path);
         replayName = track.name;
         replayPoints = track.points;
         replaySegmentStarts = track.segmentStarts;
         if (reference != null) {
-            loadReference(reference, reversed);
+            comparison.setReference(reference, reversed);
         } else if (automatic) {
-            selection = RecordingSnapshot.SELECTION_SEARCH;
+            comparison.searchAutomatically();
         }
         recording = true;
         publish();
@@ -554,83 +564,11 @@ public final class TrackService extends Service {
                 Replay.waitMs(p, replayPoints.get(replayIndex), replaySpeed));
     }
 
-    // Worker thread. Removes the reference track and the comparison.
-    private void resetComparison(Profile p) {
-        referencePath = null;
-        referenceReversed = false;
-        referenceWayName = null;
-        selection = RecordingSnapshot.SELECTION_OFF;
-        selector = null;
-        matcher = null;
-        agreement = null;
-        match = null;
-        smoother = DeltaSmoother.forProfile(p);
-        smoothedDeltaMs = MatchResult.UNKNOWN;
-        finishSignaled = false;
-    }
-
-    // Worker thread. The manual selection. A reference track that Retrace
-    // cannot read gives a trip with no comparison. The recording itself
-    // still works. In the opposite direction, the matcher gets the reversed
-    // track.
-    private void loadReference(String path, boolean reversed) {
-        try {
-            Track reference = store.load(new File(path));
-            if (reference.points.size() >= 2) {
-                matcher = new TrackMatcher(reversed ? reference.reversed() : reference, profile);
-                referencePath = path;
-                referenceReversed = reversed;
-                referenceWayName = reference.isWay() ? reference.name : null;
-                selection = RecordingSnapshot.SELECTION_MANUAL;
-            }
-        } catch (IOException | IllegalArgumentException e) {
-            matcher = null;
-        }
-    }
-
-    // Worker thread. Starts the automatic selection at the first point. The
-    // bounds of TrackStore first drop the far tracks. Each other saved track
-    // is read and checked alone. Thus only the near tracks stay in memory.
-    // The GPS fixes wait in the queue of the worker thread during this work.
-    private void startSearch(TrackPoint first) {
-        List<ReferenceSelector.Candidate> near = new ArrayList<>();
-        for (File f : store.filesNear(first, ReferenceSelector.startLimitM(profile, first))) {
-            // The replayed track always agrees with itself. It is not a
-            // candidate for its own replay.
-            if (f.getPath().equals(replayPath)) {
-                continue;
-            }
-            try {
-                Track track = store.load(f);
-                if (ReferenceSelector.routeNear(track, profile, first)) {
-                    near.add(new ReferenceSelector.Candidate(f.getPath(), track, false));
-                    near.add(new ReferenceSelector.Candidate(f.getPath(), track.reversed(), true));
-                }
-            } catch (IOException | IllegalArgumentException e) {
-                // A file that Retrace cannot read is not a candidate.
-            }
-        }
-        if (near.isEmpty()) {
-            selection = RecordingSnapshot.SELECTION_NOT_FOUND;
-            return;
-        }
-        selector = new ReferenceSelector(near, profile, first);
-        selection = RecordingSnapshot.SELECTION_TEMPORARY;
-    }
-
     // Worker thread. A new reference track during the trip. The points of
     // the trip go to the new matcher again. A finish in these points gives
     // no vibration, because it is in the past.
     private void select(String path, boolean reversed, boolean automatic) {
-        resetComparison(profile);
-        if (automatic) {
-            selection = RecordingSnapshot.SELECTION_SEARCH;
-        } else if (path != null) {
-            loadReference(path, reversed);
-        }
-        for (TrackPoint p : pointsFrom(0)) {
-            compare(p);
-        }
+        comparison.select(path, reversed, automatic, pointsFrom(0));
         publish();
         if (replaySpeed == 0) {
             lastNotificationMs = System.currentTimeMillis();
@@ -719,7 +657,7 @@ public final class TrackService extends Service {
                 }
                 POINTS.add(fix);
             }
-            finishNow = compare(fix);
+            finishNow = comparison.add(fix);
         }
         publish();
 
@@ -731,93 +669,6 @@ public final class TrackService extends Service {
         if (finishNow) {
             vibrate();
         }
-    }
-
-    // Worker thread. Gives the point to the matcher, or to the selector
-    // during the automatic selection. Returns true at the first point of the
-    // finish.
-    private boolean compare(TrackPoint fix) {
-        if (selection == RecordingSnapshot.SELECTION_SEARCH) {
-            startSearch(fix);
-        }
-        if (selector != null) {
-            return compareCandidates(fix);
-        }
-        if (matcher == null) {
-            return false;
-        }
-        MatchResult result = matcher.update(fix);
-        if (agreement != null) {
-            agreement.add(fix, result);
-            if (agreement.differs()) {
-                stopDifferentComparison();
-                return false;
-            }
-        }
-        return follow(fix, result);
-    }
-
-    // Worker thread. The trip goes away from its automatic reference track.
-    // The comparison stops, and the trip continues as a new route.
-    private void stopDifferentComparison() {
-        resetComparison(profile);
-        selection = RecordingSnapshot.SELECTION_NOT_FOUND;
-    }
-
-    // Worker thread. The temporary reference track can change at each point.
-    // A change starts the comparison again, with the result of the matcher
-    // of the new candidate.
-    private boolean compareCandidates(TrackPoint fix) {
-        ReferenceSelector.State state = selector.update(fix);
-        if (state == ReferenceSelector.State.NONE) {
-            resetComparison(profile);
-            selection = RecordingSnapshot.SELECTION_NOT_FOUND;
-            return false;
-        }
-        String path = selector.current().id;
-        boolean reversed = selector.current().reversed;
-        if (!path.equals(referencePath) || reversed != referenceReversed) {
-            referencePath = path;
-            referenceReversed = reversed;
-            Track candidate = selector.current().track;
-            referenceWayName = candidate.isWay() ? candidate.name : null;
-            match = null;
-            smoother.reset();
-            smoothedDeltaMs = MatchResult.UNKNOWN;
-            finishSignaled = false;
-        }
-        MatchResult result = selector.currentResult();
-        if (state == ReferenceSelector.State.SELECTED) {
-            matcher = selector.selectedMatcher();
-            agreement = selector.selectedAgreement();
-            selector = null;
-            selection = RecordingSnapshot.SELECTION_AUTOMATIC;
-        }
-        return follow(fix, result);
-    }
-
-    // Worker thread. Takes one result of the matcher. Returns true at the
-    // first point of the finish.
-    private boolean follow(TrackPoint fix, MatchResult result) {
-        boolean wasStarted = match != null && match.started();
-        match = result;
-        if (match.state == TrackMatcher.State.FINISHED) {
-            // At the finish, the exact value is the result.
-            smoothedDeltaMs = match.deltaTimeMs;
-            if (!finishSignaled) {
-                finishSignaled = true;
-                return true;
-            }
-            return false;
-        }
-        if (match.started() && !wasStarted) {
-            // At the start or at a join, the difference starts again from zero.
-            smoother.reset();
-        }
-        if (match.state == TrackMatcher.State.ON_ROUTE && match.deltaTimeMs != MatchResult.UNKNOWN) {
-            smoothedDeltaMs = smoother.add(fix.timeMs, match.deltaTimeMs);
-        }
-        return false;
     }
 
     // Worker thread. Stop of a trip with the GPS: the current track segment
@@ -966,7 +817,8 @@ public final class TrackService extends Service {
                 try {
                     File savedFile = store.saveLog();
                     saved = savedFile != null;
-                    if (saved && referenceWayName != null && finishSignaled) {
+                    if (saved && comparison.referenceWayName() != null
+                            && comparison.finishSignaled()) {
                         offerWay(savedFile);
                     }
                 } catch (IOException e) {
@@ -977,9 +829,9 @@ public final class TrackService extends Service {
         RecordingSnapshot last = snapshot;
         snapshot = new RecordingSnapshot(false, profile, startTimeMs, filter.count(),
                 filter.distanceM(), lastAccuracyM, lastFixTimeMs, lastFixSource,
-                last.savedCount + (saved ? 1 : 0), error, referencePath, selection,
-                referenceReversed, match,
-                smoothedDeltaMs, replayPath, replayName, replaySpeed, replayElapsedMs, false,
+                last.savedCount + (saved ? 1 : 0), error, comparison.referenceId(),
+                comparison.selection(), comparison.referenceReversed(), comparison.match(),
+                comparison.smoothedDeltaMs(), replayPath, replayName, replaySpeed, replayElapsedMs, false,
                 waypointCount, false, lastPosition);
         if (stopService) {
             leaveForeground();
@@ -996,9 +848,9 @@ public final class TrackService extends Service {
         }
         int result = WayUpdater.QUESTION;
         if (mode == AppSettings.WAY_AUTOMATIC) {
-            result = WayUpdater.add(store, new File(referencePath), savedFile);
+            result = WayUpdater.add(store, new File(comparison.referenceId()), savedFile);
         }
-        WAY_OFFER.set(new WayUpdater.Offer(referencePath, referenceWayName,
+        WAY_OFFER.set(new WayUpdater.Offer(comparison.referenceId(), comparison.referenceWayName(),
                 savedFile.getPath(), result));
     }
 
@@ -1023,7 +875,8 @@ public final class TrackService extends Service {
         snapshot = new RecordingSnapshot(recording, profile, startTimeMs, filter.count(),
                 filter.distanceM(), lastAccuracyM, lastFixTimeMs, lastFixSource,
                 snapshot.savedCount, error,
-                referencePath, selection, referenceReversed, match, smoothedDeltaMs, replayPath,
+                comparison.referenceId(), comparison.selection(), comparison.referenceReversed(),
+                comparison.match(), comparison.smoothedDeltaMs(), replayPath,
                 replayName, replaySpeed, replayElapsedMs, paused, waypointCount, fixesOn,
                 lastPosition);
     }

@@ -72,41 +72,9 @@ Do the tasks in this sequence: 5, 7, 11.
 
 **The goal.** Move this logic to a new class `TripComparison` in `core`, with no change of behavior. Then test it on the JVM.
 
-Do it in two patches: the move first, then the tests.
+Do it in two patches: the move first, then the tests. Only patch B stays.
 
-**Patch A: the move.**
-
-1. Make the interface `app/src/main/java/net/basov/retrace/core/TrackSource.java`:
-
-   ```java
-   public interface TrackSource {
-       // The ids of the saved tracks that can be near the fix.
-       List<String> near(TrackPoint fix, double limitM);
-
-       // Reads one saved track.
-       Track load(String id) throws IOException;
-   }
-   ```
-
-2. Make `app/src/main/java/net/basov/retrace/core/TripComparison.java`. Its constructor takes a `TrackSource`.
-3. Move these fields from `TrackService` to it: `referencePath`, `referenceReversed`, `referenceWayName`, `selection`, `selector`, `matcher`, `smoother`, `agreement`, `match`, `smoothedDeltaMs` and `finishSignaled`. Add a field `profile` and a field `excludedId` for the replayed track.
-4. Move these methods with their code: `resetComparison`, `loadReference`, `startSearch`, `compare`, `stopDifferentComparison`, `compareCandidates` and `follow`. Use these public names:
-
-   | Method | Old code |
-   | --- | --- |
-   | `void reset(Profile p)` | `resetComparison(p)` |
-   | `void searchAutomatically()` | the line `selection = SELECTION_SEARCH` |
-   | `void setReference(String id, boolean reversed)` | `loadReference` |
-   | `void setExcluded(String id)` | the check of `replayPath` in `startSearch` |
-   | `boolean add(TrackPoint fix)` | `compare(fix)` |
-   | `void select(String id, boolean reversed, boolean automatic, List<TrackPoint> points)` | the first part of `select()`: the reset, the selection and the loop over the points |
-
-5. Add a public getter for each value that `publish()` and `finish()` read: the reference id, the reversed flag, the way name, the selection, the match, the smoothed difference and the finish signal.
-6. `startSearch` catches `IOException` and `IllegalArgumentException` for each track, the same as now.
-7. In `TrackService`, add the field `private TripComparison comparison;`. Make the object in `onCreate()`. Its `TrackSource` is an inner class: `near` calls `store.filesNear` and returns the paths, and `load` calls `store.load(new File(id))`.
-8. Replace each use of a moved field with a call of the new class. `resetTrip()` calls `reset(p)`. `beginReplay()` calls `setExcluded(path)` after `resetTrip()`.
-9. Do not change the sequence of the calls. Do not change a condition.
-10. Update the banner comment of `TrackService` and the table of `doc/MATCHING.md`.
+**Patch A: the move.** Patch 63 did it. `TrackService` now gives each point to `TripComparison.add()`. The source of the saved tracks is the inner class `StoreTracks`. `resetTrip()` calls `reset(p)` and then `setExcluded(null)`. `reset()` does not clear the excluded track, because `select()` calls it during a replay.
 
 **Patch B: the tests.** Make `TripComparisonTest` with a `TrackSource` that holds tracks in a map. Each case uses invented tracks and 10 seeds or more.
 
@@ -122,7 +90,7 @@ Do it in two patches: the move first, then the tests.
 | The excluded track | It is never the reference track of its own replay. |
 | A track that the source cannot read | `setReference` gives a trip with no comparison, and no exception. |
 
-**Done when:** `TrackService` holds no matcher and no selector, and `test/run.sh` passes with the new test class.
+**Done when:** `test/run.sh` passes with the new test class.
 
 **Risk.** This is the largest task. A small difference changes the comparison of each trip. Compare the old and the new code line by line before you give the patch. Ask the maintainer to record one trip and run one replay on a device.
 

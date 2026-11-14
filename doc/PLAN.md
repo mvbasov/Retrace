@@ -176,7 +176,7 @@ The precision of `Δt` has a limit. The GPS drift of two trips is different, and
 
 Automatic selection:
 
-1. At the first point of a trip, TrackService reads the saved tracks one at a time. It keeps each track with its route inside three start circles of the point, and with the profile of the trip. A track of a different profile also stays if the profile guess of the import gives the trip profile from its speed. An example is a walk that the user recorded as cycling. Each such track is a candidate in its own direction and in the opposite direction.
+1. At the first point of a trip, `TripComparison` reads the saved tracks one at a time. It keeps each track with its route inside three start circles of the point, and with the profile of the trip. A track of a different profile also stays if the profile guess of the import gives the trip profile from its speed. An example is a walk that the user recorded as cycling. Each such track is a candidate in its own direction and in the opposite direction.
 2. Each point of the trip goes to one TrackMatcher for each candidate. A matcher joins the route at the start or in the middle. It does not join against the direction of movement.
 3. The progress of a candidate is the distance along its route from the start or the join. The place along the route cannot move farther than the trip moved, plus two off-route limits. A larger change is a new join, and the progress starts again there. Without this rule, the opposite direction of a loop finds its route again near its own finish, and wins at once.
 4. The temporary reference track is the valid candidate with the lowest mean cross-track distance. Before the first valid candidate, it is the candidate with the nearest route. A valid candidate is on the route, and its progress is at least half the decision distance.
@@ -201,7 +201,7 @@ Manual selection:
 - The menu of the track screen starts a trip with that track as the reference track, in its direction or in the opposite direction.
 - During the trip, the menu of the trip screen selects a saved track, the automatic selection or no comparison. The tracks of the trip profile come first, then the tracks of the other profiles with their profile. A second dialog asks for the direction of the track.
 - The time in the opposite direction comes from `Track.reversed()`. It is correct only on a flat route. The menu item, the dialog and the trip screen tell this.
-- After a change, TrackService gives all the points of the trip to the new matcher. A finish in these points gives no vibration.
+- After a change, TrackService gives all the points of the trip to `TripComparison` again. A finish in these points gives no vibration.
 - A manual selection always replaces the automatic selection for that trip.
 
 ### 5.6 Map

@@ -12,7 +12,8 @@ The plan in [PLAN.md](PLAN.md) gives the rules in short form, in section 5.4. Th
 
 | Class | Package | Task |
 | --- | --- | --- |
-| `TrackService` | `net.basov.retrace` | Gets each fix on its worker thread. Gives the fix to the filter, the matcher and the smoother. |
+| `TrackService` | `net.basov.retrace` | Gets each fix on its worker thread. Gives the fix to the filter, then each kept point to `TripComparison`. |
+| `TripComparison` | `core` | Holds the reference track, the selection, the matcher, the smoother and the finish signal. It reads the saved tracks through `TrackSource`. |
 | `FixSmoother` | `core` | A Kalman filter. Smooths each fix and drops a GPS spike. |
 | `RecordFilter` | `core` | Drops a fix with a bad accuracy, an old time, or a step below the minimum distance or the accuracy. |
 | `TrackMatcher` | `core` | Compares one point of the current track with the reference track. This document is mostly about this class. |
