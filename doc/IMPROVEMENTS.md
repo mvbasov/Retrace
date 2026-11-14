@@ -9,8 +9,8 @@ This document uses ASD-STE100 Simplified Technical English, the same as `CLAUDE.
 ## 1. How to use this plan
 
 1. Read `CLAUDE.md` and `doc/TERMINOLOGY.md` first. Each rule there applies to each task here.
-2. Do the tasks in the sequence of section 4. Do one task in one patch.
-3. Do not start a task of section 5 without the answer of the maintainer.
+2. Do the tasks in the sequence of section 3.1. Do one task in one patch.
+3. The maintainer approved the tasks of section 5 on 2026-11-14. Do not ask again.
 4. Do not change code that the task does not name. If a step is not clear, stop and ask the maintainer.
 5. After each task, remove its section from this document in the same patch. Thus this document always shows the work that stays.
 
@@ -47,18 +47,27 @@ Use only invented tracks from `TestTracks`. Do not add a real track. Check a cha
 
 ## 3. The tasks in one table
 
-| Task | Type | Size | Needs the maintainer |
+| Task | Type | Size | Section |
 | --- | --- | --- | --- |
-| 1. A loop selects the opposite direction | Fault | Small | No |
-| 2. A replay loses the track segments | Fault | Small | No |
-| 3. Wrong sentences in the banner of `TrackService` | Comment | Small | No |
-| 4. Each list and each trip start read all GPX files | Speed | Medium | No |
-| 5. The comparison logic of `TrackService` has no test | Structure | Large | No |
-| 6. Save the accuracy of each point | Feature | Medium | Yes |
-| 7. Do not count the pause in the comparison | Feature | Small | Yes |
-| 8. A GPS button in the notification of the pause | Feature | Small | Yes |
-| 9. Compile the Android code in the test workflow | Build | Small | Yes |
-| 10. A Russian translation of the user interface | Feature | Medium | Yes |
+| 1. A loop selects the opposite direction | Fault | Small | 4 |
+| 2. A replay loses the track segments | Fault | Small | 4 |
+| 3. Wrong sentences in the banner of `TrackService` | Comment | Small | 4 |
+| 4. Each list and each trip start read all GPX files | Speed | Medium | 4 |
+| 5. The comparison logic of `TrackService` has no test | Structure | Large | 4 |
+| 6. Save the accuracy of each point | Feature | Medium | 5 |
+| 7. Do not count the pause in the comparison | Feature | Medium | 5 |
+| 8. A GPS button in the notification of the pause | Feature | Small | 5 |
+| 9. Compile the Android code in the test workflow | Build | Small | 5 |
+
+The maintainer declined task 10, a Russian translation. Do not do it.
+
+### 3.1 The sequence
+
+Do the tasks in this sequence: 1, 2, 3, 9, 8, 6, 4, 5, 7.
+
+- Task 9 comes early. After it, each push compiles the Android classes. Thus a fault in an Android class of a later task shows at once.
+- Task 8 comes after task 3, because the two change the same comment.
+- Task 7 needs task 5. It changes the class that task 5 makes.
 
 ---
 
@@ -287,7 +296,7 @@ Before the correction, about 16 of the 30 seeds fail. Run the new test once with
 
 5. Add a public getter for each value that `publish()` and `finish()` read: the reference id, the reversed flag, the way name, the selection, the match, the smoothed difference and the finish signal.
 6. `startSearch` catches `IOException` and `IllegalArgumentException` for each track, the same as now.
-7. In `TrackService`, make one `TripComparison` in `onCreate()`. Its `TrackSource` is an inner class: `near` calls `store.filesNear` and returns the paths, and `load` calls `store.load(new File(id))`.
+7. In `TrackService`, add the field `private TripComparison comparison;`. Make the object in `onCreate()`. Its `TrackSource` is an inner class: `near` calls `store.filesNear` and returns the paths, and `load` calls `store.load(new File(id))`.
 8. Replace each use of a moved field with a call of the new class. `resetTrip()` calls `reset(p)`. `beginReplay()` calls `setExcluded(path)` after `resetTrip()`.
 9. Do not change the sequence of the calls. Do not change a condition.
 10. Update the banner comment of `TrackService` and the table of `doc/MATCHING.md`.
@@ -312,57 +321,243 @@ Before the correction, about 16 of the 30 seeds fail. Run the new test once with
 
 ---
 
-## 5. Tasks that need a decision of the maintainer
+## 5. Tasks that the maintainer approved
 
-Ask the question of each task first. Do the task only after a clear answer.
+The maintainer approved these tasks on 2026-11-14. Do not ask again.
 
 ### Task 6. Save the accuracy of each point
 
-**The question.** "Do you want the accuracy of each point in the log file and in the GPX file? The files become larger."
+**The goal.** The log file and the GPX file keep the accuracy of each point. A later analysis can then find the bad points. A replay then gives the real accuracy to `RecordFilter`, the same as the trip.
 
-**Why.** The maintainer asked for this earlier. With the accuracy in the file, a later analysis can find bad points. A replay then also uses the real accuracy in `RecordFilter`.
+**Part A: the log file.** File: `app/src/main/java/net/basov/retrace/core/PointLog.java`.
 
-**Steps after a yes:**
+1. Change `FORMAT` from 2 to 3.
+2. Change `line()` so that it also writes the accuracy as a fifth value:
 
-1. `PointLog`: the format number becomes 3. `line()` writes the accuracy as a fifth value. The reader accepts formats 1, 2 and 3. A point line with four values has no accuracy.
-2. `GpxWriter`: write the accuracy of a point inside the `trkpt` element, in an `extensions` element. Use a `retrace:` element, the same as the members of a way, with the namespace `WAY_NAMESPACE`. Write one decimal. Write nothing for a point with no accuracy.
-3. `GpxReader`: read that element into `TrackPoint.accuracyM`. A file with no such element reads as before.
-4. Add tests to `SegmentsTest` or `GpxTest`:
-   - The accuracy stays after a write and a read.
-   - A format 2 log file is still read.
-   - A GPX file of a different application is still read.
-5. Check with `GpxReader` that the GPX file stays valid XML. Update section 5.2 of `doc/PLAN.md`.
+   ```java
+   return p.timeMs + " " + p.latitude + " " + p.longitude + " " + p.elevationM
+           + " " + p.accuracyM;
+   ```
 
-**Risk.** `RouteAgreementTest` and other tests use `TestTracks.recorded`. Check that no test changes its result.
+   Java writes `NaN` for a point with no accuracy, and `Double.parseDouble` reads it back.
+3. In `read()`, accept the formats "1", "2" and "3" in the header.
+4. In `parsePoint(String[] f)`, accept four or five values. With five values, the fifth is the accuracy. With four values, the accuracy is `Double.NaN`. `parseWaypoint` gives four values, thus a waypoint does not change.
+5. Update the banner comment: format 3 adds the accuracy, and the reader accepts formats 1, 2 and 3.
+6. In `TrackTest`, find the check that reads `"RETRACE-LOG 3 walking 1\n"` as an unknown format. Change the 3 to 4.
+
+**Part B: the GPX file.** File: `app/src/main/java/net/basov/retrace/core/GpxWriter.java`.
+
+1. Write the Retrace namespace on the root element. Change the line that writes `<gpx` so that it also writes ` xmlns:retrace="` + `WAY_NAMESPACE` + `"`. The `retrace:way` element of a way keeps its own declaration. Two declarations of the same namespace are correct XML.
+2. In the loop of the track points, after `appendElevationAndTime`, add the accuracy if it is a finite number:
+
+   ```java
+   if (!Double.isNaN(p.accuracyM) && !Double.isInfinite(p.accuracyM)) {
+       line.append("<extensions><retrace:accuracy>");
+       appendFixed(line, p.accuracyM, 1);
+       line.append("</retrace:accuracy></extensions>");
+   }
+   ```
+
+   GPX 1.1 puts `extensions` last in a `trkpt`. Thus it comes after `time`. Do not write the accuracy for a waypoint.
+3. Add two sentences to the banner comment about the accuracy element.
+
+**Part C: the GPX reader.** File: `app/src/main/java/net/basov/retrace/core/GpxReader.java`.
+
+1. In the handler, add a field `private double accuracy;`.
+2. In `startElement`, where a point starts, set `accuracy = Double.NaN;`.
+3. In `endElement`, add this branch before the branch for the end of `trkpt`:
+
+   ```java
+   } else if (inPoint && name.equals("accuracy")
+           && GpxWriter.WAY_NAMESPACE.equals(uri)) {
+       accuracy = parseDouble(value);
+   ```
+
+4. Give `accuracy` to the `TrackPoint` of a `trkpt` and of a `rtept`, in place of `Double.NaN`.
+5. Update the banner comment.
+
+**Tests.** Add a method to `SegmentsTest` for each case. Give each method a comment that tells why it exists.
+
+- A track with the accuracies 4.5, `Double.NaN` and 12.0 keeps them after `GpxWriter.write` and `GpxReader.read`. 4.5 comes back as 4.5, and `NaN` stays `NaN`.
+- The GPX text holds `retrace:accuracy` two times for these three points.
+- A GPX text of a different application with `<extensions><other:accuracy xmlns:other="urn:x">7</other:accuracy></extensions>` in a `trkpt` gives `NaN`.
+- A log line with five values gives the accuracy. A format 2 log file is still read, with `NaN`.
+
+**Documents.** Add one list item to section 5.2 of `doc/PLAN.md`. Add one sentence to `README.md`: the GPX file keeps the accuracy of each point in a Retrace extension, and other applications ignore it.
+
+**Done when:** `test/run.sh` passes. Each test class that uses `TestTracks.recorded` gives the same result as before.
+
+**Risk.** A replay now uses the saved accuracy in `RecordFilter`. The trip used the same accuracy, thus the replay keeps the same points. An old track has no accuracy, and its replay does not change.
+
+---
 
 ### Task 7. Do not count the pause in the comparison
 
-**The question.** "After Stop and Continue, the time of the pause counts as time behind the reference track. Do you want the comparison without the time of the pause?"
+**The goal.** After Stop and Continue, the difference to the reference track does not count the time of the pause. The saved points, the log file and the GPX file keep the real time. The elapsed time on the trip screen and in the notification stays the clock time.
 
-**Steps after a yes:**
+**Do this task after task 5.** It changes `TripComparison`.
 
-1. In `TrackService`, add a field `pausedTotalMs` and a field `pauseStartMs`. `pause()` sets `pauseStartMs` to the time of the last position. The first accepted point after `resume()` adds its time minus `pauseStartMs` to `pausedTotalMs`.
-2. Give the comparison a copy of the point with `timeMs - pausedTotalMs`. The saved point and the log file keep the real time.
-3. `select()` gives the old points to the new matcher again. It must apply the same shift for each track segment. Thus keep the shift of each track segment in a list, next to `SEGMENT_STARTS`.
-4. If task 5 is done, put this logic into `TripComparison` and test it there.
+**Part A: `TripComparison`.** File: `app/src/main/java/net/basov/retrace/core/TripComparison.java`.
+
+1. Add three fields:
+
+   ```java
+   // The index of the first point after each pause, and the sum of the
+   // pauses up to that point, in the same sequence.
+   private final List<Integer> shiftStarts = new ArrayList<>();
+   private final List<Long> shifts = new ArrayList<>();
+   // The count of the points that add() got since the last reset.
+   private int added;
+   ```
+
+2. In `reset(Profile p)`, set `added = 0`. Do not clear the two lists there. `select()` calls `reset()` and then gives all points again. The points after a pause must get the same shift again.
+3. Add a method `clearPauses()` that clears the two lists. `TrackService.resetTrip()` calls it at the start of each trip and each replay.
+4. Add a method `addPause(long pausedMs)`. The next point that `add()` gets starts the new shift:
+
+   ```java
+   public void addPause(long pausedMs) {
+       long total = shifts.isEmpty() ? 0 : shifts.get(shifts.size() - 1);
+       shiftStarts.add(added);
+       shifts.add(total + Math.max(0, pausedMs));
+   }
+   ```
+
+5. Add a private method `long shiftAt(int index)`. It returns the shift of the last start that is not after the index, or 0.
+6. At the start of `add(TrackPoint fix)`, make the shifted point and use it in place of `fix` in the whole method:
+
+   ```java
+   long shift = shiftAt(added++);
+   TrackPoint p = shift == 0 || !fix.hasTime() ? fix : new TrackPoint(fix.latitude,
+           fix.longitude, fix.timeMs - shift, fix.elevationM, fix.accuracyM);
+   ```
+
+   `follow()` also gets `p`. Thus `DeltaSmoother` uses the shifted time too.
+7. Update the banner comment of the class.
+
+**Part B: `TrackService`.**
+
+1. Add a field `private long pauseClockMs;`.
+2. In `pause()`, after `paused = true;`, set `pauseClockMs = SystemClock.elapsedRealtime();`.
+3. In `resume()`, before `paused = false;`, call `comparison.addPause(SystemClock.elapsedRealtime() - pauseClockMs);`.
+4. In `resetTrip()`, call `comparison.clearPauses();`.
+
+The clock since the boot does not jump when the user changes the time of the device. The fixes of a pause do not go to the comparison. Thus the index of `add()` agrees with the index of `POINTS`.
+
+**Tests.** Add these cases to `TripComparisonTest`. Use walking, 1.4 m/s, a straight route of 1200 m, 4 m noise and 10 seeds.
+
+| Case | Check |
+| --- | --- |
+| The trip has a pause of 600 s at 600 m: each later point has 600 000 ms more. No `addPause`. | The difference at the finish is about +600 s, with a tolerance of 30 s. |
+| The same trip with `addPause(600000)` before the first point after the pause. | The difference at the finish is about 0 s, with a tolerance of 30 s. |
+| The same trip with the pause, then `select()` with the same reference track. | The difference at the finish is the same as in the second case, with a tolerance of 1 s. |
+| `clearPauses()`, then a new trip with no pause. | The difference at the finish is about 0 s. |
+
+**Documents.** In section 5.1 of `doc/PLAN.md`, change "the elapsed time continues" in the paragraph of Stop. The new text: the elapsed time on the screen continues, but the comparison does not count the time of the pause. Add the same sentence to `README.md`.
+
+**Done when:** `test/run.sh` passes with the new cases.
+
+---
 
 ### Task 8. A GPS button in the notification of the pause
 
-**The question.** "Do you want the button GPS off and GPS on in the notification of the pause too?"
+**The goal.** During the pause, the notification has a third button: GPS off or GPS on. It does the same as the button of the trip screen.
 
-**Steps after a yes:** in `TrackService.notification()`, add a third action to the paused state: `ACTION_PAUSE_FIXES` with request code 5. The label is `R.string.trip_gps_off` if `s.fixesOn`, else `R.string.trip_gps_on`. Use the icon `ic_notification`. Correct the banner comment.
+**Steps:**
+
+1. Make `app/src/main/res/drawable/ic_gps.xml`, a vector icon of a target. Use strokes, not a fill type, because Android 6 does not read `android:fillType`:
+
+   ```xml
+   <?xml version="1.0" encoding="utf-8"?>
+   <!-- The icon of the GPS button in the notification of the pause. -->
+   <vector xmlns:android="http://schemas.android.com/apk/res/android"
+       android:width="24dp"
+       android:height="24dp"
+       android:viewportWidth="24"
+       android:viewportHeight="24">
+       <path
+           android:strokeColor="#FFFFFFFF"
+           android:strokeWidth="2"
+           android:pathData="M12,5 A7,7 0 1,1 11.99,5 M12,1 V5 M12,19 V23 M1,12 H5 M19,12 H23" />
+       <path
+           android:fillColor="#FFFFFFFF"
+           android:pathData="M12,9 A3,3 0 1,1 11.99,9 Z" />
+   </vector>
+   ```
+
+2. In `TrackService.notification()`, in the branch of the pause, add a third action after End:
+
+   ```java
+   b.addAction(action(ACTION_PAUSE_FIXES, 5, R.drawable.ic_gps,
+           s.fixesOn ? R.string.trip_gps_off : R.string.trip_gps_on));
+   ```
+
+   The request code 5 is free. The codes 1 to 4 are in use.
+3. Change the comment above the actions: after Stop, the buttons are Continue, End and GPS off or GPS on.
+4. Change the banner comment: the sentence of task 3 about the notification gets the GPS button of the pause.
+5. `togglePauseFixes()` already calls `publishAndNotify()`. Thus the label changes after each push. Do not change that method.
+6. Add one sentence to the paragraph of Stop in `README.md` and in section 5.1 of `doc/PLAN.md`.
+
+**Test.** No JVM test can show a notification. Ask the maintainer to push the button in the notification two times during a pause. The label and the dot of the trip screen must change each time.
+
+**Done when:** `test/run.sh` passes, and the maintainer confirms the button on a device.
+
+---
 
 ### Task 9. Compile the Android code in the test workflow
 
-**The question.** "The test workflow does not compile the Android classes. A fault there shows only in the release build. Do you want a compile step in the test workflow? It makes each run some minutes longer."
+**The goal.** The test workflow also compiles each Android class. Now a fault in an Android class shows only in the release build.
 
-**Steps after a yes:** follow section 7 of `CLAUDE.md`. Add a stage to `Dockerfile` and `Dockerfile.ci` that runs the Java compile task of Gradle with no signing. Change `BuildFilesTest` and `doc/RELEASE.md` together with the workflows.
+**The design.** A new Docker stage `compile` runs the Gradle task `compileDebugJavaWithJavac`. The debug variant needs no keystore, and the task makes no APK. The stage copies `/gate-passed` from the test stage, thus it also runs the tests. The test workflow builds this stage in place of the test stage. Each run is some minutes longer, because the cache mount of Gradle does not go into the cache of GitHub.
 
-### Task 10. A Russian translation of the user interface
+**Part A: `Dockerfile`.** Add this stage between the stage `test` and the stage `project_builder`. `project_builder` must stay the last stage, because `local/build.sh` builds the last stage.
 
-**The question.** "Do you want a Russian translation in `res/values-ru/strings.xml`? Who checks the terms?"
+```dockerfile
+# ------------------------------ compile ------------------------------
+# The compile check of the Android code. test/run.sh compiles only the
+# package core. This stage compiles each Java class of the application.
+# The debug variant needs no keystore, and the task makes no APK.
+# Run the check alone with this command:
+#   docker buildx build --target compile .
+FROM retrace-base:latest AS compile
 
-**Steps after a yes:** copy `strings.xml`, translate each value, and keep each format argument such as `%1$s`. Do not translate the names of the keys. The maintainer reads each string before the patch.
+COPY --from=test /gate-passed /tmp/gate-passed
+
+COPY . .
+
+RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
+    gradle --no-daemon compileDebugJavaWithJavac
+```
+
+**Part B: `Dockerfile.ci`.** Add the same stage between `test` and `project_builder`. The only difference is the FROM line: `FROM base_env AS compile`. The stage `export` stays the last stage.
+
+**Part C: `.github/workflows/test.yml`.**
+
+1. Change `--target test` to `--target compile`.
+2. Change the header comment: the workflow runs the quality gate and the compile check of the Android code.
+
+**Part D: `BuildFilesTest`.** File: `test/java/net/basov/retrace/repocheck/BuildFilesTest.java`. After the check of the test stage, add:
+
+```java
+// The compile stage of Dockerfile is in Dockerfile.ci. The test workflow
+// builds it.
+List<String> compileStage = stage(local, "FROM retrace-base:latest AS compile");
+check("Dockerfile: compile stage", false, compileStage.isEmpty());
+checkInOrder("compile stage in Dockerfile.ci", compileStage,
+        stage(ci, "FROM base_env AS compile"));
+check("test workflow: compile target", true, test.contains("--target compile"));
+```
+
+Read the method `main` first. Use the names of the variables that it uses for the lines of `Dockerfile`, of `Dockerfile.ci` and of the text of `test.yml`. If a name differs, use the name of the file.
+
+**Part E: documents.**
+
+1. `doc/RELEASE.md`: in the table of the workflows, the row "Test Retrace" now says: the result of the quality gate and of the compile check. Add a row to the table of faults: "The compile stage fails | A Java fault in an Android class. | Run `docker buildx build --target compile .` and correct the fault."
+2. `CLAUDE.md` section 6: add one sentence: the stage `compile` compiles the Android code, and the test workflow builds it.
+3. `CLAUDE.md` section 7: in the list item about the two stages of `Dockerfile`, write three stages: `test`, `compile` and `project_builder`.
+
+**Done when:** `test/run.sh` passes, and the first run of the test workflow on GitHub is green. If you cannot run Docker, say so. The maintainer then checks the first run.
+
+**Risk.** If the stage fails on the first run for a reason that is not a Java fault, stop. Give the log to the maintainer. Do not add a package or a tool to `Dockerfile.base` without a question.
 
 ---
 
@@ -373,7 +568,8 @@ These points are correct behavior for now. Do not change them without a request.
 - **An out-and-back route on one line.** The two directions are the same line at the start. The selection takes the opposite direction in about one trip of ten. The route and the distance are then correct, and only the times of the reference track differ.
 - **A reference track with two or more track segments.** `TrackMatcher` and `WayBuilder` use all points as one line. The step between two track segments is a straight line with the time of the pause.
 - **A waypoint with the GPS off.** During the pause with GPS off, a new waypoint goes to the last known position.
-- **The elapsed time of the notification** continues during the pause. See task 7.
+- **The elapsed time of the notification and of the trip screen** continues during the pause. After task 7, only the comparison does not count the pause.
+- **A movement during the pause.** Task 7 removes the time of the pause, not its distance. If the user travels far during the pause, the matcher sees a large step in a short time.
 
 These parts did not get a review in depth. A later review can start here:
 
