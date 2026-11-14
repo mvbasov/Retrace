@@ -21,7 +21,11 @@ import java.util.List;
 // with the nearest route before that.
 //
 // The progress of a candidate is the distance along its route from the
-// place where the trip started or joined it. The selection comes when one
+// place where the trip started or joined it. The place along the route
+// cannot move farther than the trip moved, plus two off-route limits. A
+// larger change is a new join, and the progress starts again there. An
+// example is the opposite direction of a loop: it finds its route again
+// near its own finish. The selection comes when one
 // candidate has a progress of DECISION_M, or 10 percent of the shortest
 // candidate if that is less. A candidate that is not on the route then is
 // not valid. From the valid candidates, the lowest mean cross-track
@@ -106,6 +110,8 @@ public final class ReferenceSelector {
         double crossSum;
         int crossCount;
         double firstAlong = Double.NaN;
+        double lastAlong = Double.NaN;
+        double lastAlongTravelM;
 
         Trial(Candidate candidate, Profile profile, double routeDistanceM) {
             this.candidate = candidate;
@@ -131,6 +137,7 @@ public final class ReferenceSelector {
 
     private final List<Trial> trials = new ArrayList<>();
     private final double decisionM;
+    private final double jumpSlackM;
     private State state;
     private Trial current;
     private TrackPoint lastFix;
@@ -197,6 +204,7 @@ public final class ReferenceSelector {
             shortest = Math.min(shortest, c.track.distanceM());
         }
         decisionM = Math.max(MIN_DECISION_M, Math.min(DECISION_M, 0.1 * shortest));
+        jumpSlackM = 2 * profile.offRouteM;
         state = trials.isEmpty() ? State.NONE : State.SELECTING;
         current = nearestRoute();
     }
@@ -254,9 +262,16 @@ public final class ReferenceSelector {
             }
             anyAgrees = true;
             if (t.last.state == TrackMatcher.State.ON_ROUTE) {
-                if (Double.isNaN(t.firstAlong)) {
+                // A jump of the place along the route is a new join. The
+                // progress then starts again there.
+                boolean jump = !Double.isNaN(t.lastAlong)
+                        && Math.abs(t.last.alongM - t.lastAlong)
+                        > travelledM - t.lastAlongTravelM + jumpSlackM;
+                if (Double.isNaN(t.firstAlong) || jump) {
                     t.firstAlong = t.last.alongM;
                 }
+                t.lastAlong = t.last.alongM;
+                t.lastAlongTravelM = travelledM;
                 t.crossSum += t.last.crossTrackM;
                 t.crossCount++;
             }

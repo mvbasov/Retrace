@@ -24,6 +24,8 @@ public final class ReferenceSelectorTest {
     private static final double[][] SOUTH = {{0, 0}, {0, -1000}};
     private static final double[][] FAR = {{3000, 3000}, {3000, 4000}};
     private static final double[][] SHORT = {{0, 0}, {0, 200}};
+    // A loop with its finish 10 m from its start.
+    private static final double[][] LOOP = {{0, 0}, {400, 0}, {400, 400}, {0, 400}, {0, 10}};
 
     public static void main(String[] args) {
         onlyNearTracksOfTheProfileAreCandidates();
@@ -37,6 +39,7 @@ public final class ReferenceSelectorTest {
         aWayWinsOverTheTracksOfItsRoute();
         aTripInTheOppositeDirectionSelectsTheReversedTrack();
         aTripFromTheMiddleJoinsTheRoute();
+        aLoopKeepsItsDirection();
 
         if (failures > 0) {
             System.out.println("ReferenceSelectorTest: " + failures + " check(s) failed");
@@ -174,6 +177,28 @@ public final class ReferenceSelectorTest {
         check("middle: track", "north-new", r.selected);
         check("middle: same direction", false, r.reversed);
         check("middle: not at once", true, r.decidedAtM >= 0.8 * r.decisionM);
+    }
+
+    // The finish of a loop is near its start. The candidate of the opposite
+    // direction leaves its route after some meters, and then finds the route
+    // again near its own finish. The place along the route then jumps by
+    // almost the full length. Before the jump rule, that jump was progress,
+    // and about half of the trips selected the opposite direction.
+    private static void aLoopKeepsItsDirection() {
+        int wrong = 0;
+        for (long seed = 1; seed <= 30; seed++) {
+            Track saved = walk(LOOP, 1000 + seed, 1);
+            List<TrackPoint> points = trip(LOOP, 2000 + seed, 0);
+            List<ReferenceSelector.Candidate> all = new ArrayList<>();
+            all.add(new ReferenceSelector.Candidate("loop", saved));
+            List<ReferenceSelector.Candidate> near = ReferenceSelector.nearRoute(
+                    all, Profile.WALKING, points.get(0));
+            Result r = feed(new ReferenceSelector(near, Profile.WALKING, points.get(0)), points);
+            if (r.state != ReferenceSelector.State.SELECTED || r.reversed) {
+                wrong++;
+            }
+        }
+        check("loop: wrong selections", 0, wrong);
     }
 
     // ------------------------------------------------------------------

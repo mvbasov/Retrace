@@ -36,9 +36,9 @@ Use only invented tracks from `TestTracks`. Do not add a real track. Check a cha
 
 | Part | Depth | Result |
 | --- | --- | --- |
-| `TrackService` | Each line | Tasks 1, 2, 3, 5 and 7. |
+| `TrackService` | Each line | Tasks 2, 3, 5 and 7. |
 | `TrackStore`, `TrackProvider` | Each line | Task 4. The provider is safe: it gives only files of the track directory. |
-| `ReferenceSelector`, `RouteAgreement` | Each line, and runs with many seeds | Task 1. |
+| `ReferenceSelector`, `RouteAgreement` | Each line, and runs with many seeds | One fault. Patch 54 corrected it. |
 | Activities and dialogs | The threads and the life cycle | No fault. Each background result checks that the activity is alive. |
 | `GpxReader`, `GpxWriter`, `PointLog` | The formats and the errors | Task 6. A GPX file goes to a temporary file first, thus a stop of the process cannot break it. |
 | `TrackMatcher`, `WayBuilder`, `MapView`, the tile classes | The structure only | Not examined in depth. See section 6. |
@@ -49,7 +49,6 @@ Use only invented tracks from `TestTracks`. Do not add a real track. Check a cha
 
 | Task | Type | Size | Section |
 | --- | --- | --- | --- |
-| 1. A loop selects the opposite direction | Fault | Small | 4 |
 | 2. A replay loses the track segments | Fault | Small | 4 |
 | 3. Wrong sentences in the banner of `TrackService` | Comment | Small | 4 |
 | 4. Each list and each trip start read all GPX files | Speed | Medium | 4 |
@@ -63,7 +62,7 @@ The maintainer declined task 10, a Russian translation. Do not do it.
 
 ### 3.1 The sequence
 
-Do the tasks in this sequence: 1, 2, 3, 9, 8, 6, 4, 5, 7.
+Do the tasks in this sequence: 2, 3, 9, 8, 6, 4, 5, 7.
 
 - Task 9 comes early. After it, each push compiles the Android classes. Thus a fault in an Android class of a later task shows at once.
 - Task 8 comes after task 3, because the two change the same comment.
@@ -72,81 +71,6 @@ Do the tasks in this sequence: 1, 2, 3, 9, 8, 6, 4, 5, 7.
 ---
 
 ## 4. Tasks that need no decision
-
-### Task 1. A loop selects the opposite direction
-
-**The fault.** The reference track is a loop: its finish is near its start. The automatic selection then selects the opposite direction in about half of the trips. The comparison is then wrong for the whole trip.
-
-**The cause.** The candidate of the opposite direction starts at the same place. After some meters, its matcher is off the route. Then it finds the route again near the finish of the reversed track. The first leg of the loop is the last leg of the reversed track. The distance along the route jumps from 0 m to almost the full length. `Trial.progress()` in `ReferenceSelector` is the distance along the route minus `firstAlong`. Thus the progress is larger than the decision distance at once, and the selection decides for this candidate.
-
-**The correction.** A candidate cannot move farther along the route than the trip moved. A larger change is a new join, and the progress starts again there. The review made this change and ran it: the loop then selects the correct direction for each of 120 trips.
-
-**File:** `app/src/main/java/net/basov/retrace/core/ReferenceSelector.java`
-
-**Steps:**
-
-1. In the class `Trial`, add two fields after `firstAlong`:
-
-   ```java
-   double lastAlong = Double.NaN;
-   double lastAlongTravelM;
-   ```
-
-2. Add a field to `ReferenceSelector` after `decisionM`:
-
-   ```java
-   private final double jumpSlackM;
-   ```
-
-3. In the constructor, after the line that sets `decisionM`, add:
-
-   ```java
-   jumpSlackM = 2 * profile.offRouteM;
-   ```
-
-4. In `update()`, find this code:
-
-   ```java
-   if (t.last.state == TrackMatcher.State.ON_ROUTE) {
-       if (Double.isNaN(t.firstAlong)) {
-           t.firstAlong = t.last.alongM;
-       }
-   ```
-
-   Replace it with this code:
-
-   ```java
-   if (t.last.state == TrackMatcher.State.ON_ROUTE) {
-       // A jump of the place along the route is a new join. The
-       // progress then starts again there.
-       boolean jump = !Double.isNaN(t.lastAlong)
-               && Math.abs(t.last.alongM - t.lastAlong)
-               > travelledM - t.lastAlongTravelM + jumpSlackM;
-       if (Double.isNaN(t.firstAlong) || jump) {
-           t.firstAlong = t.last.alongM;
-       }
-       t.lastAlong = t.last.alongM;
-       t.lastAlongTravelM = travelledM;
-   ```
-
-5. Add two sentences about the jump rule to the banner comment of the class.
-
-**Test.** Add the method `aLoopKeepsItsDirection` to `ReferenceSelectorTest`. Give it a comment that tells why it exists.
-
-- The route: `{{0, 0}, {400, 0}, {400, 400}, {0, 400}, {0, 10}}`.
-- For each seed from 1 to 30, make the saved track and the trip with `TestTracks.ideal`, `TestTracks.noisy` with 4 m and `TestTracks.recorded`. Use walking, 1.4 m/s, and different seeds for the two.
-- Get the candidates with `ReferenceSelector.nearRoute`. Give each point of the trip to `update()` until the state is not `SELECTING`.
-- Check for each seed: the state is `SELECTED`, and `current().reversed` is false.
-
-Before the correction, about 16 of the 30 seeds fail. Run the new test once without the correction, to see that it finds the fault.
-
-**Documents.** Add one list item to section 5.5 of `doc/PLAN.md` about the jump rule.
-
-**Done when:** `test/run.sh` passes, and the new test fails without the correction.
-
-**Do not change:** an out-and-back route on one line still selects the opposite direction in some trips. See section 6.
-
----
 
 ### Task 2. A replay loses the track segments
 
@@ -261,11 +185,11 @@ Before the correction, about 16 of the 30 seeds fail. Run the new test once with
 
 ### Task 5. The comparison logic of `TrackService` has no test
 
-**The weak point.** `TrackService` has more than 1100 lines. About 250 of them decide the comparison: the manual selection, the automatic selection, the stop of a comparison that differs, the smoothing and the finish signal. This logic uses no Android class, but it is in an Android class. Thus no test runs it. The faults of tasks 1 and 2 show the cost.
+**The weak point.** `TrackService` has more than 1100 lines. About 250 of them decide the comparison. They hold the manual selection, the automatic selection, the stop of a comparison that differs, the smoothing and the finish signal. This logic uses no Android class, but it is in an Android class. Thus no test runs it. The fault of task 2, and the loop fault that patch 54 corrected, show the cost.
 
 **The goal.** Move this logic to a new class `TripComparison` in `core`, with no change of behavior. Then test it on the JVM.
 
-**Do this task after tasks 1 to 4.** Do it in two patches: the move first, then the tests.
+**Do this task after tasks 2, 3 and 4.** Do it in two patches: the move first, then the tests.
 
 **Patch A: the move.**
 
@@ -574,5 +498,5 @@ These points are correct behavior for now. Do not change them without a request.
 These parts did not get a review in depth. A later review can start here:
 
 - `WayBuilder` has more than 1100 lines in one file. Its tests are good, but a change there is a risk.
-- `TrackMatcher`: in the runs for task 1, the matcher found the route again after an off-route state, against the direction of the movement. Task 1 corrects the effect in the selection only. A check of the direction rule at that place is a possible next step.
+- `TrackMatcher`: for a loop, the matcher of the opposite direction found the route again after an off-route state, against the direction of the movement. Patch 54 corrected the effect in the selection only. A check of the direction rule at that place is a possible next step.
 - `MapView` and the tile classes.

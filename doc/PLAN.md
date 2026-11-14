@@ -175,7 +175,7 @@ Automatic selection:
 
 1. At the first point of a trip, TrackService reads the saved tracks one at a time. It keeps each track of the same profile with its route inside three start circles of the point. Each such track is a candidate in its own direction and in the opposite direction.
 2. Each point of the trip goes to one TrackMatcher for each candidate. A matcher joins the route at the start or in the middle. It does not join against the direction of movement.
-3. The progress of a candidate is the distance along its route from the start or the join.
+3. The progress of a candidate is the distance along its route from the start or the join. The place along the route cannot move farther than the trip moved, plus two off-route limits. A larger change is a new join, and the progress starts again there. Without this rule, the opposite direction of a loop finds its route again near its own finish, and wins at once.
 4. The temporary reference track is the valid candidate with the lowest mean cross-track distance. Before the first valid candidate, it is the candidate with the nearest route. A valid candidate is on the route, and its progress is at least half the decision distance.
 5. The decision distance is 10 % of the shortest candidate, between 50 m and 300 m. When the progress of one candidate on the route reaches it, Retrace selects the temporary reference track. Its matcher has all the points, thus the comparison continues with no gap.
 6. Two tracks of the same route have almost the same score. Thus candidates within 3 m of the best mean cross-track distance count as equal. From them:
