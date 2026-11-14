@@ -23,8 +23,10 @@ import net.basov.retrace.core.GpxReader;
 import net.basov.retrace.core.GpxWriter;
 import net.basov.retrace.core.PointLog;
 import net.basov.retrace.core.Profile;
+import net.basov.retrace.core.SummaryCache;
 import net.basov.retrace.core.TimeText;
 import net.basov.retrace.core.Track;
+import net.basov.retrace.core.TrackBounds;
 import net.basov.retrace.core.TrackPoint;
 import net.basov.retrace.core.Waypoint;
 
@@ -42,9 +44,28 @@ import net.basov.retrace.core.Waypoint;
 //
 // TrackService and MainActivity each make their own TrackStore. One lock
 // for the whole process keeps their file work in sequence.
+//
+// A cache keeps the line of the list and the bounds of each GPX file. See
+// SummaryCache. Thus the list and the automatic selection read only the
+// files that changed. Each write and each delete of a GPX file removes its
+// value from the cache.
 final class TrackStore {
 
     private static final Object LOCK = new Object();
+
+    // Use it only inside synchronized (LOCK).
+    private static final SummaryCache<Summary> CACHE = new SummaryCache<>();
+
+    // The cached values of one GPX file.
+    private static final class Summary {
+        final Entry entry;
+        final TrackBounds bounds;
+
+        Summary(Entry entry, TrackBounds bounds) {
+            this.entry = entry;
+            this.bounds = bounds;
+        }
+    }
 
     private static final String TRACK_DIRECTORY = "tracks";
     private static final String LOG_FILE = "current.log";
@@ -143,13 +164,12 @@ final class TrackStore {
     List<Entry> list() {
         synchronized (LOCK) {
             List<Entry> entries = new ArrayList<>();
+            List<String> paths = new ArrayList<>();
             for (File f : trackFiles()) {
-                try {
-                    entries.add(new Entry(f, readGpx(f)));
-                } catch (IOException e) {
-                    entries.add(new Entry(f));
-                }
+                entries.add(summaryLocked(f).entry);
+                paths.add(f.getPath());
             }
+            CACHE.retain(paths);
             Collections.sort(entries, (a, b) -> {
                 if (a.startTimeMs != b.startTimeMs) {
                     return a.startTimeMs < b.startTimeMs ? 1 : -1;
@@ -175,6 +195,38 @@ final class TrackStore {
             }
             return result;
         }
+    }
+
+    // Returns the files with a track that can be near the fix. The check
+    // uses the bounds only. The caller does the precise check.
+    List<File> filesNear(TrackPoint fix, double limitM) {
+        synchronized (LOCK) {
+            List<File> result = new ArrayList<>();
+            for (File f : trackFiles()) {
+                if (summaryLocked(f).bounds.near(fix, limitM)) {
+                    result.add(f);
+                }
+            }
+            return result;
+        }
+    }
+
+    // The cached values of a file. A file that Retrace cannot read gets an
+    // entry that is not readable, and bounds that are never near.
+    private static Summary summaryLocked(File f) {
+        long modified = f.lastModified();
+        long length = f.length();
+        Summary s = CACHE.get(f.getPath(), modified, length);
+        if (s == null) {
+            try {
+                Track track = readGpx(f);
+                s = new Summary(new Entry(f, track), TrackBounds.of(track.points));
+            } catch (IOException e) {
+                s = new Summary(new Entry(f), TrackBounds.of(new ArrayList<TrackPoint>()));
+            }
+            CACHE.put(f.getPath(), modified, length, s);
+        }
+        return s;
     }
 
     Track load(File file) throws IOException {
@@ -251,6 +303,7 @@ final class TrackStore {
 
     boolean delete(File file) {
         synchronized (LOCK) {
+            CACHE.remove(file.getPath());
             return file.delete();
         }
     }
@@ -345,6 +398,7 @@ final class TrackStore {
                 new FileOutputStream(temp), StandardCharsets.UTF_8))) {
             GpxWriter.write(track, out);
         }
+        CACHE.remove(file.getPath());
         if (!temp.renameTo(file)) {
             temp.delete();
             throw new IOException("cannot rename " + temp);

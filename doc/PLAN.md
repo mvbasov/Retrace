@@ -108,6 +108,8 @@ The `core` package imports no Android package. Thus the tests run on the JVM.
 
 - Retrace saves GPX 1.1 files in the media directory, the same as OMN-Go: `/storage/emulated/0/Android/media/net.basov.retrace/tracks/`. This makes a backup easy.
 - The GPX `<type>` element holds the profile.
+- A cache in memory keeps the line of the list and the bounds of each GPX file. A value is valid while the time of the last change and the length of the file are the same. Each write and each delete of a GPX file removes its value. Thus the list reads only the files that changed.
+- At the first point of a trip, the bounds drop the tracks that are far from the point. `TrackBounds` makes the limit 10 % larger, thus it never drops a near track. The automatic selection then reads only the other tracks.
 - A track can have more than one track segment. Each track segment is one `<trkseg>` element. The length, the speeds and the map do not use the step from one track segment to the next. The comparison and the ways use all points as one list.
 - The waypoints of a track are `<wpt>` elements before the `<trk>` element. Each waypoint has a name. The maps show the waypoints as small dots with their names.
 - The log file has a `SEGMENT` line at the start of each new track segment, and a `WPT` line for each waypoint. Each point line also has the accuracy. The format number of the log file is 3. Retrace also reads a log file of format 1 or 2.

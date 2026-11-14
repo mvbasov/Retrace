@@ -588,13 +588,13 @@ public final class TrackService extends Service {
         }
     }
 
-    // Worker thread. Starts the automatic selection at the first point. Each
-    // saved track is read and checked alone. Thus only the near tracks stay
-    // in memory. The GPS fixes wait in the queue of the worker thread during
-    // this work.
+    // Worker thread. Starts the automatic selection at the first point. The
+    // bounds of TrackStore first drop the far tracks. Each other saved track
+    // is read and checked alone. Thus only the near tracks stay in memory.
+    // The GPS fixes wait in the queue of the worker thread during this work.
     private void startSearch(TrackPoint first) {
         List<ReferenceSelector.Candidate> near = new ArrayList<>();
-        for (File f : store.trackFiles()) {
+        for (File f : store.filesNear(first, ReferenceSelector.startLimitM(profile, first))) {
             // The replayed track always agrees with itself. It is not a
             // candidate for its own replay.
             if (f.getPath().equals(replayPath)) {

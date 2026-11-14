@@ -164,9 +164,14 @@ public final class ReferenceSelector {
         if (track.profile != profile || track.points.size() < 2) {
             return false;
         }
+        return distanceToRoute(track, fix) <= startLimitM(profile, fix);
+    }
+
+    // The largest distance from the first fix to the route of a candidate.
+    // TrackStore uses it for its fast check before the precise check.
+    public static double startLimitM(Profile profile, TrackPoint fix) {
         double accuracy = Double.isNaN(fix.accuracyM) ? 0 : fix.accuracyM;
-        double limit = START_FACTOR * (profile.radiusM + 2 * accuracy);
-        return distanceToRoute(track, fix) <= limit;
+        return START_FACTOR * (profile.radiusM + 2 * accuracy);
     }
 
     // The distance from the fix to the nearest point of the line of the

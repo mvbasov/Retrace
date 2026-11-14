@@ -37,7 +37,7 @@ Use only invented tracks from `TestTracks`. Do not add a real track. Check a cha
 | Part | Depth | Result |
 | --- | --- | --- |
 | `TrackService` | Each line | Tasks 5 and 7. Patches 56 and 57 corrected a fault and two comments. |
-| `TrackStore`, `TrackProvider` | Each line | Task 4. The provider is safe: it gives only files of the track directory. |
+| `TrackStore`, `TrackProvider` | Each line | Patch 61 added a cache. The provider is safe: it gives only files of the track directory. |
 | `ReferenceSelector`, `RouteAgreement` | Each line, and runs with many seeds | One fault. Patch 54 corrected it. |
 | Activities and dialogs | The threads and the life cycle | No fault. Each background result checks that the activity is alive. |
 | `GpxReader`, `GpxWriter`, `PointLog` | The formats and the errors | No fault. Patch 60 added the accuracy. A GPX file goes to a temporary file first, thus a stop of the process cannot break it. |
@@ -49,7 +49,6 @@ Use only invented tracks from `TestTracks`. Do not add a real track. Check a cha
 
 | Task | Type | Size | Section |
 | --- | --- | --- | --- |
-| 4. Each list and each trip start read all GPX files | Speed | Medium | 4 |
 | 5. The comparison logic of `TrackService` has no test | Structure | Large | 4 |
 | 7. Do not count the pause in the comparison | Feature | Medium | 5 |
 | 11. Search for a different route after the trip leaves the route | Feature | Medium | 5 |
@@ -59,7 +58,7 @@ The maintainer declined task 10, a Russian translation. Do not do it.
 
 ### 3.1 The sequence
 
-Do the tasks in this sequence: 4, 12, 5, 7, 11.
+Do the tasks in this sequence: 12, 5, 7, 11.
 
 - After patch 58, each push compiles the Android classes. Thus a fault in an Android class shows in the test workflow of GitHub. Look at its result after each push.
 - Task 7 and task 11 need task 5. They change the class that task 5 makes.
@@ -69,71 +68,13 @@ Do the tasks in this sequence: 4, 12, 5, 7, 11.
 
 ## 4. Tasks that need no decision
 
-### Task 4. Each list and each trip start read all GPX files
-
-**The weak point.** `TrackStore.list()` parses each GPX file at each load of the list screen. `TrackService.startSearch()` parses each GPX file at the first point of each trip. During `list()`, the lock of `TrackStore` stops the worker thread of the service. With some hundred tracks, the list is slow, and the first fixes of a trip wait.
-
-**The design.** A cache in memory keeps a summary of each file. The key is the path. The entry is valid while the time of the last change and the length of the file are the same. The summary holds the `Entry` of the list and the bounds of the track.
-
-**Part A: the class `TrackBounds` in `core`.**
-
-1. Make `app/src/main/java/net/basov/retrace/core/TrackBounds.java`. It is immutable, with four fields: `minLat`, `maxLat`, `minLon`, `maxLon`.
-2. Add `public static TrackBounds of(List<TrackPoint> points)`. For an empty list, return bounds that contain no point (use `Double.NaN` and return false from `near`).
-3. Add `public boolean near(TrackPoint fix, double limitM)`. Change the limit to degrees: `limitM / 111320.0` for the latitude. For the longitude, divide that value by the cosine of the latitude of the fix, and by 0.01 at least. Return true if the fix is inside the bounds made larger by these values.
-4. The method must never return false for a fix that is inside `limitM` of a point of the track. A true for a far fix is permitted, because the precise check comes later.
-5. Make `TrackBoundsTest` with these cases:
-   - A fix on the track.
-   - A fix 10 m outside the bounds, with a limit of 20 m.
-   - A fix 500 m outside the bounds.
-   - A track at latitude 60.
-   - An empty list.
-
-**Part B: the class `SummaryCache` in `core`.**
-
-1. Make `app/src/main/java/net/basov/retrace/core/SummaryCache.java`, a generic class `SummaryCache<V>`. It has no Android import.
-2. It holds a `HashMap<String, Item<V>>`. An item holds `modifiedMs`, `length` and the value.
-3. Add `V get(String path, long modifiedMs, long length)`. It returns the value if the two numbers agree, else null.
-4. Add `void put(String path, long modifiedMs, long length, V value)`, `void remove(String path)` and `void retain(Collection<String> paths)`. `retain` removes each path that is not in the collection.
-5. The class has no lock. The caller holds the lock.
-6. Make `SummaryCacheTest`: a hit, a miss after a change of the time, a miss after a change of the length, `remove` and `retain`.
-
-**Part C: `TrackStore`.**
-
-1. Add a static field: `private static final SummaryCache<Summary> CACHE = new SummaryCache<>();`. Use it only inside `synchronized (LOCK)`.
-2. Add a private static class `Summary` with two fields: the `Entry` and the `TrackBounds`.
-3. Add a private method `Summary summaryLocked(File f)`. It asks the cache with `f.getPath()`, `f.lastModified()` and `f.length()`. On a miss, it reads the file with `readGpx`, makes the `Entry` and the bounds, and puts them into the cache. For a file that it cannot read, it makes `new Entry(f)` and empty bounds, and puts them into the cache too.
-4. Change `list()` to use `summaryLocked(f).entry`. At the end of `list()`, call `CACHE.retain` with the paths of the files.
-5. In `writeGpx` and in `delete`, the caller holds the lock. After the change of the file, call `CACHE.remove(file.getPath())`.
-6. Add a method for the service:
-
-   ```java
-   // Returns the files with a track that can be near the fix. The check
-   // uses the bounds only. The caller does the precise check.
-   List<File> filesNear(TrackPoint fix, double limitM)
-   ```
-
-   It uses `summaryLocked(f).bounds.near(fix, limitM)` for each file of `trackFiles()`.
-
-**Part D: `ReferenceSelector` and `TrackService`.**
-
-1. In `ReferenceSelector.routeNear()`, the limit is `START_FACTOR * (profile.radiusM + 2 * accuracy)`. Move this calculation to a new method `public static double startLimitM(Profile profile, TrackPoint fix)`. `routeNear()` calls it. The behavior does not change.
-2. In `TrackService.startSearch()`, replace `store.trackFiles()` with `store.filesNear(first, ReferenceSelector.startLimitM(profile, first))`. The loop and the call of `routeNear` stay.
-
-**Documents.** Add two list items to section 5.2 of `doc/PLAN.md`: the cache, and the bounds check before the selection.
-
-**Done when:** `test/run.sh` passes with the two new test classes. The list screen and the automatic selection give the same results as before.
-
-**Risk.** A wrong cache shows old data. Thus the key must use the time and the length, and each write must remove the entry.
-
----
-
 ### Task 5. The comparison logic of `TrackService` has no test
 
 **The weak point.** `TrackService` has more than 1100 lines. About 250 of them decide the comparison. They hold the manual selection, the automatic selection, the stop of a comparison that differs, the smoothing and the finish signal. This logic uses no Android class, but it is in an Android class. Thus no test runs it. The replay fault that patch 56 corrected, and the loop fault that patch 54 corrected, show the cost.
 
 **The goal.** Move this logic to a new class `TripComparison` in `core`, with no change of behavior. Then test it on the JVM.
 
-**Do this task after tasks 4 and 12.** Do it in two patches: the move first, then the tests.
+**Do this task after task 12.** Do it in two patches: the move first, then the tests.
 
 **Patch A: the move.**
 
@@ -363,52 +304,29 @@ The comparison always uses the profile of the trip for its limits. Only the refe
 
 **Part B: the automatic selection.** Files in `app/src/main/java/net/basov/retrace/core/`.
 
-1. In `Profile`, add three constants and a method:
-
-   ```java
-   // The limits of the mean speed between two profiles, in m/s. A track
-   // with a wrong profile gets its real profile from its mean speed.
-   public static final double WALK_RUN_MPS = 2.2;
-   public static final double RUN_CYCLE_MPS = 4.5;
-   public static final double CYCLE_DRIVE_MPS = 10;
-
-   // The profile that fits a mean speed, or null for NaN.
-   public static Profile ofMeanSpeed(double mps) {
-       if (Double.isNaN(mps)) {
-           return null;
-       }
-       if (mps < WALK_RUN_MPS) {
-           return WALKING;
-       }
-       if (mps < RUN_CYCLE_MPS) {
-           return RUNNING;
-       }
-       return mps < CYCLE_DRIVE_MPS ? CYCLING : DRIVING;
-   }
-   ```
-
+1. Use the guess of the import: `TrackImport.guessProfile(List<TrackPoint>)`. It gives the profile from the median speed of the moving parts, with the limits 8, 16 and 40 km/h. Do not make a second set of limits.
 2. In `ReferenceSelector`, add this method:
 
    ```java
    // True if the track can be a reference track for a trip of the profile.
-   // A track of a different profile fits if its mean speed fits the profile
-   // of the trip. An example is a walk that the user recorded as cycling.
+   // A track of a different profile fits if its speed fits the profile of
+   // the trip. An example is a walk that the user recorded as cycling. The
+   // guess is the same as for an import of a file with no profile.
    public static boolean fitsProfile(Track track, Profile profile) {
        if (track.profile == profile) {
            return true;
        }
-       return track.profile != null
-               && Profile.ofMeanSpeed(TrackSpeeds.of(track, track.profile).meanMps) == profile;
+       return track.profile != null && TrackImport.guessProfile(track.points) == profile;
    }
    ```
 
-3. In `routeNear()`, replace `track.profile != profile` with `!fitsProfile(track, profile)`. Keep the check of the count of points. Call `fitsProfile` after the distance check, because `TrackSpeeds` costs more time than the distance.
+3. In `routeNear()`, replace `track.profile != profile` with `!fitsProfile(track, profile)`. Keep the check of the count of points. Call `fitsProfile` after the distance check, because the guess costs more time than the distance.
 4. In `best()`, add a first tie rule: a candidate of the trip profile wins over a candidate of a different profile. The class must keep the profile of the trip. If it has no field for it, add `private final Profile profile;` and set it in the constructor.
 5. Update the banner comment: the candidates, and the new first tie rule.
 
 **Part C: change the profile of a track.**
 
-1. `TrackStore`: add `void changeProfile(File file, Profile profile) throws IOException`. Under the lock, read the track, call `withProfile(profile)` and write it with `writeGpx`. If task 4 is done, `writeGpx` also removes the entry of the cache. Do not change the file name. A way keeps the file names of its members, thus a new name breaks the way. The profile in the file name is then only a name.
+1. `TrackStore`: add `void changeProfile(File file, Profile profile) throws IOException`. Under the lock, read the track, call `withProfile(profile)` and write it with `writeGpx`. `writeGpx` also removes the entry of the cache. Do not change the file name. A way keeps the file names of its members, thus a new name breaks the way. The profile in the file name is then only a name.
 2. `TrackActions`: add the item `CHANGE_PROFILE = 8` after `RENAME`. Show it if the entry is readable and is not a way. Its label is the new string `change_profile`: "Change the profile".
 3. The item opens a dialog with the four labels of `Labels.profile`, with `setSingleChoiceItems`. The current profile is checked. A push on a different profile calls `runFileTask` with `store.changeProfile`, then closes the dialog.
 4. Add the code `PROFILE_CHANGED = 5` to the codes of `TrackActions`. Find each implementation of `TrackActions.Listener`. Handle `PROFILE_CHANGED` the same as `RENAMED`.
@@ -416,7 +334,6 @@ The comparison always uses the profile of the trip for its limits. Only the refe
 
 **Tests.**
 
-- `ProfileTest` or a new test class: the values 1.4, 2.5, 6 and 15 m/s give the four profiles. NaN gives null.
 - `ReferenceSelectorTest`: a walking trip on the north route. The only saved track is the same route at 1.4 m/s, but with the profile `CYCLING`. The selector selects it.
 - `ReferenceSelectorTest`: the same trip, and a saved track at 5 m/s with the profile `CYCLING`. It is not a candidate.
 - `ReferenceSelectorTest`: the same trip, a walking track and a track at 1.4 m/s with the profile `CYCLING`, on the same route. The walking track wins.
@@ -427,7 +344,7 @@ The comparison always uses the profile of the trip for its limits. Only the refe
 
 **Done when:** `test/run.sh` passes with the new cases.
 
-**Risk.** The speed limits overlap with real trips: a slow cyclist can go at 4 m/s. That only matters for a track of a different profile. The tie rule and `RouteAgreement` protect the comparison.
+**Risk.** The speed limits overlap with real trips: a slow cyclist can go at 4 m/s, which is below 16 km/h. That only matters for a track of a different profile. The tie rule and `RouteAgreement` protect the comparison.
 
 ---
 
