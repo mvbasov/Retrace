@@ -99,7 +99,7 @@ The `core` package imports no Android package. Thus the tests run on the JVM.
 - It writes each point to the log file during the trip. Thus a crash loses no data.
 - Stop of a trip with the GPS ends the current track segment. The trip stays open, and the elapsed time continues. The GPS stays on during the pause, thus it keeps its fix. Its fixes do not go into the track. They update the dot, the smoother, the position on the map and the position for a waypoint.
 - The fused provider turns the GPS receiver off when the device does not move. Thus, during the pause of a trip with the fused provider, the service also requests the GPS fixes directly. Continue removes that request.
-- The button **GPS off** of the pause stops all fixes. **GPS on** and **Continue** start them again. Each pause starts with the fixes on. Continue starts a new track segment at the next point. It needs no minimum step, and the step to it is not distance. End stops the GPS and saves the track. A replay has no pause.
+- The button **GPS off** of the pause stops all fixes. **GPS on** and **Continue** start them again. Each pause starts with the fixes on. Continue starts a new track segment at the next point. It needs no minimum step, and the step to it is not distance. End stops the GPS and saves the track. A replay has no pause, but it keeps the track segments of the replayed track.
 - The Waypoint button adds a waypoint at the last smoothed fix, with the next automatic name: wpt01, wpt02 and so on. The service writes it to the log file at once.
 - The service does not restart after Android stops the process. The next start of MainActivity saves the log file as a track.
 - The notification shows the live result, for example "0:42 ahead · 3.2 km to the finish".

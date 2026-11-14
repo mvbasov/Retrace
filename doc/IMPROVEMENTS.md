@@ -36,7 +36,7 @@ Use only invented tracks from `TestTracks`. Do not add a real track. Check a cha
 
 | Part | Depth | Result |
 | --- | --- | --- |
-| `TrackService` | Each line | Tasks 2, 3, 5 and 7. |
+| `TrackService` | Each line | Tasks 3, 5 and 7. One fault: patch 56 corrected it. |
 | `TrackStore`, `TrackProvider` | Each line | Task 4. The provider is safe: it gives only files of the track directory. |
 | `ReferenceSelector`, `RouteAgreement` | Each line, and runs with many seeds | One fault. Patch 54 corrected it. |
 | Activities and dialogs | The threads and the life cycle | No fault. Each background result checks that the activity is alive. |
@@ -49,7 +49,6 @@ Use only invented tracks from `TestTracks`. Do not add a real track. Check a cha
 
 | Task | Type | Size | Section |
 | --- | --- | --- | --- |
-| 2. A replay loses the track segments | Fault | Small | 4 |
 | 3. Wrong sentences in the banner of `TrackService` | Comment | Small | 4 |
 | 4. Each list and each trip start read all GPX files | Speed | Medium | 4 |
 | 5. The comparison logic of `TrackService` has no test | Structure | Large | 4 |
@@ -64,7 +63,7 @@ The maintainer declined task 10, a Russian translation. Do not do it.
 
 ### 3.1 The sequence
 
-Do the tasks in this sequence: 2, 3, 9, 8, 6, 4, 12, 5, 7, 11.
+Do the tasks in this sequence: 3, 9, 8, 6, 4, 12, 5, 7, 11.
 
 - Task 9 comes early. After it, each push compiles the Android classes. Thus a fault in an Android class of a later task shows at once.
 - Task 8 comes after task 3, because the two change the same comment.
@@ -74,42 +73,6 @@ Do the tasks in this sequence: 2, 3, 9, 8, 6, 4, 12, 5, 7, 11.
 ---
 
 ## 4. Tasks that need no decision
-
-### Task 2. A replay loses the track segments
-
-**The fault.** `TrackService.beginReplay()` keeps only `track.points`. A replay of a track with two track segments draws a line between them, and counts that step as distance.
-
-**File:** `app/src/main/java/net/basov/retrace/TrackService.java`
-
-**Steps:**
-
-1. Add a field near `replayPoints`:
-
-   ```java
-   private List<Integer> replaySegmentStarts = new ArrayList<>();
-   ```
-
-2. In `beginReplay()`, after `replayPoints = track.points;`, add `replaySegmentStarts = track.segmentStarts;`.
-3. In `resetTrip()`, after `replayPoints = null;`, add `replaySegmentStarts = new ArrayList<>();`.
-4. In `replayNext()`, find `TrackPoint p = replayPoints.get(replayIndex++);`. Replace it with:
-
-   ```java
-   int index = replayIndex++;
-   TrackPoint p = replayPoints.get(index);
-   if (replaySegmentStarts.contains(index)) {
-       // The same steps as Continue after Stop of a trip.
-       newSegmentPending = true;
-       filter.newSegment();
-   }
-   ```
-
-5. In the banner comment, add one sentence: a replay keeps the track segments of the replayed track.
-
-**Test.** `TrackService` has no JVM test. `RecordFilter.newSegment()` already has a test in `TrackTest`. Ask the maintainer to replay a track with two track segments on a device.
-
-**Done when:** the map of the replay shows no line between the two track segments.
-
----
 
 ### Task 3. Wrong sentences in the banner of `TrackService`
 
@@ -188,11 +151,11 @@ Do the tasks in this sequence: 2, 3, 9, 8, 6, 4, 12, 5, 7, 11.
 
 ### Task 5. The comparison logic of `TrackService` has no test
 
-**The weak point.** `TrackService` has more than 1100 lines. About 250 of them decide the comparison. They hold the manual selection, the automatic selection, the stop of a comparison that differs, the smoothing and the finish signal. This logic uses no Android class, but it is in an Android class. Thus no test runs it. The fault of task 2, and the loop fault that patch 54 corrected, show the cost.
+**The weak point.** `TrackService` has more than 1100 lines. About 250 of them decide the comparison. They hold the manual selection, the automatic selection, the stop of a comparison that differs, the smoothing and the finish signal. This logic uses no Android class, but it is in an Android class. Thus no test runs it. The replay fault that patch 56 corrected, and the loop fault that patch 54 corrected, show the cost.
 
 **The goal.** Move this logic to a new class `TripComparison` in `core`, with no change of behavior. Then test it on the JVM.
 
-**Do this task after tasks 2, 3 and 4.** Do it in two patches: the move first, then the tests.
+**Do this task after tasks 3, 4 and 12.** Do it in two patches: the move first, then the tests.
 
 **Patch A: the move.**
 

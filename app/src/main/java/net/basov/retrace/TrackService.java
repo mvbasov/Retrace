@@ -97,9 +97,10 @@ import net.basov.retrace.core.Waypoint;
 //
 // ACTION_REPLAY starts a replay: the points of a saved track go through the
 // same steps as GPS fixes, faster than the real time. See Replay. A replay
-// does not use the GPS, writes no log file and saves no track. It does not
-// use the foreground state, because it needs no location permission. Thus
-// Android can stop a replay soon after the user leaves Retrace.
+// does not use the GPS, writes no log file and saves no track. It keeps the
+// track segments of the replayed track. It does not use the foreground
+// state, because it needs no location permission. Thus Android can stop a
+// replay soon after the user leaves Retrace.
 //
 // A trip with a way as the reference track can join the way after the
 // finish. See WayUpdater. The service keeps one offer, and the visible
@@ -261,6 +262,7 @@ public final class TrackService extends Service {
     private String replayPath;
     private String replayName;
     private List<TrackPoint> replayPoints;
+    private List<Integer> replaySegmentStarts = new ArrayList<>();
     private int replayIndex;
     private long replayElapsedMs;
     private final Runnable replayStep = this::replayNext;
@@ -477,6 +479,7 @@ public final class TrackService extends Service {
         replayPath = null;
         replayName = null;
         replayPoints = null;
+        replaySegmentStarts = new ArrayList<>();
         replayIndex = 0;
         replayElapsedMs = 0;
         synchronized (POINTS) {
@@ -507,6 +510,7 @@ public final class TrackService extends Service {
         replayPath = path;
         replayName = track.name;
         replayPoints = track.points;
+        replaySegmentStarts = track.segmentStarts;
         if (reference != null) {
             loadReference(reference, reversed);
         } else if (automatic) {
@@ -524,7 +528,13 @@ public final class TrackService extends Service {
         if (!recording || replaySpeed == 0) {
             return;
         }
-        TrackPoint p = replayPoints.get(replayIndex++);
+        int index = replayIndex++;
+        TrackPoint p = replayPoints.get(index);
+        if (replaySegmentStarts.contains(index)) {
+            // The same steps as Continue after Stop of a trip.
+            newSegmentPending = true;
+            filter.newSegment();
+        }
         TrackPoint first = replayPoints.get(0);
         if (p.hasTime() && first.hasTime()) {
             replayElapsedMs = p.timeMs - first.timeMs;
