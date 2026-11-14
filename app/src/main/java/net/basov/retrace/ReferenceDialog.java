@@ -16,7 +16,10 @@ import net.basov.retrace.core.Profile;
 //
 // The trip screen uses it during a trip, and the list of tracks uses it
 // before a replay. The first two lines are the automatic selection and no
-// comparison. The saved tracks of the profile follow, the newest first.
+// comparison. The saved tracks of the trip profile follow, the newest
+// first. Then the tracks of the other profiles follow, each with its
+// profile. A track can have a wrong profile, for example a walk that the
+// user recorded as cycling.
 //
 // After a push on a track, a second dialog asks for the direction. The
 // opposite direction tells that its time is correct only on a flat route.
@@ -37,14 +40,17 @@ final class ReferenceDialog {
         TrackStore store = new TrackStore(activity);
         files.execute(() -> {
             List<TrackStore.Entry> tracks = new ArrayList<>();
+            List<TrackStore.Entry> others = new ArrayList<>();
             for (TrackStore.Entry e : store.list()) {
-                if (e.readable && e.profile == profile && e.points >= TrackStore.MIN_POINTS) {
-                    tracks.add(e);
+                if (!e.readable || e.profile == null || e.points < TrackStore.MIN_POINTS) {
+                    continue;
                 }
+                (e.profile == profile ? tracks : others).add(e);
             }
+            tracks.addAll(others);
             activity.runOnUiThread(() -> {
                 if (!activity.isFinishing() && !activity.isDestroyed()) {
-                    showList(activity, tracks, listener);
+                    showList(activity, tracks, profile, listener);
                 }
             });
         });
@@ -74,14 +80,17 @@ final class ReferenceDialog {
     }
 
     private static void showList(Activity activity, List<TrackStore.Entry> tracks,
-                                 Listener listener) {
+                                 Profile profile, Listener listener) {
         String[] items = new String[tracks.size() + 2];
         items[0] = activity.getString(R.string.select_automatic);
         items[1] = activity.getString(R.string.select_none);
         for (int i = 0; i < tracks.size(); i++) {
             TrackStore.Entry e = tracks.get(i);
-            items[i + 2] = activity.getString(R.string.select_item, e.name,
-                    Labels.distance(activity, e.distanceM));
+            String distance = Labels.distance(activity, e.distanceM);
+            items[i + 2] = e.profile == profile
+                    ? activity.getString(R.string.select_item, e.name, distance)
+                    : activity.getString(R.string.select_item_profile, e.name, distance,
+                            Labels.profile(activity, e.profile));
         }
         new AlertDialog.Builder(activity)
                 .setTitle(R.string.select_reference)

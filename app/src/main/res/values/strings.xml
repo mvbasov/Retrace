@@ -38,10 +38,12 @@
     <string name="track_details_speeds">%1$s · %2$s</string>
     <string name="track_unreadable">Retrace cannot read this file.</string>
     <string name="rename">Rename</string>
+    <string name="change_profile">Change the profile</string>
     <string name="rename_waypoints">Waypoints</string>
     <string name="delete">Delete</string>
     <string name="delete_question">Delete the track \"%1$s\"?</string>
     <string name="error_rename">Retrace cannot rename the track.</string>
+    <string name="error_change_profile">Retrace cannot change the profile of the track.</string>
     <string name="error_delete">Retrace cannot delete the track.</string>
 
     <!-- The ways -->
@@ -117,6 +119,8 @@
     <string name="select_automatic">Automatic selection</string>
     <string name="select_none">No comparison</string>
     <string name="select_item">%1$s · %2$s</string>
+    <!-- A track of a different profile: the name, the distance and the profile. -->
+    <string name="select_item_profile">%1$s · %2$s · %3$s</string>
     <string name="reference_search">Retrace looks for a saved track that starts here.</string>
     <string name="reference_temporary">Reference track: %1$s (temporary)</string>
     <string name="reference_selected">Reference track: %1$s</string>

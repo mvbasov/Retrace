@@ -176,13 +176,14 @@ The precision of `Δt` has a limit. The GPS drift of two trips is different, and
 
 Automatic selection:
 
-1. At the first point of a trip, TrackService reads the saved tracks one at a time. It keeps each track of the same profile with its route inside three start circles of the point. Each such track is a candidate in its own direction and in the opposite direction.
+1. At the first point of a trip, TrackService reads the saved tracks one at a time. It keeps each track with its route inside three start circles of the point, and with the profile of the trip. A track of a different profile also stays if the profile guess of the import gives the trip profile from its speed. An example is a walk that the user recorded as cycling. Each such track is a candidate in its own direction and in the opposite direction.
 2. Each point of the trip goes to one TrackMatcher for each candidate. A matcher joins the route at the start or in the middle. It does not join against the direction of movement.
 3. The progress of a candidate is the distance along its route from the start or the join. The place along the route cannot move farther than the trip moved, plus two off-route limits. A larger change is a new join, and the progress starts again there. Without this rule, the opposite direction of a loop finds its route again near its own finish, and wins at once.
 4. The temporary reference track is the valid candidate with the lowest mean cross-track distance. Before the first valid candidate, it is the candidate with the nearest route. A valid candidate is on the route, and its progress is at least half the decision distance.
 5. The decision distance is 10 % of the shortest candidate, between 50 m and 300 m. When the progress of one candidate on the route reaches it, Retrace selects the temporary reference track. Its matcher has all the points, thus the comparison continues with no gap.
 6. Two tracks of the same route have almost the same score. Thus candidates within 3 m of the best mean cross-track distance count as equal. From them:
-   - A way wins, because it is the typical trip on the route.
+   - A track of the trip profile wins over a track of a different profile.
+   - Then a way wins, because it is the typical trip on the route.
    - Then the same direction wins over the opposite direction.
    - Then the newest track wins, and the trip races the last trip on that route.
 7. If no candidate is valid after three decision distances, Retrace records a new route with no comparison.
@@ -198,7 +199,7 @@ Example: a short loop and a long route with the same start and the same first 40
 Manual selection:
 
 - The menu of the track screen starts a trip with that track as the reference track, in its direction or in the opposite direction.
-- During the trip, the menu of the trip screen selects a track of the same profile, the automatic selection or no comparison. A second dialog asks for the direction of the track.
+- During the trip, the menu of the trip screen selects a saved track, the automatic selection or no comparison. The tracks of the trip profile come first, then the tracks of the other profiles with their profile. A second dialog asks for the direction of the track.
 - The time in the opposite direction comes from `Track.reversed()`. It is correct only on a flat route. The menu item, the dialog and the trip screen tell this.
 - After a change, TrackService gives all the points of the trip to the new matcher. A finish in these points gives no vibration.
 - A manual selection always replaces the automatic selection for that trip.
@@ -223,7 +224,7 @@ Manual selection:
     - The mean speed is the distance of the moving steps divided by their time.
     - The lowest and the highest speed come from windows of the smoothing time of the profile, with no stop or jump in them.
   - The direction of the arrow comes from the first point at least 16 dp from the start on the screen. The points of a wait at the start do not turn the arrow.
-  - The bottom of the track screen has the **Replay** button and the **Menu** button. The menu has the trip items, the way item, and share, rename and delete.
+  - The bottom of the track screen has the **Replay** button and the **Menu** button. The menu has the trip items, the way item, and share, rename, change the profile and delete. **Change the profile** writes the track again with a different profile. The file keeps its name, because a way keeps the file names of its members.
   - A long push on a track in the list shows a short menu: share, rename and delete.
   - The rename dialog shows the name of the track and the names of its waypoints. An empty field keeps the old name. With no change, Retrace does not write the file.
 - You can change the tile URL in Settings. Thus you can use a different tile server.
@@ -340,7 +341,7 @@ Retrace does not need `ACCESS_BACKGROUND_LOCATION`. The service starts while the
   - a wait at the start, and a GPS gap
   - a faster trip, a slower trip, and a route with no times
 - Replay mode: the service takes the points of a saved track and not the fixes of the GPS. Thus you can test the full user interface at your desk.
-  - The **Replay** button of the track screen starts a replay of that track. A dialog first selects the reference track: the automatic selection, no comparison, or a saved track of the same profile.
+  - The **Replay** button of the track screen starts a replay of that track. A dialog first selects the reference track: the automatic selection, no comparison, or a saved track.
   - After the stop of a replay, the **Replay** button of the trip screen starts the same replay again. It uses the last selection of the reference track and the last speed. After the automatic selection, the selection runs again.
   - The automatic selection does not use the replayed track. A replay with the replayed track as the reference track gives a time difference near zero. This is a quick check of the matcher.
   - Each point keeps its own time. Only the wait on the screen is shorter. The speeds are 1×, 5×, 10×, 30× and 100×, and the menu of the trip screen changes the speed. No wait is longer than 2 seconds.

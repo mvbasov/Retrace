@@ -40,6 +40,9 @@ public final class ReferenceSelectorTest {
         aTripInTheOppositeDirectionSelectsTheReversedTrack();
         aTripFromTheMiddleJoinsTheRoute();
         aLoopKeepsItsDirection();
+        aWalkSavedAsCyclingIsACandidate();
+        aRealCyclingTrackIsNotACandidate();
+        theTripProfileWinsATie();
 
         if (failures > 0) {
             System.out.println("ReferenceSelectorTest: " + failures + " check(s) failed");
@@ -199,6 +202,54 @@ public final class ReferenceSelectorTest {
             }
         }
         check("loop: wrong selections", 0, wrong);
+    }
+
+    // The user can save a walk with the profile cycling. Its speed fits
+    // walking, thus a walking trip can use it as the reference track.
+    private static void aWalkSavedAsCyclingIsACandidate() {
+        Track walk = walk(NORTH, 31, 1);
+        List<ReferenceSelector.Candidate> all = new ArrayList<>();
+        all.add(new ReferenceSelector.Candidate("mislabelled",
+                new Track("m", Profile.CYCLING, walk.points)));
+        List<TrackPoint> points = trip(NORTH, 131, 0);
+        List<ReferenceSelector.Candidate> near = ReferenceSelector.nearRoute(
+                all, Profile.WALKING, points.get(0));
+        check("mislabelled: candidates", 2, near.size());
+        Result r = feed(new ReferenceSelector(near, Profile.WALKING, points.get(0)), points);
+        check("mislabelled: state", ReferenceSelector.State.SELECTED, r.state);
+        check("mislabelled: track", "mislabelled", r.selected);
+        check("mislabelled: same direction", false, r.reversed);
+    }
+
+    // A real cycling track at 5 m/s does not fit walking.
+    private static void aRealCyclingTrackIsNotACandidate() {
+        Track ride = new Track("c", Profile.CYCLING, TestTracks.recorded(TestTracks.noisy(
+                TestTracks.ideal(NORTH, 5, TestTracks.START_MS + DAY_MS, 0), 32, SIGMA),
+                Profile.CYCLING));
+        List<ReferenceSelector.Candidate> all = new ArrayList<>();
+        all.add(new ReferenceSelector.Candidate("ride", ride));
+        check("ride: candidates", 0, ReferenceSelector.nearRoute(
+                all, Profile.WALKING, trip(NORTH, 132, 0).get(0)).size());
+    }
+
+    // The same walk, saved two times: with the profile walking, and later
+    // with the profile cycling. The two scores are equal, and the newest
+    // rule prefers the later track. The profile of the trip must come first.
+    private static void theTripProfileWinsATie() {
+        Track walk = walk(NORTH, 33, 1);
+        List<TrackPoint> later = new ArrayList<>();
+        for (TrackPoint p : walk.points) {
+            later.add(new TrackPoint(p.latitude, p.longitude, p.timeMs + 8 * DAY_MS,
+                    p.elevationM, p.accuracyM));
+        }
+        List<ReferenceSelector.Candidate> all = new ArrayList<>();
+        all.add(new ReferenceSelector.Candidate("walking", walk));
+        all.add(new ReferenceSelector.Candidate("cycling", new Track("c", Profile.CYCLING, later)));
+        List<TrackPoint> points = trip(NORTH, 133, 0);
+        List<ReferenceSelector.Candidate> near = ReferenceSelector.nearRoute(
+                all, Profile.WALKING, points.get(0));
+        Result r = feed(new ReferenceSelector(near, Profile.WALKING, points.get(0)), points);
+        check("tie: track", "walking", r.selected);
     }
 
     // ------------------------------------------------------------------

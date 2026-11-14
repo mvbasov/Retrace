@@ -301,6 +301,15 @@ final class TrackStore {
         }
     }
 
+    // Changes the profile of a saved track. The file keeps its name, because
+    // a way keeps the file names of its members. The profile in the file
+    // name is then only a name.
+    void changeProfile(File file, Profile profile) throws IOException {
+        synchronized (LOCK) {
+            writeGpx(readGpx(file).withProfile(profile), file);
+        }
+    }
+
     boolean delete(File file) {
         synchronized (LOCK) {
             CACHE.remove(file.getPath());

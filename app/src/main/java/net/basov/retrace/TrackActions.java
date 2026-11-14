@@ -17,13 +17,15 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 
+import net.basov.retrace.core.Profile;
+
 // ----------------------------------------------------------------------
 // The menu of a track
 // ----------------------------------------------------------------------
 //
 // The list of tracks and the track screen show the menu of a track. A long
-// push on a line of the list shows the file items: share, rename and
-// delete. The Menu button of the track screen shows the full menu: the trip
+// push on a line of the list shows the file items: share, rename, change
+// the profile, and delete. The Menu button of the track screen shows the full menu: the trip
 // items, the way item, then the file items.
 //
 // The menu is a dialog, not a context menu. From Android 7, a context menu is
@@ -46,6 +48,7 @@ final class TrackActions {
     static final int DELETED = 2;
     static final int WAY_MADE = 3;
     static final int WAY_CHANGED = 4;
+    static final int PROFILE_CHANGED = 5;
 
     interface Listener {
         void onChanged(int change);
@@ -58,6 +61,7 @@ final class TrackActions {
     private static final int SHARE = 5;
     private static final int RENAME = 6;
     private static final int DELETE = 7;
+    private static final int CHANGE_PROFILE = 8;
 
     private TrackActions() {
     }
@@ -91,6 +95,9 @@ final class TrackActions {
         if (e.readable) {
             add(activity, ids, labels, SHARE, R.string.share);
             add(activity, ids, labels, RENAME, R.string.rename);
+        }
+        if (e.readable && !e.isWay()) {
+            add(activity, ids, labels, CHANGE_PROFILE, R.string.change_profile);
         }
         add(activity, ids, labels, DELETE, R.string.delete);
         new AlertDialog.Builder(activity)
@@ -128,6 +135,8 @@ final class TrackActions {
             share(activity, e);
         } else if (id == RENAME) {
             askRename(activity, files, e, listener);
+        } else if (id == CHANGE_PROFILE) {
+            askProfile(activity, files, e, listener);
         } else if (id == DELETE) {
             askDelete(activity, files, e, listener);
         }
@@ -205,6 +214,37 @@ final class TrackActions {
     private static String newName(EditText field, String old) {
         String value = field.getText().toString().trim();
         return value.isEmpty() ? old : value;
+    }
+
+    // The user can record a route with a wrong profile. The four profiles
+    // show with the current profile checked. A push on a different profile
+    // writes the track again. A way is not offered, because its profile
+    // comes from its members.
+    private static void askProfile(Activity activity, ExecutorService files, TrackStore.Entry e,
+                                   Listener listener) {
+        Profile[] profiles = Profile.values();
+        String[] labels = new String[profiles.length];
+        int checked = -1;
+        for (int i = 0; i < profiles.length; i++) {
+            labels[i] = Labels.profile(activity, profiles[i]);
+            if (profiles[i] == e.profile) {
+                checked = i;
+            }
+        }
+        new AlertDialog.Builder(activity)
+                .setTitle(R.string.change_profile)
+                .setSingleChoiceItems(labels, checked, (d, which) -> {
+                    d.dismiss();
+                    Profile selected = profiles[which];
+                    if (selected != e.profile) {
+                        TrackStore store = new TrackStore(activity);
+                        runFileTask(activity, files, () -> store.changeProfile(e.file, selected),
+                                R.string.error_change_profile,
+                                () -> listener.onChanged(PROFILE_CHANGED));
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
     }
 
     private static void askDelete(Activity activity, ExecutorService files, TrackStore.Entry e,

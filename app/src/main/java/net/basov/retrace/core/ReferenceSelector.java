@@ -8,13 +8,15 @@ import java.util.List;
 // The automatic selection of the reference track
 // ----------------------------------------------------------------------
 //
-// At the start of a trip, the candidates are the saved tracks of the same
-// profile with a route near the first point. The trip can start at the
-// start of a route, or join it in the middle. Each such track is a
-// candidate in its own direction and in the opposite direction. See
-// nearRoute(). The selector gives each point of the trip to one
-// TrackMatcher for each candidate. A matcher does not join a route against
-// the direction of movement. Thus the wrong direction does not get valid.
+// At the start of a trip, the candidates are the saved tracks with a route
+// near the first point. A candidate has the profile of the trip, or a
+// different profile with a speed that fits the trip profile. See
+// fitsProfile(). The trip can start at the start of a route, or join it in
+// the middle. Each such track is a candidate in its own direction and in
+// the opposite direction. See nearRoute(). The selector gives each point of
+// the trip to one TrackMatcher for each candidate. A matcher does not join a
+// route against the direction of movement. Thus the wrong direction does not
+// get valid.
 //
 // During the selection, the current candidate is the temporary reference
 // track. It is the candidate with the best score so far, or the candidate
@@ -33,10 +35,11 @@ import java.util.List;
 //
 // Two tracks of the same route have almost the same score. Thus candidates
 // within TIE_M of the best score count as equal. From them:
-// 1. A way wins, because it is the typical trip on the route.
-// 2. Then the same direction wins over the opposite direction. The time in
+// 1. A track of the trip profile wins over a track of a different profile.
+// 2. Then a way wins, because it is the typical trip on the route.
+// 3. Then the same direction wins over the opposite direction. The time in
 //    the opposite direction is correct only on a flat route.
-// 3. Then the newest wins. The trip then races the last trip on that route.
+// 4. Then the newest wins. The trip then races the last trip on that route.
 //
 // If no candidate is valid after GIVE_UP_FACTOR times the decision distance,
 // the trip has no reference track. Retrace then records a new route.
@@ -138,6 +141,8 @@ public final class ReferenceSelector {
     private final List<Trial> trials = new ArrayList<>();
     private final double decisionM;
     private final double jumpSlackM;
+    // The profile of the trip.
+    private final Profile profile;
     private State state;
     private Trial current;
     private TrackPoint lastFix;
@@ -161,10 +166,23 @@ public final class ReferenceSelector {
     // fix. TrackService reads the saved tracks one at a time with this
     // check. Thus only the near tracks stay in memory.
     public static boolean routeNear(Track track, Profile profile, TrackPoint fix) {
-        if (track.profile != profile || track.points.size() < 2) {
+        if (track.points.size() < 2) {
             return false;
         }
-        return distanceToRoute(track, fix) <= startLimitM(profile, fix);
+        // The guess of fitsProfile() costs more time than the distance.
+        return distanceToRoute(track, fix) <= startLimitM(profile, fix)
+                && fitsProfile(track, profile);
+    }
+
+    // True if the track can be a reference track for a trip of the profile.
+    // A track of a different profile fits if its speed fits the profile of
+    // the trip. An example is a walk that the user recorded as cycling. The
+    // guess is the same as for an import of a file with no profile.
+    public static boolean fitsProfile(Track track, Profile profile) {
+        if (track.profile == profile) {
+            return true;
+        }
+        return track.profile != null && TrackImport.guessProfile(track.points) == profile;
     }
 
     // The largest distance from the first fix to the route of a candidate.
@@ -203,6 +221,7 @@ public final class ReferenceSelector {
     // The candidates must have at least 2 points each. The route distances
     // come from the first fix of the trip.
     public ReferenceSelector(List<Candidate> candidates, Profile profile, TrackPoint firstFix) {
+        this.profile = profile;
         double shortest = Double.POSITIVE_INFINITY;
         for (Candidate c : candidates) {
             trials.add(new Trial(c, profile, distanceToRoute(c.track, firstFix)));
@@ -331,6 +350,11 @@ public final class ReferenceSelector {
             }
         }
         return Collections.max(equal, (a, b) -> {
+            boolean ownA = a.candidate.track.profile == profile;
+            boolean ownB = b.candidate.track.profile == profile;
+            if (ownA != ownB) {
+                return ownA ? 1 : -1;
+            }
             boolean wayA = a.candidate.track.isWay();
             boolean wayB = b.candidate.track.isWay();
             if (wayA != wayB) {
