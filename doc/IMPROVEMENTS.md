@@ -53,7 +53,6 @@ Use only invented tracks from `TestTracks`. Do not add a real track. Check a cha
 | 5. The comparison logic of `TrackService` has no test | Structure | Large | 4 |
 | 6. Save the accuracy of each point | Feature | Medium | 5 |
 | 7. Do not count the pause in the comparison | Feature | Medium | 5 |
-| 8. A GPS button in the notification of the pause | Feature | Small | 5 |
 | 11. Search for a different route after the trip leaves the route | Feature | Medium | 5 |
 | 12. Compare with a track of a different profile | Feature | Medium | 5 |
 
@@ -61,7 +60,7 @@ The maintainer declined task 10, a Russian translation. Do not do it.
 
 ### 3.1 The sequence
 
-Do the tasks in this sequence: 8, 6, 4, 12, 5, 7, 11.
+Do the tasks in this sequence: 6, 4, 12, 5, 7, 11.
 
 - After patch 58, each push compiles the Android classes. Thus a fault in an Android class shows in the test workflow of GitHub. Look at its result after each push.
 - Task 7 and task 11 need task 5. They change the class that task 5 makes.
@@ -325,51 +324,6 @@ The clock since the boot does not jump when the user changes the time of the dev
 **Documents.** In section 5.1 of `doc/PLAN.md`, change "the elapsed time continues" in the paragraph of Stop. The new text: the elapsed time on the screen continues, but the comparison does not count the time of the pause. Add the same sentence to `README.md`.
 
 **Done when:** `test/run.sh` passes with the new cases.
-
----
-
-### Task 8. A GPS button in the notification of the pause
-
-**The goal.** During the pause, the notification has a third button: GPS off or GPS on. It does the same as the button of the trip screen.
-
-**Steps:**
-
-1. Make `app/src/main/res/drawable/ic_gps.xml`, a vector icon of a target. Use strokes, not a fill type, because Android 6 does not read `android:fillType`:
-
-   ```xml
-   <?xml version="1.0" encoding="utf-8"?>
-   <!-- The icon of the GPS button in the notification of the pause. -->
-   <vector xmlns:android="http://schemas.android.com/apk/res/android"
-       android:width="24dp"
-       android:height="24dp"
-       android:viewportWidth="24"
-       android:viewportHeight="24">
-       <path
-           android:strokeColor="#FFFFFFFF"
-           android:strokeWidth="2"
-           android:pathData="M12,5 A7,7 0 1,1 11.99,5 M12,1 V5 M12,19 V23 M1,12 H5 M19,12 H23" />
-       <path
-           android:fillColor="#FFFFFFFF"
-           android:pathData="M12,9 A3,3 0 1,1 11.99,9 Z" />
-   </vector>
-   ```
-
-2. In `TrackService.notification()`, in the branch of the pause, add a third action after End:
-
-   ```java
-   b.addAction(action(ACTION_PAUSE_FIXES, 5, R.drawable.ic_gps,
-           s.fixesOn ? R.string.trip_gps_off : R.string.trip_gps_on));
-   ```
-
-   The request code 5 is free. The codes 1 to 4 are in use.
-3. Change the comment above the actions: after Stop, the buttons are Continue, End and GPS off or GPS on.
-4. Change the banner comment: the sentence about the buttons of the notification gets the GPS button of the pause.
-5. `togglePauseFixes()` already calls `publishAndNotify()`. Thus the label changes after each push. Do not change that method.
-6. Add one sentence to the paragraph of Stop in `README.md` and in section 5.1 of `doc/PLAN.md`.
-
-**Test.** No JVM test can show a notification. Ask the maintainer to push the button in the notification two times during a pause. The label and the dot of the trip screen must change each time.
-
-**Done when:** `test/run.sh` passes, and the maintainer confirms the button on a device.
 
 ---
 

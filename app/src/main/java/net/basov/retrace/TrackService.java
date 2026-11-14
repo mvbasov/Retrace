@@ -67,7 +67,7 @@ import net.basov.retrace.core.Waypoint;
 // the fixes on.
 //
 // The notification has the buttons Stop and Waypoint, and during the pause
-// Continue and End. A replay has no pause: Stop ends it.
+// Continue, End and GPS off or GPS on. A replay has no pause: Stop ends it.
 //
 // ACTION_WAYPOINT adds a waypoint at the last position, with the next
 // automatic name. It goes into the log file at once. See Waypoint.
@@ -1101,11 +1101,14 @@ public final class TrackService extends Service {
             text = TripText.notification(this, s);
         }
 
-        // During the trip: Stop and Waypoint. After Stop: Continue and End.
+        // During the trip: Stop and Waypoint. After Stop: Continue, End, and
+        // GPS off or GPS on.
         Notification.Builder b = builder();
         if (s.paused) {
             b.addAction(action(ACTION_CONTINUE, 3, R.drawable.ic_continue, R.string.trip_continue));
             b.addAction(action(ACTION_STOP, 1, R.drawable.ic_stop, R.string.trip_end));
+            b.addAction(action(ACTION_PAUSE_FIXES, 5, R.drawable.ic_gps,
+                    s.fixesOn ? R.string.trip_gps_off : R.string.trip_gps_on));
         } else {
             b.addAction(action(ACTION_PAUSE, 2, R.drawable.ic_stop, R.string.stop_recording));
             b.addAction(action(ACTION_WAYPOINT, 4, R.drawable.ic_waypoint, R.string.waypoint));
