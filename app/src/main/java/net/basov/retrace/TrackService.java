@@ -56,16 +56,18 @@ import net.basov.retrace.core.Waypoint;
 // the current track segment, but the trip stays open. The GPS stays on, thus
 // it keeps its fix for Continue. During the pause, the fixes do not go into
 // the track. They go to the dot, to the position on the map and to the
-// position of a waypoint. ACTION_CONTINUE starts a new track segment at the next
-// point. ACTION_STOP is the End button: it stops the GPS and saves the
-// track.
+// position of a waypoint. ACTION_CONTINUE starts a new track segment at
+// the next point. ACTION_STOP is the End button: it stops the GPS and saves
+// the track.
 //
 // The fused provider turns the GPS receiver off when the device does not
 // move. Thus, during the pause of a trip with the fused provider, the
 // service also requests the fixes of the GPS directly. ACTION_PAUSE_FIXES
 // turns all fixes of the pause off, and on again. Each pause starts with
-// the fixes on. The
-// notification has the same buttons. A replay has no pause: Stop ends it.
+// the fixes on.
+//
+// The notification has the buttons Stop and Waypoint, and during the pause
+// Continue and End. A replay has no pause: Stop ends it.
 //
 // ACTION_WAYPOINT adds a waypoint at the last position, with the next
 // automatic name. It goes into the log file at once. See Waypoint.
@@ -428,9 +430,10 @@ public final class TrackService extends Service {
     }
 
     // Worker thread. From Android 12, requests the fused fixes. Otherwise, if
-    // the setting is off, or if the device has no fused provider, requests the fixes of the GPS and
-    // of the network. The network is a fallback, thus a missing network
-    // provider is no fault. Returns ERROR_NONE if a provider gives fixes.
+    // the setting is off, or if the device has no fused provider, requests
+    // the fixes of the GPS and of the network. The network is a fallback,
+    // thus a missing network provider is no fault. Returns ERROR_NONE if a
+    // provider gives fixes.
     private int requestFixes() {
         if (Build.VERSION.SDK_INT >= 31 && AppSettings.useFused(this)) {
             fused = FusedFixes.start(locationManager, FIX_INTERVAL_MS, worker, listener);

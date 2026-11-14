@@ -36,7 +36,7 @@ Use only invented tracks from `TestTracks`. Do not add a real track. Check a cha
 
 | Part | Depth | Result |
 | --- | --- | --- |
-| `TrackService` | Each line | Tasks 3, 5 and 7. One fault: patch 56 corrected it. |
+| `TrackService` | Each line | Tasks 5 and 7. Patches 56 and 57 corrected a fault and two comments. |
 | `TrackStore`, `TrackProvider` | Each line | Task 4. The provider is safe: it gives only files of the track directory. |
 | `ReferenceSelector`, `RouteAgreement` | Each line, and runs with many seeds | One fault. Patch 54 corrected it. |
 | Activities and dialogs | The threads and the life cycle | No fault. Each background result checks that the activity is alive. |
@@ -49,7 +49,6 @@ Use only invented tracks from `TestTracks`. Do not add a real track. Check a cha
 
 | Task | Type | Size | Section |
 | --- | --- | --- | --- |
-| 3. Wrong sentences in the banner of `TrackService` | Comment | Small | 4 |
 | 4. Each list and each trip start read all GPX files | Speed | Medium | 4 |
 | 5. The comparison logic of `TrackService` has no test | Structure | Large | 4 |
 | 6. Save the accuracy of each point | Feature | Medium | 5 |
@@ -63,33 +62,15 @@ The maintainer declined task 10, a Russian translation. Do not do it.
 
 ### 3.1 The sequence
 
-Do the tasks in this sequence: 3, 9, 8, 6, 4, 12, 5, 7, 11.
+Do the tasks in this sequence: 9, 8, 6, 4, 12, 5, 7, 11.
 
 - Task 9 comes early. After it, each push compiles the Android classes. Thus a fault in an Android class of a later task shows at once.
-- Task 8 comes after task 3, because the two change the same comment.
 - Task 7 and task 11 need task 5. They change the class that task 5 makes.
 - Task 12 comes before task 5. Thus task 5 moves the code with the new profile rule.
 
 ---
 
 ## 4. Tasks that need no decision
-
-### Task 3. Wrong sentences in the banner of `TrackService`
-
-**The fault.** Two changes left faults in the comments. `CommentStyleTest` cannot find them.
-
-**File:** `app/src/main/java/net/basov/retrace/TrackService.java`
-
-**Steps:**
-
-1. In the banner comment, find the text that ends with "Each pause starts with the fixes on. The notification has the same buttons. A replay has no pause: Stop ends it." The line breaks are wrong, and the notification does not have the GPS button.
-2. Replace the last two sentences with: "The notification has the buttons Stop and Waypoint, and during the pause Continue and End. A replay has no pause: Stop ends it."
-3. Wrap the paragraph again, with the same line width as the comment lines around it.
-4. Find the comment above `requestFixes()`. One line is longer than 100 characters. Wrap it again.
-
-**Done when:** `test/run.sh` passes. No code line changes.
-
----
 
 ### Task 4. Each list and each trip start read all GPX files
 
@@ -155,7 +136,7 @@ Do the tasks in this sequence: 3, 9, 8, 6, 4, 12, 5, 7, 11.
 
 **The goal.** Move this logic to a new class `TripComparison` in `core`, with no change of behavior. Then test it on the JVM.
 
-**Do this task after tasks 3, 4 and 12.** Do it in two patches: the move first, then the tests.
+**Do this task after tasks 4 and 12.** Do it in two patches: the move first, then the tests.
 
 **Patch A: the move.**
 
@@ -383,7 +364,7 @@ The clock since the boot does not jump when the user changes the time of the dev
 
    The request code 5 is free. The codes 1 to 4 are in use.
 3. Change the comment above the actions: after Stop, the buttons are Continue, End and GPS off or GPS on.
-4. Change the banner comment: the sentence of task 3 about the notification gets the GPS button of the pause.
+4. Change the banner comment: the sentence about the buttons of the notification gets the GPS button of the pause.
 5. `togglePauseFixes()` already calls `publishAndNotify()`. Thus the label changes after each push. Do not change that method.
 6. Add one sentence to the paragraph of Stop in `README.md` and in section 5.1 of `doc/PLAN.md`.
 
