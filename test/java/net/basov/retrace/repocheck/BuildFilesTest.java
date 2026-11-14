@@ -42,6 +42,14 @@ public final class BuildFilesTest {
         check("Dockerfile: test stage", false, testStage.isEmpty());
         checkInOrder("test stage in Dockerfile.ci", testStage, stage(ci, "FROM base_env AS test"));
 
+        // The compile stage of Dockerfile is in Dockerfile.ci. The test workflow
+        // builds it.
+        List<String> compileStage = stage(local, "FROM retrace-base:latest AS compile");
+        check("Dockerfile: compile stage", false, compileStage.isEmpty());
+        checkInOrder("compile stage in Dockerfile.ci", compileStage,
+                stage(ci, "FROM base_env AS compile"));
+        check("test workflow: compile target", true, test.contains("--target compile"));
+
         // The two builds make the APK with the same commands.
         String[] same = {
                 "COPY --from=test /gate-passed /tmp/gate-passed",

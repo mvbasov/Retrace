@@ -99,6 +99,7 @@ feat(track): Record a track in a foreground service. v26.10.2
 - The tests use no JUnit and no Gradle. Each test class has a `main` method and its own `check` helper. A failed check sets the exit code to 1. Thus the project needs no test dependency.
 - `test/run.sh` compiles `app/src/main/java/net/basov/retrace/core/` and `test/java/` with `javac --release 17 -Xlint:all -Werror`. Then it runs each class with a name that ends in `Test`.
 - The `test` stage of `Dockerfile` runs `test/run.sh`. A failed test stops the build, and no APK comes out. To run the gate alone, use `docker buildx build --target test .`.
+- The `compile` stage of `Dockerfile` runs the tests, then compiles the Android code with Gradle. The test workflow builds this stage.
 - `--build-arg SKIP_TESTS=1` skips the gate. Use it only for an emergency build.
 - **Put the logic into `core`, and test it there.** A test that runs the code is better than a test that reads the source text.
 - Give each test method a comment that says why the test exists.
@@ -118,7 +119,7 @@ feat(track): Record a track in a foreground service. v26.10.2
 - The version of the Android Gradle plugin is in `build.gradle`. The version of Gradle is in `Dockerfile.base`. Change the two together.
 - The Gradle files use the `name = value` form for each property. Do not use the old `name value` form.
 - `app/build.gradle` sets `enableKotlin = false`. Without it, the plugin adds the Kotlin standard library to the APK. Do not use the deprecated `android.builtInKotlin` option.
-- `Dockerfile` has two stages. `test` runs the gate. `project_builder` runs `gradle assembleRelease` and copies the APK to `/app/bin/`. It reads the version from `app/build.gradle` for the name of the APK file.
+- `Dockerfile` has three stages. `test` runs the gate. `compile` compiles the Android code with no signature. `project_builder` runs `gradle assembleRelease` and copies the APK to `/app/bin/`. It reads the version from `app/build.gradle` for the name of the APK file.
 - The build does not use the variant API of the Android Gradle plugin. The plugin removes the old variant API.
 - `local/build.sh` builds both images and copies the APK to `output-binaries/`. The terminal shows the interactive progress of BuildKit. The script writes the plain log to `output-binaries/build.log`:
   - With Docker Buildx v0.20.0 or newer, `docker buildx history logs` gives the log of each stage.

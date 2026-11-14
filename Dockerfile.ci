@@ -14,6 +14,8 @@
 #
 #   base_env        The toolchain of Dockerfile.base.
 #   test            base_env plus the source. It runs the quality gate.
+#   compile         test, then a compile of the Android code. The test
+#                   workflow builds this stage.
 #   project_builder base_env plus the source. It makes the signed APK.
 #   export          The APK alone.
 #
@@ -77,6 +79,19 @@ RUN if [ "$SKIP_TESTS" = "1" ]; then \
         sh test/run.sh; \
     fi && \
     touch /gate-passed
+
+# ============================== COMPILE ==============================
+# The compile check of the Android code. test/run.sh compiles only the
+# package core. This stage compiles each Java class of the application.
+# The debug variant needs no keystore, and the task makes no APK.
+FROM base_env AS compile
+
+COPY --from=test /gate-passed /tmp/gate-passed
+
+COPY . .
+
+RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
+    gradle --no-daemon compileDebugJavaWithJavac
 
 # ============================== STAGE 3 ===============================
 FROM base_env AS project_builder

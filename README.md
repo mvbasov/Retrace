@@ -67,6 +67,8 @@ docker buildx build -f Dockerfile.base -t retrace-base:latest --load .
 docker buildx build --target test .
 ```
 
+To run the tests and then compile the Android code, use `--target compile` in the second command. The test workflow of GitHub runs this check.
+
 ## Release
 
 The GitHub workflows follow the workflows of OMN-Go:

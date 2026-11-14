@@ -1,4 +1,4 @@
-# STAGE 2: The quality gate, then the APK.
+# STAGE 2: The quality gate, the compile check, then the APK.
 #
 # project_builder is the last stage. Thus local/build.sh builds it.
 # Run the gate alone with this command:
@@ -22,6 +22,21 @@ RUN if [ "$SKIP_TESTS" = "1" ]; then \
         sh test/run.sh; \
     fi && \
     touch /gate-passed
+
+# ------------------------------ compile ------------------------------
+# The compile check of the Android code. test/run.sh compiles only the
+# package core. This stage compiles each Java class of the application.
+# The debug variant needs no keystore, and the task makes no APK.
+# Run the check alone with this command:
+#   docker buildx build --target compile .
+FROM retrace-base:latest AS compile
+
+COPY --from=test /gate-passed /tmp/gate-passed
+
+COPY . .
+
+RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
+    gradle --no-daemon compileDebugJavaWithJavac
 
 # -------------------------- project_builder --------------------------
 FROM retrace-base:latest AS project_builder

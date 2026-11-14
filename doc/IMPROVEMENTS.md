@@ -24,7 +24,7 @@ Run these checks before you give a patch:
 4. Write the commit message file in the format of section 5 of `CLAUDE.md`.
 5. Tell the maintainer that the Android build did not run, if you cannot run it.
 
-`test/run.sh` compiles only the package `core`. It does not compile the Android classes. Thus read each changed Android class again with care: each name, each import and each bracket.
+`test/run.sh` compiles only the package `core`. It does not compile the Android classes. Thus read each changed Android class again with care: each name, each import and each bracket. The test workflow of GitHub compiles the Android classes after each push. Ask the maintainer for its result.
 
 ### 1.2 The rule for the tests
 
@@ -54,7 +54,6 @@ Use only invented tracks from `TestTracks`. Do not add a real track. Check a cha
 | 6. Save the accuracy of each point | Feature | Medium | 5 |
 | 7. Do not count the pause in the comparison | Feature | Medium | 5 |
 | 8. A GPS button in the notification of the pause | Feature | Small | 5 |
-| 9. Compile the Android code in the test workflow | Build | Small | 5 |
 | 11. Search for a different route after the trip leaves the route | Feature | Medium | 5 |
 | 12. Compare with a track of a different profile | Feature | Medium | 5 |
 
@@ -62,9 +61,9 @@ The maintainer declined task 10, a Russian translation. Do not do it.
 
 ### 3.1 The sequence
 
-Do the tasks in this sequence: 9, 8, 6, 4, 12, 5, 7, 11.
+Do the tasks in this sequence: 8, 6, 4, 12, 5, 7, 11.
 
-- Task 9 comes early. After it, each push compiles the Android classes. Thus a fault in an Android class of a later task shows at once.
+- After patch 58, each push compiles the Android classes. Thus a fault in an Android class shows in the test workflow of GitHub. Look at its result after each push.
 - Task 7 and task 11 need task 5. They change the class that task 5 makes.
 - Task 12 comes before task 5. Thus task 5 moves the code with the new profile rule.
 
@@ -371,64 +370,6 @@ The clock since the boot does not jump when the user changes the time of the dev
 **Test.** No JVM test can show a notification. Ask the maintainer to push the button in the notification two times during a pause. The label and the dot of the trip screen must change each time.
 
 **Done when:** `test/run.sh` passes, and the maintainer confirms the button on a device.
-
----
-
-### Task 9. Compile the Android code in the test workflow
-
-**The goal.** The test workflow also compiles each Android class. Now a fault in an Android class shows only in the release build.
-
-**The design.** A new Docker stage `compile` runs the Gradle task `compileDebugJavaWithJavac`. The debug variant needs no keystore, and the task makes no APK. The stage copies `/gate-passed` from the test stage, thus it also runs the tests. The test workflow builds this stage in place of the test stage. Each run is some minutes longer, because the cache mount of Gradle does not go into the cache of GitHub.
-
-**Part A: `Dockerfile`.** Add this stage between the stage `test` and the stage `project_builder`. `project_builder` must stay the last stage, because `local/build.sh` builds the last stage.
-
-```dockerfile
-# ------------------------------ compile ------------------------------
-# The compile check of the Android code. test/run.sh compiles only the
-# package core. This stage compiles each Java class of the application.
-# The debug variant needs no keystore, and the task makes no APK.
-# Run the check alone with this command:
-#   docker buildx build --target compile .
-FROM retrace-base:latest AS compile
-
-COPY --from=test /gate-passed /tmp/gate-passed
-
-COPY . .
-
-RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
-    gradle --no-daemon compileDebugJavaWithJavac
-```
-
-**Part B: `Dockerfile.ci`.** Add the same stage between `test` and `project_builder`. The only difference is the FROM line: `FROM base_env AS compile`. The stage `export` stays the last stage.
-
-**Part C: `.github/workflows/test.yml`.**
-
-1. Change `--target test` to `--target compile`.
-2. Change the header comment: the workflow runs the quality gate and the compile check of the Android code.
-
-**Part D: `BuildFilesTest`.** File: `test/java/net/basov/retrace/repocheck/BuildFilesTest.java`. After the check of the test stage, add:
-
-```java
-// The compile stage of Dockerfile is in Dockerfile.ci. The test workflow
-// builds it.
-List<String> compileStage = stage(local, "FROM retrace-base:latest AS compile");
-check("Dockerfile: compile stage", false, compileStage.isEmpty());
-checkInOrder("compile stage in Dockerfile.ci", compileStage,
-        stage(ci, "FROM base_env AS compile"));
-check("test workflow: compile target", true, test.contains("--target compile"));
-```
-
-Read the method `main` first. Use the names of the variables that it uses for the lines of `Dockerfile`, of `Dockerfile.ci` and of the text of `test.yml`. If a name differs, use the name of the file.
-
-**Part E: documents.**
-
-1. `doc/RELEASE.md`: in the table of the workflows, the row "Test Retrace" now says: the result of the quality gate and of the compile check. Add a row to the table of faults: "The compile stage fails | A Java fault in an Android class. | Run `docker buildx build --target compile .` and correct the fault."
-2. `CLAUDE.md` section 6: add one sentence: the stage `compile` compiles the Android code, and the test workflow builds it.
-3. `CLAUDE.md` section 7: in the list item about the two stages of `Dockerfile`, write three stages: `test`, `compile` and `project_builder`.
-
-**Done when:** `test/run.sh` passes, and the first run of the test workflow on GitHub is green. If you cannot run Docker, say so. The maintainer then checks the first run.
-
-**Risk.** If the stage fails on the first run for a reason that is not a Java fault, stop. Give the log to the maintainer. Do not add a package or a tool to `Dockerfile.base` without a question.
 
 ---
 

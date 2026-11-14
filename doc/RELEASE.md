@@ -11,7 +11,7 @@ The workflows follow the workflows of OMN-Go. This document uses ASD-STE100 Simp
 | Workflow | File | Start | Result |
 | --- | --- | --- | --- |
 | Build Retrace | `.github/workflows/release.yml` | A push to `master`, a pull request to `master`, a push of a tag `v*` | A signed APK. For a tag push, also a GitHub release with the APK. |
-| Test Retrace | `.github/workflows/test.yml` | A push to `master`, a pull request to `master` | The result of the quality gate. It needs no secret. |
+| Test Retrace | `.github/workflows/test.yml` | A push to `master`, a pull request to `master` | The result of the quality gate and of the compile check of the Android code. It needs no secret. |
 
 Each workflow runs on a new `ubuntu-latest` machine. The machine has no Java, no Android SDK and no Gradle. The Docker build gives all of them, the same as the local build.
 
@@ -182,6 +182,7 @@ Without `.env`, the passwords are the public values of `.env.example`. Then the 
 | Android says "App not installed", or "The package conflicts with an existing package" | The release APK has a different key from the installed APK. | Use the keystore of the local build. See section 3.1 and section 4.1. |
 | The build of a pull request from a fork fails at the signing step | GitHub does not give the secrets to a fork. | No remedy is necessary. See the result of "Test Retrace". |
 | A failed test stops the build | The quality gate found a fault. | Run `test/run.sh` on your computer, and correct the fault. |
+| The compile stage fails | A Java fault in an Android class. | Run `docker buildx build --target compile .` and correct the fault. |
 | A difference between `Dockerfile.ci` and `Dockerfile.base` or `Dockerfile` | `BuildFilesTest` found a change in one file only. | Make the same change in the other file. |
 
 ### 6.1 Remove a wrong tag

@@ -1,7 +1,9 @@
-# The fast quality gate, the same as in OMN-Go. It builds the test stage of
-# Dockerfile.ci and nothing else. That stage runs test/run.sh in the same
-# image as the release build. It needs no secret. A pull request from a
-# fork thus gets a test result too.
+# The quality gate, the same as in OMN-Go, and the compile check of the
+# Android code. It builds the compile stage of Dockerfile.ci. That stage
+# first runs the test stage: test/run.sh in the same image as the release
+# build. Then it compiles each Java class of the application with Gradle.
+# It needs no secret. A pull request from a fork thus gets a test result
+# too.
 #
 # The release build (release.yml) runs the same gate before it makes an
 # APK.
@@ -31,7 +33,7 @@ jobs:
         run: |
           docker buildx build \
             -f Dockerfile.ci \
-            --target test \
+            --target compile \
             --progress plain \
             --cache-from type=gha,scope=retrace-test \
             --cache-to type=gha,mode=max,scope=retrace-test \
