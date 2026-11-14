@@ -519,5 +519,6 @@ The tests of this math are in `test/java/net/basov/retrace/core/`:
 - `DeltaSmootherTest` checks the smoothing.
 - `ReferenceSelectorTest` checks the automatic selection with many matchers.
 - `RouteAgreementTest` checks that a repeat of a route keeps its comparison, and that a different route stops it.
+- `TripComparisonTest` checks the selections, the stop of a comparison that differs, the finish signal and the excluded track of a replay.
 
 `TestTracks` makes the invented tracks. It adds noise with a slow drift and a fast part, the same as a real GPS receiver. The tests use no real track.

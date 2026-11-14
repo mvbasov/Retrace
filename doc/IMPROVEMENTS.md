@@ -49,7 +49,6 @@ Use only invented tracks from `TestTracks`. Do not add a real track. Check a cha
 
 | Task | Type | Size | Section |
 | --- | --- | --- | --- |
-| 5. The comparison logic of `TrackService` has no test | Structure | Large | 4 |
 | 7. Do not count the pause in the comparison | Feature | Medium | 5 |
 | 11. Search for a different route after the trip leaves the route | Feature | Medium | 5 |
 
@@ -57,54 +56,28 @@ The maintainer declined task 10, a Russian translation. Do not do it.
 
 ### 3.1 The sequence
 
-Do the tasks in this sequence: 5, 7, 11.
+Do the tasks in this sequence: 7, 11.
 
 - After patch 58, each push compiles the Android classes. Thus a fault in an Android class shows in the test workflow of GitHub. Look at its result after each push.
-- Task 7 and task 11 need task 5. They change the class that task 5 makes.
+- Task 7 and task 11 change `TripComparison`. Add their tests to `TripComparisonTest`.
 
 ---
 
 ## 4. Tasks that need no decision
 
-### Task 5. The comparison logic of `TrackService` has no test
-
-**The weak point.** `TrackService` has more than 1100 lines. About 250 of them decide the comparison. They hold the manual selection, the automatic selection, the stop of a comparison that differs, the smoothing and the finish signal. This logic uses no Android class, but it is in an Android class. Thus no test runs it. The replay fault that patch 56 corrected, and the loop fault that patch 54 corrected, show the cost.
-
-**The goal.** Move this logic to a new class `TripComparison` in `core`, with no change of behavior. Then test it on the JVM.
-
-Do it in two patches: the move first, then the tests. Only patch B stays.
-
-**Patch A: the move.** Patch 63 did it. `TrackService` now gives each point to `TripComparison.add()`. The source of the saved tracks is the inner class `StoreTracks`. `resetTrip()` calls `reset(p)` and then `setExcluded(null)`. `reset()` does not clear the excluded track, because `select()` calls it during a replay.
-
-**Patch B: the tests.** Make `TripComparisonTest` with a `TrackSource` that holds tracks in a map. Each case uses invented tracks and 10 seeds or more.
-
-| Case | Check |
-| --- | --- |
-| A manual reference track, the trip follows it | `add()` returns true one time only, at the finish. The selection is `SELECTION_MANUAL`. |
-| No reference track | `add()` always returns false. The match is null. |
-| The automatic selection with one saved track of the same route | The selection goes from `SELECTION_SEARCH` to `SELECTION_TEMPORARY` to `SELECTION_AUTOMATIC`. |
-| The automatic selection, no saved track near | The selection is `SELECTION_NOT_FOUND` after the first point. |
-| The automatic reference track differs later | The selection becomes `SELECTION_NOT_FOUND`, and the match is null. Use the routes of `RouteAgreementTest`. |
-| A manual reference track that differs | The comparison stays to the end. |
-| `select()` during the trip, after the finish place | The finish signal is set, and the next `add()` returns false. |
-| The excluded track | It is never the reference track of its own replay. |
-| A track that the source cannot read | `setReference` gives a trip with no comparison, and no exception. |
-
-**Done when:** `test/run.sh` passes with the new test class.
-
-**Risk.** This is the largest task. A small difference changes the comparison of each trip. Compare the old and the new code line by line before you give the patch. Ask the maintainer to record one trip and run one replay on a device.
+Patches 54 to 64 did each task of this section.
 
 ---
 
 ## 5. Tasks that the maintainer approved
 
-The maintainer approved these tasks on 2026-11-14. Do not ask again. The maintainer asked for tasks 11 and 12 on the same day.
+The maintainer approved these tasks on 2026-11-14. Do not ask again. The maintainer asked for task 11 on the same day.
 
 ### Task 7. Do not count the pause in the comparison
 
 **The goal.** After Stop and Continue, the difference to the reference track does not count the time of the pause. The saved points, the log file and the GPX file keep the real time. The elapsed time on the trip screen and in the notification stays the clock time.
 
-**Do this task after task 5.** It changes `TripComparison`.
+It changes `TripComparison`, which patch 63 made.
 
 **Part A: `TripComparison`.** File: `app/src/main/java/net/basov/retrace/core/TripComparison.java`.
 
@@ -183,7 +156,7 @@ Now the trip stays with no comparison to its end. After this task, the trip sear
 - After the user selects "No comparison", the trip never searches.
 - A replay with the automatic selection searches again in the same way.
 
-**Do this task after task 5.** It changes `TripComparison`.
+It changes `TripComparison`, which patch 63 made.
 
 **Part A: a long detour differs.** File: `app/src/main/java/net/basov/retrace/core/RouteAgreement.java`.
 
