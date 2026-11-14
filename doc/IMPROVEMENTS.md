@@ -40,7 +40,7 @@ Use only invented tracks from `TestTracks`. Do not add a real track. Check a cha
 | `TrackStore`, `TrackProvider` | Each line | Task 4. The provider is safe: it gives only files of the track directory. |
 | `ReferenceSelector`, `RouteAgreement` | Each line, and runs with many seeds | One fault. Patch 54 corrected it. |
 | Activities and dialogs | The threads and the life cycle | No fault. Each background result checks that the activity is alive. |
-| `GpxReader`, `GpxWriter`, `PointLog` | The formats and the errors | Task 6. A GPX file goes to a temporary file first, thus a stop of the process cannot break it. |
+| `GpxReader`, `GpxWriter`, `PointLog` | The formats and the errors | No fault. Patch 60 added the accuracy. A GPX file goes to a temporary file first, thus a stop of the process cannot break it. |
 | `TrackMatcher`, `WayBuilder`, `MapView`, the tile classes | The structure only | Not examined in depth. See section 6. |
 
 ---
@@ -51,7 +51,6 @@ Use only invented tracks from `TestTracks`. Do not add a real track. Check a cha
 | --- | --- | --- | --- |
 | 4. Each list and each trip start read all GPX files | Speed | Medium | 4 |
 | 5. The comparison logic of `TrackService` has no test | Structure | Large | 4 |
-| 6. Save the accuracy of each point | Feature | Medium | 5 |
 | 7. Do not count the pause in the comparison | Feature | Medium | 5 |
 | 11. Search for a different route after the trip leaves the route | Feature | Medium | 5 |
 | 12. Compare with a track of a different profile | Feature | Medium | 5 |
@@ -60,7 +59,7 @@ The maintainer declined task 10, a Russian translation. Do not do it.
 
 ### 3.1 The sequence
 
-Do the tasks in this sequence: 6, 4, 12, 5, 7, 11.
+Do the tasks in this sequence: 4, 12, 5, 7, 11.
 
 - After patch 58, each push compiles the Android classes. Thus a fault in an Android class shows in the test workflow of GitHub. Look at its result after each push.
 - Task 7 and task 11 need task 5. They change the class that task 5 makes.
@@ -193,72 +192,6 @@ Do the tasks in this sequence: 6, 4, 12, 5, 7, 11.
 ## 5. Tasks that the maintainer approved
 
 The maintainer approved these tasks on 2026-11-14. Do not ask again. The maintainer asked for tasks 11 and 12 on the same day.
-
-### Task 6. Save the accuracy of each point
-
-**The goal.** The log file and the GPX file keep the accuracy of each point. A later analysis can then find the bad points. A replay then gives the real accuracy to `RecordFilter`, the same as the trip.
-
-**Part A: the log file.** File: `app/src/main/java/net/basov/retrace/core/PointLog.java`.
-
-1. Change `FORMAT` from 2 to 3.
-2. Change `line()` so that it also writes the accuracy as a fifth value:
-
-   ```java
-   return p.timeMs + " " + p.latitude + " " + p.longitude + " " + p.elevationM
-           + " " + p.accuracyM;
-   ```
-
-   Java writes `NaN` for a point with no accuracy, and `Double.parseDouble` reads it back.
-3. In `read()`, accept the formats "1", "2" and "3" in the header.
-4. In `parsePoint(String[] f)`, accept four or five values. With five values, the fifth is the accuracy. With four values, the accuracy is `Double.NaN`. `parseWaypoint` gives four values, thus a waypoint does not change.
-5. Update the banner comment: format 3 adds the accuracy, and the reader accepts formats 1, 2 and 3.
-6. In `TrackTest`, find the check that reads `"RETRACE-LOG 3 walking 1\n"` as an unknown format. Change the 3 to 4.
-
-**Part B: the GPX file.** File: `app/src/main/java/net/basov/retrace/core/GpxWriter.java`.
-
-1. Write the Retrace namespace on the root element. Change the line that writes `<gpx` so that it also writes ` xmlns:retrace="` + `WAY_NAMESPACE` + `"`. The `retrace:way` element of a way keeps its own declaration. Two declarations of the same namespace are correct XML.
-2. In the loop of the track points, after `appendElevationAndTime`, add the accuracy if it is a finite number:
-
-   ```java
-   if (!Double.isNaN(p.accuracyM) && !Double.isInfinite(p.accuracyM)) {
-       line.append("<extensions><retrace:accuracy>");
-       appendFixed(line, p.accuracyM, 1);
-       line.append("</retrace:accuracy></extensions>");
-   }
-   ```
-
-   GPX 1.1 puts `extensions` last in a `trkpt`. Thus it comes after `time`. Do not write the accuracy for a waypoint.
-3. Add two sentences to the banner comment about the accuracy element.
-
-**Part C: the GPX reader.** File: `app/src/main/java/net/basov/retrace/core/GpxReader.java`.
-
-1. In the handler, add a field `private double accuracy;`.
-2. In `startElement`, where a point starts, set `accuracy = Double.NaN;`.
-3. In `endElement`, add this branch before the branch for the end of `trkpt`:
-
-   ```java
-   } else if (inPoint && name.equals("accuracy")
-           && GpxWriter.WAY_NAMESPACE.equals(uri)) {
-       accuracy = parseDouble(value);
-   ```
-
-4. Give `accuracy` to the `TrackPoint` of a `trkpt` and of a `rtept`, in place of `Double.NaN`.
-5. Update the banner comment.
-
-**Tests.** Add a method to `SegmentsTest` for each case. Give each method a comment that tells why it exists.
-
-- A track with the accuracies 4.5, `Double.NaN` and 12.0 keeps them after `GpxWriter.write` and `GpxReader.read`. 4.5 comes back as 4.5, and `NaN` stays `NaN`.
-- The GPX text holds `retrace:accuracy` two times for these three points.
-- A GPX text of a different application with `<extensions><other:accuracy xmlns:other="urn:x">7</other:accuracy></extensions>` in a `trkpt` gives `NaN`.
-- A log line with five values gives the accuracy. A format 2 log file is still read, with `NaN`.
-
-**Documents.** Add one list item to section 5.2 of `doc/PLAN.md`. Add one sentence to `README.md`: the GPX file keeps the accuracy of each point in a Retrace extension, and other applications ignore it.
-
-**Done when:** `test/run.sh` passes. Each test class that uses `TestTracks.recorded` gives the same result as before.
-
-**Risk.** A replay now uses the saved accuracy in `RecordFilter`. The trip used the same accuracy, thus the replay keeps the same points. An old track has no accuracy, and its replay does not change.
-
----
 
 ### Task 7. Do not count the pause in the comparison
 

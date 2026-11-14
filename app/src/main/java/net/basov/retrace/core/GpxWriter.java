@@ -14,14 +14,19 @@ import java.util.List;
 // The waypoints come before the track, as GPX 1.1 demands. Each track segment of
 // the track is one trkseg element.
 //
+// A track point with an accuracy has an extensions element with the
+// accuracy in meters, in the namespace of Retrace. Other applications
+// ignore it. GPX 1.1 has no element for the accuracy.
+//
 // The writer formats each number itself. Double.toString can write an
 // exponent, for example 1.0E-4. String.format is slow for many points.
 public final class GpxWriter {
 
     public static final String NAMESPACE = "http://www.topografix.com/GPX/1/1";
 
-    // The namespace of the extension for a way. Other applications ignore
-    // it, and read a way as a plain track.
+    // The namespace of the extensions of Retrace: the members of a way and
+    // the accuracy of a point. Other applications ignore them, and read a
+    // way as a plain track.
     public static final String WAY_NAMESPACE = "https://github.com/mvbasov/Retrace/gpx/1";
 
     // Seven decimals of a degree are about one centimeter.
@@ -32,7 +37,8 @@ public final class GpxWriter {
 
     public static void write(Track track, Writer out) throws IOException {
         out.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
-        out.write("<gpx version=\"1.1\" creator=\"Retrace\" xmlns=\"" + NAMESPACE + "\">\n");
+        out.write("<gpx version=\"1.1\" creator=\"Retrace\" xmlns=\"" + NAMESPACE
+                + "\" xmlns:retrace=\"" + WAY_NAMESPACE + "\">\n");
 
         out.write("  <metadata>\n");
         out.write("    <name>" + escape(track.name) + "</name>\n");
@@ -79,6 +85,11 @@ public final class GpxWriter {
                 appendPosition(line, p.latitude, p.longitude);
                 line.append('>');
                 appendElevationAndTime(line, p.elevationM, p.timeMs);
+                if (!Double.isNaN(p.accuracyM) && !Double.isInfinite(p.accuracyM)) {
+                    line.append("<extensions><retrace:accuracy>");
+                    appendFixed(line, p.accuracyM, 1);
+                    line.append("</retrace:accuracy></extensions>");
+                }
                 line.append("</trkpt>\n");
                 out.write(line.toString());
             }

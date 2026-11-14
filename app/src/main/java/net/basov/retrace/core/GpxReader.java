@@ -24,8 +24,9 @@ import org.xml.sax.helpers.DefaultHandler;
 // The reader accepts GPX 1.0 and GPX 1.1 from other applications. It reads
 // the points of each track segment. A file with no track gives the points of
 // its routes. It reads the waypoints with their names. It ignores each
-// unknown element. It reads the members of a way from the extension of
-// GpxWriter.
+// unknown element. It reads the members of a way and the accuracy of each
+// point from the extensions of GpxWriter. An element of the same name in a
+// different namespace is not used.
 //
 // All track segments of all tracks of a file go into one track.
 // An empty track segment is not a track segment.
@@ -101,6 +102,7 @@ public final class GpxReader {
         private double lon;
         private double ele;
         private long time;
+        private double accuracy;
 
         @Override
         public void startElement(String uri, String localName, String qName, Attributes attrs) {
@@ -117,6 +119,7 @@ public final class GpxReader {
                 ele = Double.NaN;
                 time = TrackPoint.NO_TIME;
                 pointName = null;
+                accuracy = Double.NaN;
             }
         }
 
@@ -137,6 +140,9 @@ public final class GpxReader {
                 time = parseTime(value);
             } else if (inPoint && name.equals("name") && parent.equals("wpt")) {
                 pointName = value;
+            } else if (inPoint && name.equals("accuracy")
+                    && GpxWriter.WAY_NAMESPACE.equals(uri)) {
+                accuracy = parseDouble(value);
             } else if (name.equals("trkpt") || name.equals("rtept") || name.equals("wpt")) {
                 inPoint = false;
                 if (!Double.isNaN(lat) && !Double.isNaN(lon)
@@ -148,9 +154,9 @@ public final class GpxReader {
                             segmentStarts.add(trackPoints.size());
                         }
                         newSegment = false;
-                        trackPoints.add(new TrackPoint(lat, lon, time, ele, Double.NaN));
+                        trackPoints.add(new TrackPoint(lat, lon, time, ele, accuracy));
                     } else {
-                        routePoints.add(new TrackPoint(lat, lon, time, ele, Double.NaN));
+                        routePoints.add(new TrackPoint(lat, lon, time, ele, accuracy));
                     }
                 }
             } else if (name.equals("name") && parent.equals("metadata") && metadataName == null) {

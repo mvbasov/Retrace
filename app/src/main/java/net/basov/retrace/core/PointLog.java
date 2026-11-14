@@ -17,15 +17,18 @@ import java.util.List;
 //
 // The first line is the header: the magic text, the format number, the id
 // of the profile and the start time. Each other line is one of these:
-// - a point: the time, the latitude, the longitude and the elevation
+// - a point: the time, the latitude, the longitude, the elevation and the
+//   accuracy
 // - SEGMENT: the next point starts a new track segment
 // - a waypoint: WPT, then the values of a point, then the name
 //
-// Format 1 has points only. The reader accepts formats 1 and 2.
+// Format 1 has points only. Format 2 adds the track segments and the
+// waypoints. Format 3 adds the accuracy of each point. The reader accepts
+// formats 1, 2 and 3. A point line with four values has no accuracy.
 public final class PointLog {
 
     static final String MAGIC = "RETRACE-LOG";
-    static final int FORMAT = 2;
+    static final int FORMAT = 3;
     static final String SEGMENT = "SEGMENT";
     static final String WAYPOINT = "WPT";
 
@@ -41,7 +44,8 @@ public final class PointLog {
     // Double.toString do not use the locale. Thus the decimal mark is always
     // a period.
     public static String line(TrackPoint p) {
-        return p.timeMs + " " + p.latitude + " " + p.longitude + " " + p.elevationM;
+        return p.timeMs + " " + p.latitude + " " + p.longitude + " " + p.elevationM
+                + " " + p.accuracyM;
     }
 
     // The line that starts a new track segment.
@@ -87,7 +91,8 @@ public final class PointLog {
         }
         String[] head = first.trim().split(" ");
         if (head.length != 4 || !MAGIC.equals(head[0])
-                || !("1".equals(head[1]) || String.valueOf(FORMAT).equals(head[1]))) {
+                || !("1".equals(head[1]) || "2".equals(head[1])
+                        || String.valueOf(FORMAT).equals(head[1]))) {
             return null;
         }
         Profile profile = Profile.fromId(head[2]);
@@ -141,8 +146,9 @@ public final class PointLog {
         return p == null ? null : Waypoint.at(p, f[5]);
     }
 
+    // Four or five values. The fifth value is the accuracy.
     private static TrackPoint parsePoint(String[] f) {
-        if (f.length != 4) {
+        if (f.length != 4 && f.length != 5) {
             return null;
         }
         try {
@@ -153,7 +159,8 @@ public final class PointLog {
             if (Double.isNaN(lat) || Double.isNaN(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
                 return null;
             }
-            return new TrackPoint(lat, lon, time, ele, Double.NaN);
+            double accuracy = f.length == 5 ? Double.parseDouble(f[4]) : Double.NaN;
+            return new TrackPoint(lat, lon, time, ele, accuracy);
         } catch (NumberFormatException e) {
             return null;
         }

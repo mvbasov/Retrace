@@ -33,6 +33,9 @@ public final class SegmentsTest {
         theStepBetweenSegmentsIsAStop();
         theImportKeepsTheSegments();
         waypointNames();
+        gpxKeepsTheAccuracy();
+        gpxIgnoresTheAccuracyOfAnotherApplication();
+        theLogKeepsTheAccuracy();
 
         if (failures > 0) {
             System.out.println("SegmentsTest: " + failures + " check(s) failed");
@@ -207,6 +210,51 @@ public final class SegmentsTest {
         check("1", "wpt01", Waypoint.autoName(1));
         check("12", "wpt12", Waypoint.autoName(12));
         check("123", "wpt123", Waypoint.autoName(123));
+    }
+
+    // A later analysis of the saved track needs the accuracy of each point.
+    // A point with no accuracy writes no element, and reads back as NaN.
+    private static void gpxKeepsTheAccuracy() throws IOException {
+        List<TrackPoint> points = new ArrayList<>();
+        double[] accuracies = {4.5, Double.NaN, 12.0};
+        for (int i = 0; i < accuracies.length; i++) {
+            TrackPoint p = TestTracks.point(i * 10, 0, TestTracks.START_MS + i * 1000L);
+            points.add(new TrackPoint(p.latitude, p.longitude, p.timeMs, p.elevationM,
+                    accuracies[i]));
+        }
+        StringWriter out = new StringWriter();
+        GpxWriter.write(new Track("acc", Profile.WALKING, points), out);
+        String text = out.toString();
+        check("accuracy elements", 2, count(text, "<retrace:accuracy>"));
+        Track back = read(text);
+        near("accuracy 1", 4.5, back.points.get(0).accuracyM, 1e-9);
+        check("accuracy 2", true, Double.isNaN(back.points.get(1).accuracyM));
+        near("accuracy 3", 12.0, back.points.get(2).accuracyM, 1e-9);
+    }
+
+    // An element with the same local name in a different namespace is not
+    // the accuracy of Retrace.
+    private static void gpxIgnoresTheAccuracyOfAnotherApplication() throws IOException {
+        String text = "<?xml version=\"1.0\"?>\n"
+                + "<gpx version=\"1.1\" xmlns=\"http://www.topografix.com/GPX/1/1\">\n"
+                + "<trk><trkseg><trkpt lat=\"45\" lon=\"10\"><extensions>"
+                + "<other:accuracy xmlns:other=\"urn:x\">7</other:accuracy>"
+                + "</extensions></trkpt></trkseg></trk>\n</gpx>\n";
+        Track t = read(text);
+        check("other accuracy", true, Double.isNaN(t.points.get(0).accuracyM));
+    }
+
+    // The log file keeps the accuracy too. A log file of format 2 has no
+    // accuracy, and the reader must still accept it.
+    private static void theLogKeepsTheAccuracy() throws IOException {
+        TrackPoint p = new TrackPoint(45.0, 10.0, 1000, 12.5, 6.5);
+        String log = PointLog.header(Profile.WALKING, 1000) + "\n" + PointLog.line(p) + "\n";
+        PointLog.Content c = PointLog.read(new StringReader(log));
+        near("log accuracy", 6.5, c.points.get(0).accuracyM, 1e-9);
+        String old = "RETRACE-LOG 2 walking 1000\n1000 45.0 10.0 NaN\n";
+        PointLog.Content o = PointLog.read(new StringReader(old));
+        check("format 2", 1, o == null ? -1 : o.points.size());
+        check("format 2 accuracy", true, o != null && Double.isNaN(o.points.get(0).accuracyM));
     }
 
     // Two straight track segments of 100 m, 500 m apart, one point each 10 m, and
