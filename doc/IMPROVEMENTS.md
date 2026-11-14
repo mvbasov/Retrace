@@ -9,7 +9,7 @@ This document uses ASD-STE100 Simplified Technical English, the same as `CLAUDE.
 ## 1. How to use this plan
 
 1. Read `CLAUDE.md` and `doc/TERMINOLOGY.md` first. Each rule there applies to each task here.
-2. Do the tasks in the sequence of section 3.1. Do one task in one patch.
+2. Do one task in one patch.
 3. The maintainer approved the tasks of section 5 on 2026-11-14. Do not ask again.
 4. Do not change code that the task does not name. If a step is not clear, stop and ask the maintainer.
 5. After each task, remove its section from this document in the same patch. Thus this document always shows the work that stays.
@@ -45,20 +45,13 @@ Use only invented tracks from `TestTracks`. Do not add a real track. Check a cha
 
 ---
 
-## 3. The tasks in one table
+## 3. The state of the tasks
 
-| Task | Type | Size | Section |
-| --- | --- | --- | --- |
-| 11. Search for a different route after the trip leaves the route | Feature | Medium | 5 |
+No task stays. Patches 54 to 66 did each task of sections 4 and 5.
 
 The maintainer declined task 10, a Russian translation. Do not do it.
 
-### 3.1 The sequence
-
-Do the task that stays: 11.
-
-- After patch 58, each push compiles the Android classes. Thus a fault in an Android class shows in the test workflow of GitHub. Look at its result after each push.
-- Task 11 changes `TripComparison`. Add its tests to `TripComparisonTest`.
+After patch 58, each push compiles the Android classes. Thus a fault in an Android class shows in the test workflow of GitHub. Look at its result after each push.
 
 ---
 
@@ -70,92 +63,7 @@ Patches 54 to 64 did each task of this section.
 
 ## 5. Tasks that the maintainer approved
 
-The maintainer approved these tasks on 2026-11-14. Do not ask again. The maintainer asked for task 11 on the same day.
-
-### Task 11. Search for a different route after the trip leaves the route
-
-**The goal.** A trip with the automatic selection can have no comparison. There are three causes:
-
-- No saved route was near the first point.
-- The selection found no candidate that agrees with the trip.
-- The trip left its automatic reference track, and `RouteAgreement` stopped the comparison.
-
-Now the trip stays with no comparison to its end. After this task, the trip searches again after it moved some distance. A trip that joins a different saved route then gets a comparison with that route.
-
-**Decisions.** These decisions keep the earlier behavior of the manual choices:
-
-- A reference track that the user selected never stops, and never starts a new search.
-- After the user selects "No comparison", the trip never searches.
-- A replay with the automatic selection searches again in the same way.
-
-It changes `TripComparison`, which patch 63 made.
-
-**Part A: a long detour differs.** File: `app/src/main/java/net/basov/retrace/core/RouteAgreement.java`.
-
-On a long route, the rule "more off the route than on it" can stay false for a long detour. Add a third rule: a continuous detour of `DETOUR_FACTOR` off-route limits differs. For walking, that is 500 m.
-
-1. Add the constant `public static final double DETOUR_FACTOR = 20;`.
-2. Add the fields `private final double detourLimitM;` and `private double detourM;`. In the constructor, set `detourLimitM = DETOUR_FACTOR * profile.offRouteM;`.
-3. In `add()`, in the branch of `ON_ROUTE`, set `detourM = 0;`.
-4. In the branch of `OFF_ROUTE`, add `detourM += step;`. Then also set `differs = true` if `detourM >= detourLimitM`.
-5. Add the third rule to the banner comment.
-
-**Part B: the new search.** File: `app/src/main/java/net/basov/retrace/core/TripComparison.java`.
-
-1. Add the constant `public static final double RESEARCH_FACTOR = 10;`. The new search comes after the trip moved `RESEARCH_FACTOR` off-route limits with no comparison. For walking, that is 250 m. For driving, it is 600 m.
-2. Add these fields:
-
-   ```java
-   // True while the user wants the automatic selection.
-   private boolean automatic;
-   // The distance of the points that add() got since the last reset.
-   private double travelledM;
-   private TrackPoint lastAdded;
-   // The value of travelledM when the last search or comparison ended.
-   private double searchEndM;
-   ```
-
-3. In `reset(Profile p)`, set `travelledM = 0`, `lastAdded = null` and `searchEndM = 0`. Do not change `automatic` there.
-4. Set `automatic = true` in `searchAutomatically()`, and in `select()` when its argument `automatic` is true. Set `automatic = false` in `setReference()`, and in `select()` when its argument `automatic` is false.
-5. Find each place that sets the selection to `SELECTION_NOT_FOUND`. There are three: the search with no near track, the selector with the state `NONE`, and `stopDifferentComparison()`. At each place, also set `searchEndM = travelledM;`.
-6. At the start of `add()`, before the check of `SELECTION_SEARCH`, add:
-
-   ```java
-   if (lastAdded != null) {
-       travelledM += Geo.distanceM(lastAdded, fix);
-   }
-   lastAdded = fix;
-   if (automatic && selection == RecordingSnapshot.SELECTION_NOT_FOUND
-           && travelledM - searchEndM >= RESEARCH_FACTOR * profile.offRouteM) {
-       selection = RecordingSnapshot.SELECTION_SEARCH;
-   }
-   ```
-
-   The code after it then starts the search at this point. `ReferenceSelector` can join a route in the middle, thus the trip can join a different route at any place.
-7. Add a paragraph about the new search to the banner comment.
-
-`add()` makes a shifted point for the pauses. Use the original point `fix` for the distance. The time has no effect on the distance.
-
-**Part C: `TrackService` and the screen.** No change of code is necessary. The trip screen already shows the name of the new temporary reference track. Read `RunActivity` to make sure. If the screen keeps the text "No saved track agrees with this trip" after a new selection, correct that.
-
-**Tests.** Use invented tracks, walking at 1.4 m/s, 4 m noise and 10 seeds.
-
-| Case | Check |
-| --- | --- |
-| `RouteAgreement`: a route of 3000 m north. The trip leaves it for 600 m and comes back. | `differs()` is true. |
-| `RouteAgreement`: the same route, a detour of 300 m. | `differs()` is false. |
-| Saved route A goes north from (0, 0) to (0, 1000). Saved route B goes east from (0, 400) to (1500, 400). The trip goes north to (0, 400), then east to (1500, 400). The automatic selection. | At the end, the reference id is B, the match is not null, and the difference at the finish is less than 60 s. |
-| The same trip after `select(null, false, false)`, the choice "No comparison". | The selection stays `SELECTION_OFF` to the end. |
-| The same trip with the manual reference track A. | The selection stays `SELECTION_MANUAL`, with id A, to the end. |
-| The trip starts at (0, -400) and goes north on route A. The automatic selection. | At the first point, the selection is `SELECTION_NOT_FOUND`. At the end, the reference id is A. |
-
-Add one more case for the pauses. The automatic comparison with route A stops, and the trip pauses for 600 s. Then it joins route B. The difference at the finish of B does not count the pause. `reset()` must not change the count of points in `TripComparison`. See the comment of the field `added`.
-
-Also run `RouteAgreementTest`. The case `aShortDetourOnALongRouteAgrees` must still pass. Its detour is shorter than 500 m.
-
-**Documents.** In section 5.5 of `doc/PLAN.md`, change items 7 to 9: the trip searches again after 10 off-route limits with no comparison. Add the third rule of `RouteAgreement`. Add one sentence to `README.md`.
-
-**Done when:** `test/run.sh` passes. Ask the maintainer to run a replay of a trip that leaves a route and joins a different saved route.
+The maintainer approved these tasks on 2026-11-14. Patches 58 to 66 did each task of this section.
 
 ---
 

@@ -19,7 +19,17 @@ import java.util.List;
 //   search reads the saved tracks near that point. ReferenceSelector then
 //   selects one of them. See RouteAgreement for the stop of an automatic
 //   comparison that differs from the trip.
-// - No comparison: reset() alone.
+// - No comparison: startTrip() alone.
+//
+// With the automatic selection, a trip can leave its route and follow a
+// different saved route. The comparison with the first route then stops, or
+// the search finds no route. The selection is then NOT_FOUND. After
+// RESEARCH_FACTOR times the off-route limit of the profile, a new search
+// starts at the next point. For walking, this is 250 m. The search then
+// finds the route that the trip follows now. If it finds none, the next
+// search comes after the same distance again. Only the automatic selection
+// gives NOT_FOUND. Thus a manual selection or no comparison never starts a
+// new search, because the user decided.
 //
 // select() changes the reference track during the trip. The points of the
 // trip then go to the new matcher again. Thus the comparison continues as
@@ -33,9 +43,11 @@ import java.util.List;
 // calls addPause() with the time of the pause. Each later point goes to the
 // matcher with its time less the sum of the pauses before it. The saved
 // points keep the real time. select() gives the points again with the same
-// shifts, thus reset() keeps the pauses. clearPauses() removes them at the
+// shifts, thus reset() keeps the pauses. startTrip() removes them at the
 // start of a new trip.
 public final class TripComparison {
+
+    public static final double RESEARCH_FACTOR = 10;
 
     private final TrackSource source;
 
@@ -66,8 +78,14 @@ public final class TripComparison {
     // The count of the points of the trip that add() got. It is the index of
     // the next point in the list of TrackService. reset() does not change
     // it, because a comparison can stop during the trip. select() and
-    // clearPauses() set it to zero, because the points then start again.
+    // startTrip() set it to zero, because the points then start again.
     private int added;
+    // The distance of the trip from its first point, and the last point that
+    // add() got. Like added, reset() does not change them.
+    private double travelledM;
+    private TrackPoint lastAdded;
+    // The distance of the trip at the last NOT_FOUND.
+    private double searchEndM;
 
     public TripComparison(TrackSource source) {
         this.source = source;
@@ -90,11 +108,27 @@ public final class TripComparison {
         finishSignaled = false;
     }
 
-    // Removes the pauses. TrackService calls it at the start of a trip.
-    public void clearPauses() {
+    // Removes all data of the last trip: the comparison, the pauses and the
+    // excluded track. TrackService calls it at the
+    // start of a trip.
+    public void startTrip(Profile p) {
+        reset(p);
+        clearPauses();
+        excludedId = null;
+    }
+
+    private void clearPauses() {
         shiftStarts.clear();
         shifts.clear();
+        restartPoints();
+    }
+
+    // The points of the trip start again from the first point.
+    private void restartPoints() {
         added = 0;
+        travelledM = 0;
+        lastAdded = null;
+        searchEndM = 0;
     }
 
     // A pause of the trip. The next point that add() gets starts the shift.
@@ -135,7 +169,7 @@ public final class TripComparison {
     // again.
     public void select(String id, boolean reversed, boolean automatic, List<TrackPoint> points) {
         reset(profile);
-        added = 0;
+        restartPoints();
         if (automatic) {
             selection = RecordingSnapshot.SELECTION_SEARCH;
         } else if (id != null) {
@@ -149,6 +183,14 @@ public final class TripComparison {
     // Gives the point to the matcher, or to the selector during the
     // automatic selection. Returns true at the first point of the finish.
     public boolean add(TrackPoint fix) {
+        if (lastAdded != null) {
+            travelledM += Geo.distanceM(lastAdded, fix);
+        }
+        lastAdded = fix;
+        if (selection == RecordingSnapshot.SELECTION_NOT_FOUND
+                && travelledM - searchEndM >= RESEARCH_FACTOR * profile.offRouteM) {
+            selection = RecordingSnapshot.SELECTION_SEARCH;
+        }
         long shift = shiftAt(added++);
         TrackPoint p = shift == 0 || !fix.hasTime() ? fix : new TrackPoint(fix.latitude,
                 fix.longitude, fix.timeMs - shift, fix.elevationM, fix.accuracyM);
@@ -231,7 +273,7 @@ public final class TripComparison {
             }
         }
         if (near.isEmpty()) {
-            selection = RecordingSnapshot.SELECTION_NOT_FOUND;
+            notFound();
             return;
         }
         selector = new ReferenceSelector(near, profile, first);
@@ -242,7 +284,13 @@ public final class TripComparison {
     // stops, and the trip continues as a new route.
     private void stopDifferentComparison() {
         reset(profile);
+        notFound();
+    }
+
+    // No reference track. The distance for the next search starts here.
+    private void notFound() {
         selection = RecordingSnapshot.SELECTION_NOT_FOUND;
+        searchEndM = travelledM;
     }
 
     // The temporary reference track can change at each point. A change
@@ -252,7 +300,7 @@ public final class TripComparison {
         ReferenceSelector.State state = selector.update(fix);
         if (state == ReferenceSelector.State.NONE) {
             reset(profile);
-            selection = RecordingSnapshot.SELECTION_NOT_FOUND;
+            notFound();
             return false;
         }
         String id = selector.current().id;

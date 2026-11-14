@@ -24,6 +24,10 @@ public final class TripComparisonTest {
     private static final double[][] NORTH = {{0, 0}, {0, 1000}};
     private static final double[][] NORTH_1200 = {{0, 0}, {0, 1200}};
     private static final long PAUSE_MS = 600_000;
+    // Route A goes north. Route B goes east from the place at 400 m of A.
+    private static final double[][] ROUTE_A = {{0, 0}, {0, 1000}};
+    private static final double[][] ROUTE_B = {{0, 400}, {1500, 400}};
+    private static final double[][] A_THEN_B = {{0, 0}, {0, 400}, {1500, 400}};
     private static final double[][] FAR = {{3000, 3000}, {3000, 4000}};
     // The routes of RouteAgreementTest: a short loop, and a long route with
     // the same first 40 m.
@@ -44,7 +48,12 @@ public final class TripComparisonTest {
         aPauseCountsWithNoAddPause();
         aPauseDoesNotCountWithAddPause();
         aSelectionKeepsThePause();
-        clearPausesStartsAgain();
+        startTripStartsAgain();
+        aTripThatLeavesItsRouteFindsTheNextRoute();
+        noComparisonNeverSearches();
+        aManualReferenceNeverSearches();
+        aTripFromFarFindsTheRouteLater();
+        aPauseBeforeAStopStillDoesNotCount();
 
         if (failures > 0) {
             System.out.println("TripComparisonTest: " + failures + " check(s) failed");
@@ -172,6 +181,11 @@ public final class TripComparisonTest {
         c.searchAutomatically();
         c.add(saved.points.get(0));
         check("excluded after reset", RecordingSnapshot.SELECTION_NOT_FOUND, c.selection());
+        // A new trip is not a replay. The track is a candidate again.
+        c.startTrip(Profile.WALKING);
+        c.searchAutomatically();
+        c.add(saved.points.get(0));
+        check("new trip: candidate", RecordingSnapshot.SELECTION_TEMPORARY, c.selection());
     }
 
     // A deleted file gives an exception in the source. The recording must
@@ -227,13 +241,12 @@ public final class TripComparisonTest {
     }
 
     // A new trip has no pause of the trip before it.
-    private static void clearPausesStartsAgain() {
+    private static void startTripStartsAgain() {
         for (long seed = 1; seed <= SEEDS; seed++) {
             TripComparison c = comparison("ref", walk(NORTH_1200, 900 + seed, 1));
             c.setReference("ref", false);
             addWithPause(c, pausedTrip(1000 + seed));
-            c.reset(Profile.WALKING);
-            c.clearPauses();
+            c.startTrip(Profile.WALKING);
             c.setReference("ref", false);
             List<TrackPoint> trip = TestTracks.recorded(TestTracks.noisy(TestTracks.ideal(
                     NORTH_1200, 1.4, TestTracks.START_MS + 11 * DAY_MS, 0), 1100 + seed, SIGMA),
@@ -242,6 +255,115 @@ public final class TripComparisonTest {
                 c.add(p);
             }
             near("cleared " + seed, 0, finishDelta(c), 30_000);
+        }
+    }
+
+    // The trip follows route A, then turns onto route B. The comparison with
+    // A stops, and a new search finds B.
+    private static void aTripThatLeavesItsRouteFindsTheNextRoute() {
+        for (long seed = 1; seed <= SEEDS; seed++) {
+            TripComparison c = twoRoutes(seed);
+            c.searchAutomatically();
+            boolean sawA = false;
+            TrackPoint stop = null;
+            double waitM = -1;
+            for (TrackPoint p : walkTrip(A_THEN_B, 1700 + seed)) {
+                c.add(p);
+                sawA |= "a".equals(c.referenceId());
+                if (stop == null && sawA && c.selection() == RecordingSnapshot.SELECTION_NOT_FOUND) {
+                    stop = p;
+                } else if (stop != null && waitM < 0
+                        && c.selection() != RecordingSnapshot.SELECTION_NOT_FOUND) {
+                    waitM = Geo.distanceM(stop, p);
+                }
+            }
+            check("next route " + seed + ": A first", true, sawA);
+            // The new search waits 10 off-route limits after the stop.
+            near("next route " + seed + ": wait", 250, waitM, 20);
+            check("next route " + seed + ": B", "b", c.referenceId());
+            check("next route " + seed + ": finished", true, c.match() != null
+                    && c.match().state == TrackMatcher.State.FINISHED);
+            near("next route " + seed + ": difference", 0, finishDelta(c), 60_000);
+        }
+    }
+
+    // The user selected no comparison. The trip never searches. Also a new
+    // trip after an automatic trip starts with no comparison.
+    private static void noComparisonNeverSearches() {
+        TripComparison c = twoRoutes(1);
+        c.select(null, false, false, new ArrayList<TrackPoint>());
+        for (TrackPoint p : walkTrip(A_THEN_B, 1801)) {
+            c.add(p);
+        }
+        check("no comparison", RecordingSnapshot.SELECTION_OFF, c.selection());
+        c = twoRoutes(2);
+        c.searchAutomatically();
+        for (TrackPoint p : walkTrip(A_THEN_B, 1803)) {
+            c.add(p);
+        }
+        c.startTrip(Profile.WALKING);
+        for (TrackPoint p : walkTrip(A_THEN_B, 1804)) {
+            c.add(p);
+        }
+        check("new trip", RecordingSnapshot.SELECTION_OFF, c.selection());
+    }
+
+    // The user selected A. The comparison stays with A to the end.
+    private static void aManualReferenceNeverSearches() {
+        TripComparison c = twoRoutes(1);
+        c.setReference("a", false);
+        for (TrackPoint p : walkTrip(A_THEN_B, 1802)) {
+            c.add(p);
+        }
+        check("manual: selection", RecordingSnapshot.SELECTION_MANUAL, c.selection());
+        check("manual: track", "a", c.referenceId());
+    }
+
+    // The trip starts 400 m before route A. No route is near the first
+    // point. A later search finds A.
+    private static void aTripFromFarFindsTheRouteLater() {
+        for (long seed = 1; seed <= SEEDS; seed++) {
+            TripComparison c = twoRoutes(seed);
+            c.searchAutomatically();
+            List<TrackPoint> trip = walkTrip(new double[][] {{0, -400}, {0, 1000}}, 1900 + seed);
+            c.add(trip.get(0));
+            check("from far " + seed + ": first", RecordingSnapshot.SELECTION_NOT_FOUND,
+                    c.selection());
+            for (int i = 1; i < trip.size(); i++) {
+                c.add(trip.get(i));
+            }
+            check("from far " + seed + ": track", "a", c.referenceId());
+        }
+    }
+
+    // The trip pauses at 380 m on route A, then the comparison with A stops,
+    // and the trip joins B. The stop must not lose the count of the points.
+    // Else the count gets to the index of the pause again after 380 m. That
+    // is in the middle of B, and the difference at the finish of B jumps by
+    // the pause.
+    private static void aPauseBeforeAStopStillDoesNotCount() {
+        for (long seed = 1; seed <= SEEDS; seed++) {
+            TripComparison c = twoRoutes(seed);
+            c.searchAutomatically();
+            List<TrackPoint> walked = walkTrip(A_THEN_B, 2000 + seed);
+            List<TrackPoint> trip = new ArrayList<>();
+            int pauseAt = -1;
+            for (TrackPoint p : walked) {
+                boolean after = Geo.distanceM(walked.get(0), p) >= 380;
+                if (after && pauseAt < 0) {
+                    pauseAt = trip.size();
+                }
+                trip.add(after ? new TrackPoint(p.latitude, p.longitude, p.timeMs + PAUSE_MS,
+                        p.elevationM, p.accuracyM) : p);
+            }
+            for (int i = 0; i < trip.size(); i++) {
+                if (i == pauseAt) {
+                    c.addPause(PAUSE_MS);
+                }
+                c.add(trip.get(i));
+            }
+            check("pause and stop " + seed + ": B", "b", c.referenceId());
+            near("pause and stop " + seed + ": difference", 0, finishDelta(c), 60_000);
         }
     }
 
@@ -311,6 +433,22 @@ public final class TripComparisonTest {
             System.out.println("FAIL " + name + ": expected " + expected + " +- " + tolerance
                     + ", got " + actual);
         }
+    }
+
+    // A source with the two routes A and B.
+    private static TripComparison twoRoutes(long seed) {
+        MapSource source = new MapSource();
+        source.tracks.put("a", walk(ROUTE_A, 1500 + seed, 1));
+        source.tracks.put("b", walk(ROUTE_B, 1600 + seed, 2));
+        TripComparison c = new TripComparison(source);
+        c.reset(Profile.WALKING);
+        return c;
+    }
+
+    // A trip at the speed of the saved tracks, on day 10.
+    private static List<TrackPoint> walkTrip(double[][] corners, long seed) {
+        return TestTracks.recorded(TestTracks.noisy(TestTracks.ideal(corners, 1.4,
+                TestTracks.START_MS + 10 * DAY_MS, 0), seed, SIGMA), Profile.WALKING);
     }
 
     private static TripComparison comparison(String id, Track track) {

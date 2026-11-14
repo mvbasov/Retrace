@@ -21,6 +21,13 @@ package net.basov.retrace.core;
 // The second rule keeps the comparison during a short detour on a long
 // route.
 //
+// They also differ when the trip is DETOUR_FACTOR times the off-route limit
+// of the profile off the route without a return to it. For walking, this is
+// 500 m. This rule stops the comparison when the trip leaves a long route
+// after a long part on it. Without this rule, the trip must go as far off
+// the route as it went on the route. A return to the route sets this
+// distance to zero again.
+//
 // They also differ when the trip comes to the finish with less than
 // MIN_COVERAGE of the route behind it. The coverage is the distance of the
 // trip on the route. An example: a short loop that comes back to its start.
@@ -40,16 +47,20 @@ public final class RouteAgreement {
 
     public static final double LOST_FACTOR = 4;
     public static final double MIN_COVERAGE = 0.5;
+    public static final double DETOUR_FACTOR = 20;
 
     private final double lostM;
+    private final double detourLimitM;
     private TrackPoint lastFix;
     private double onRouteM;
     private double offRouteM;
+    private double detourM;
     private boolean finished;
     private boolean differs;
 
     public RouteAgreement(Profile profile) {
         this.lostM = LOST_FACTOR * profile.offRouteM;
+        this.detourLimitM = DETOUR_FACTOR * profile.offRouteM;
     }
 
     // Takes one point of the trip and the result of the matcher for it.
@@ -66,9 +77,11 @@ public final class RouteAgreement {
             }
         } else if (result.state == TrackMatcher.State.ON_ROUTE) {
             onRouteM += step;
+            detourM = 0;
         } else if (result.state == TrackMatcher.State.OFF_ROUTE) {
             offRouteM += step;
-            if (offRouteM >= lostM && offRouteM > onRouteM) {
+            detourM += step;
+            if (offRouteM >= lostM && offRouteM > onRouteM || detourM >= detourLimitM) {
                 differs = true;
             }
         }

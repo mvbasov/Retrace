@@ -500,9 +500,7 @@ public final class TrackService extends Service {
             SEGMENT_STARTS.clear();
             WAYPOINTS.clear();
         }
-        comparison.reset(p);
-        comparison.clearPauses();
-        comparison.setExcluded(null);
+        comparison.startTrip(p);
     }
 
     // Worker thread. Returns false if Retrace cannot read the track. The

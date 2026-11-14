@@ -29,6 +29,7 @@ public final class RouteAgreementTest {
         aRepeatOfTheRouteAgrees();
         aDifferentWayDiffers();
         aShortDetourOnALongRouteAgrees();
+        aLongDetourOnALongRouteDiffers();
         aFinishAfterAShortPartDiffers();
         aFinishAfterMostOfTheRouteAgrees();
         theLongTripStopsTheComparisonWithTheLoop();
@@ -79,6 +80,26 @@ public final class RouteAgreementTest {
             Track trip = track(detour, 1.4, 400 + seed, 5, Profile.WALKING);
             RouteAgreement a = run(ref, trip, Profile.WALKING);
             check("detour " + seed, false, a.differs());
+        }
+    }
+
+    // On a route of 3000 m, the trip is mostly on the route. A detour of
+    // 600 m does not make it more off the route than on it. The rule of the
+    // continuous detour stops the comparison. A detour of 300 m stays.
+    private static void aLongDetourOnALongRouteDiffers() {
+        double[][] route = {{0, 0}, {0, 3000}};
+        double[][] longDetour = {{0, 0}, {0, 1500}, {300, 1500}, {300, 1800}, {0, 1800},
+                {0, 3000}};
+        double[][] shortDetour = {{0, 0}, {0, 1500}, {150, 1500}, {150, 1650}, {0, 1650},
+                {0, 3000}};
+        for (long seed = 1; seed <= 10; seed++) {
+            Track ref = track(route, 1.4, 1200 + seed, 1, Profile.WALKING);
+            check("long detour " + seed, true, run(ref,
+                    track(longDetour, 1.4, 1300 + seed, 5, Profile.WALKING), Profile.WALKING)
+                    .differs());
+            check("short detour " + seed, false, run(ref,
+                    track(shortDetour, 1.4, 1400 + seed, 5, Profile.WALKING), Profile.WALKING)
+                    .differs());
         }
     }
 

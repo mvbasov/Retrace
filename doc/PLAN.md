@@ -187,12 +187,14 @@ Automatic selection:
    - Then the same direction wins over the opposite direction.
    - Then the newest track wins, and the trip races the last trip on that route.
 7. If no candidate is valid after three decision distances, Retrace records a new route with no comparison.
-8. `RouteAgreement` checks each candidate and the selected reference track. The trip and a route differ in two cases:
+8. `RouteAgreement` checks each candidate and the selected reference track. The trip and a route differ in three cases:
    - The trip is 4 off-route limits off the route in all, and more off the route than on it. For walking, this is 100 m.
+   - The trip is 20 off-route limits off the route with no return to it. For walking, this is 500 m. This rule stops the comparison when the trip leaves a long route after a long part on it.
    - The trip comes to the finish with less than half of the route on the route.
 9. A candidate that differs is out of the selection. When all candidates differ, Retrace records a new route at once. When the automatic reference track differs after the selection, the comparison stops. The trip screen then tells that no saved track agrees with the trip.
+10. After 10 off-route limits with no reference track, a new search starts at the next point. For walking, this is 250 m. The search finds a saved route that the trip follows now, also in its middle. If it finds none, the next search comes after the same distance again. Only the automatic selection searches again. A manual selection and no comparison never search.
 
-Limit: two routes with the same first part. The selection can come before the routes go apart. Then the comparison stops after the trip leaves the selected route, also if the trip follows the other route. A manual selection then gives the other route. A reference track of a manual selection never stops.
+Limit: two routes with the same first part. The selection can come before the routes go apart. Then the comparison stops after the trip leaves the selected route. A new search then finds the other route, but its comparison starts in the middle of that route. A manual selection gives the other route from the start. A reference track of a manual selection never stops.
 
 Example: a short loop and a long route with the same start and the same first 40 m. The long trip selects the loop after some meters, because the decision distance of a short route is short. The comparison stops after about 100 m off the loop. A trip on the loop comes back to its start. That place is the finish of the long route in the opposite direction. Without the coverage rule, the loop finishes the long route after 90 m.
 
