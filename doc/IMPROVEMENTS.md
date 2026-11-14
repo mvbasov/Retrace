@@ -57,16 +57,19 @@ Use only invented tracks from `TestTracks`. Do not add a real track. Check a cha
 | 7. Do not count the pause in the comparison | Feature | Medium | 5 |
 | 8. A GPS button in the notification of the pause | Feature | Small | 5 |
 | 9. Compile the Android code in the test workflow | Build | Small | 5 |
+| 11. Search for a different route after the trip leaves the route | Feature | Medium | 5 |
+| 12. Compare with a track of a different profile | Feature | Medium | 5 |
 
 The maintainer declined task 10, a Russian translation. Do not do it.
 
 ### 3.1 The sequence
 
-Do the tasks in this sequence: 2, 3, 9, 8, 6, 4, 5, 7.
+Do the tasks in this sequence: 2, 3, 9, 8, 6, 4, 12, 5, 7, 11.
 
 - Task 9 comes early. After it, each push compiles the Android classes. Thus a fault in an Android class of a later task shows at once.
 - Task 8 comes after task 3, because the two change the same comment.
-- Task 7 needs task 5. It changes the class that task 5 makes.
+- Task 7 and task 11 need task 5. They change the class that task 5 makes.
+- Task 12 comes before task 5. Thus task 5 moves the code with the new profile rule.
 
 ---
 
@@ -247,7 +250,7 @@ Do the tasks in this sequence: 2, 3, 9, 8, 6, 4, 5, 7.
 
 ## 5. Tasks that the maintainer approved
 
-The maintainer approved these tasks on 2026-11-14. Do not ask again.
+The maintainer approved these tasks on 2026-11-14. Do not ask again. The maintainer asked for tasks 11 and 12 on the same day.
 
 ### Task 6. Save the accuracy of each point
 
@@ -482,6 +485,177 @@ Read the method `main` first. Use the names of the variables that it uses for th
 **Done when:** `test/run.sh` passes, and the first run of the test workflow on GitHub is green. If you cannot run Docker, say so. The maintainer then checks the first run.
 
 **Risk.** If the stage fails on the first run for a reason that is not a Java fault, stop. Give the log to the maintainer. Do not add a package or a tool to `Dockerfile.base` without a question.
+
+---
+
+### Task 11. Search for a different route after the trip leaves the route
+
+**The goal.** A trip with the automatic selection can have no comparison. There are three causes:
+
+- No saved route was near the first point.
+- The selection found no candidate that agrees with the trip.
+- The trip left its automatic reference track, and `RouteAgreement` stopped the comparison.
+
+Now the trip stays with no comparison to its end. After this task, the trip searches again after it moved some distance. A trip that joins a different saved route then gets a comparison with that route.
+
+**Decisions.** These decisions keep the earlier behavior of the manual choices:
+
+- A reference track that the user selected never stops, and never starts a new search.
+- After the user selects "No comparison", the trip never searches.
+- A replay with the automatic selection searches again in the same way.
+
+**Do this task after task 5.** It changes `TripComparison`.
+
+**Part A: a long detour differs.** File: `app/src/main/java/net/basov/retrace/core/RouteAgreement.java`.
+
+On a long route, the rule "more off the route than on it" can stay false for a long detour. Add a third rule: a continuous detour of `DETOUR_FACTOR` off-route limits differs. For walking, that is 500 m.
+
+1. Add the constant `public static final double DETOUR_FACTOR = 20;`.
+2. Add the fields `private final double detourLimitM;` and `private double detourM;`. In the constructor, set `detourLimitM = DETOUR_FACTOR * profile.offRouteM;`.
+3. In `add()`, in the branch of `ON_ROUTE`, set `detourM = 0;`.
+4. In the branch of `OFF_ROUTE`, add `detourM += step;`. Then also set `differs = true` if `detourM >= detourLimitM`.
+5. Add the third rule to the banner comment.
+
+**Part B: the new search.** File: `app/src/main/java/net/basov/retrace/core/TripComparison.java`.
+
+1. Add the constant `public static final double RESEARCH_FACTOR = 10;`. The new search comes after the trip moved `RESEARCH_FACTOR` off-route limits with no comparison. For walking, that is 250 m. For driving, it is 600 m.
+2. Add these fields:
+
+   ```java
+   // True while the user wants the automatic selection.
+   private boolean automatic;
+   // The distance of the points that add() got since the last reset.
+   private double travelledM;
+   private TrackPoint lastAdded;
+   // The value of travelledM when the last search or comparison ended.
+   private double searchEndM;
+   ```
+
+3. In `reset(Profile p)`, set `travelledM = 0`, `lastAdded = null` and `searchEndM = 0`. Do not change `automatic` there.
+4. Set `automatic = true` in `searchAutomatically()`, and in `select()` when its argument `automatic` is true. Set `automatic = false` in `setReference()`, and in `select()` when its argument `automatic` is false.
+5. Find each place that sets the selection to `SELECTION_NOT_FOUND`. There are three: the search with no near track, the selector with the state `NONE`, and `stopDifferentComparison()`. At each place, also set `searchEndM = travelledM;`.
+6. At the start of `add()`, before the check of `SELECTION_SEARCH`, add:
+
+   ```java
+   if (lastAdded != null) {
+       travelledM += Geo.distanceM(lastAdded, fix);
+   }
+   lastAdded = fix;
+   if (automatic && selection == RecordingSnapshot.SELECTION_NOT_FOUND
+           && travelledM - searchEndM >= RESEARCH_FACTOR * profile.offRouteM) {
+       selection = RecordingSnapshot.SELECTION_SEARCH;
+   }
+   ```
+
+   The code after it then starts the search at this point. `ReferenceSelector` can join a route in the middle, thus the trip can join a different route at any place.
+7. Add a paragraph about the new search to the banner comment.
+
+If task 7 is done, `add()` already makes a shifted point. Use the original point `fix` for the distance. The time has no effect on the distance.
+
+**Part C: `TrackService` and the screen.** No change of code is necessary. The trip screen already shows the name of the new temporary reference track. Read `RunActivity` to make sure. If the screen keeps the text "No saved track agrees with this trip" after a new selection, correct that.
+
+**Tests.** Use invented tracks, walking at 1.4 m/s, 4 m noise and 10 seeds.
+
+| Case | Check |
+| --- | --- |
+| `RouteAgreement`: a route of 3000 m north. The trip leaves it for 600 m and comes back. | `differs()` is true. |
+| `RouteAgreement`: the same route, a detour of 300 m. | `differs()` is false. |
+| Saved route A goes north from (0, 0) to (0, 1000). Saved route B goes east from (0, 400) to (1500, 400). The trip goes north to (0, 400), then east to (1500, 400). The automatic selection. | At the end, the reference id is B, the match is not null, and the difference at the finish is less than 60 s. |
+| The same trip after `select(null, false, false)`, the choice "No comparison". | The selection stays `SELECTION_OFF` to the end. |
+| The same trip with the manual reference track A. | The selection stays `SELECTION_MANUAL`, with id A, to the end. |
+| The trip starts at (0, -400) and goes north on route A. The automatic selection. | At the first point, the selection is `SELECTION_NOT_FOUND`. At the end, the reference id is A. |
+
+Also run `RouteAgreementTest`. The case `aShortDetourOnALongRouteAgrees` must still pass. Its detour is shorter than 500 m.
+
+**Documents.** In section 5.5 of `doc/PLAN.md`, change items 7 to 9: the trip searches again after 10 off-route limits with no comparison. Add the third rule of `RouteAgreement`. Add one sentence to `README.md`.
+
+**Done when:** `test/run.sh` passes. Ask the maintainer to run a replay of a trip that leaves a route and joins a different saved route.
+
+---
+
+### Task 12. Compare with a track of a different profile
+
+**The goal.** The user can record a route with the wrong profile, for example a walk as cycling. That track is then never a reference track for a walk. After this task:
+
+- The manual selection shows the tracks of all profiles.
+- The automatic selection also uses a track of a different profile if its speed fits the profile of the trip.
+- The menu of a track can change its profile.
+
+The comparison always uses the profile of the trip for its limits. Only the reference times come from the track.
+
+**Part A: the manual selection.** File: `app/src/main/java/net/basov/retrace/ReferenceDialog.java`.
+
+1. In `show()`, make two lists. The first holds each readable track of the trip profile. The second holds each readable track of a different profile that is not null. Keep the newest-first sequence in each list. Give the dialog the first list, then the second list.
+2. In `showList()`, show a track of a different profile with its profile. Add the string `select_item_profile` to `res/values/strings.xml`: `%1$s (%2$s, %3$s)`. The third value is `Labels.profile(activity, e.profile)`.
+3. Change the banner comment: the tracks of the trip profile come first, then the tracks of the other profiles.
+
+**Part B: the automatic selection.** Files in `app/src/main/java/net/basov/retrace/core/`.
+
+1. In `Profile`, add three constants and a method:
+
+   ```java
+   // The limits of the mean speed between two profiles, in m/s. A track
+   // with a wrong profile gets its real profile from its mean speed.
+   public static final double WALK_RUN_MPS = 2.2;
+   public static final double RUN_CYCLE_MPS = 4.5;
+   public static final double CYCLE_DRIVE_MPS = 10;
+
+   // The profile that fits a mean speed, or null for NaN.
+   public static Profile ofMeanSpeed(double mps) {
+       if (Double.isNaN(mps)) {
+           return null;
+       }
+       if (mps < WALK_RUN_MPS) {
+           return WALKING;
+       }
+       if (mps < RUN_CYCLE_MPS) {
+           return RUNNING;
+       }
+       return mps < CYCLE_DRIVE_MPS ? CYCLING : DRIVING;
+   }
+   ```
+
+2. In `ReferenceSelector`, add this method:
+
+   ```java
+   // True if the track can be a reference track for a trip of the profile.
+   // A track of a different profile fits if its mean speed fits the profile
+   // of the trip. An example is a walk that the user recorded as cycling.
+   public static boolean fitsProfile(Track track, Profile profile) {
+       if (track.profile == profile) {
+           return true;
+       }
+       return track.profile != null
+               && Profile.ofMeanSpeed(TrackSpeeds.of(track, track.profile).meanMps) == profile;
+   }
+   ```
+
+3. In `routeNear()`, replace `track.profile != profile` with `!fitsProfile(track, profile)`. Keep the check of the count of points. Call `fitsProfile` after the distance check, because `TrackSpeeds` costs more time than the distance.
+4. In `best()`, add a first tie rule: a candidate of the trip profile wins over a candidate of a different profile. The class must keep the profile of the trip. If it has no field for it, add `private final Profile profile;` and set it in the constructor.
+5. Update the banner comment: the candidates, and the new first tie rule.
+
+**Part C: change the profile of a track.**
+
+1. `TrackStore`: add `void changeProfile(File file, Profile profile) throws IOException`. Under the lock, read the track, call `withProfile(profile)` and write it with `writeGpx`. If task 4 is done, `writeGpx` also removes the entry of the cache. Do not change the file name. A way keeps the file names of its members, thus a new name breaks the way. The profile in the file name is then only a name.
+2. `TrackActions`: add the item `CHANGE_PROFILE = 8` after `RENAME`. Show it if the entry is readable and is not a way. Its label is the new string `change_profile`: "Change the profile".
+3. The item opens a dialog with the four labels of `Labels.profile`, with `setSingleChoiceItems`. The current profile is checked. A push on a different profile calls `runFileTask` with `store.changeProfile`, then closes the dialog.
+4. Add the code `PROFILE_CHANGED = 5` to the codes of `TrackActions`. Find each implementation of `TrackActions.Listener`. Handle `PROFILE_CHANGED` the same as `RENAMED`.
+5. Read `WayDialogs` and `WayCandidates`. A track of a different profile must not go into a way, the same as now. Do not change that rule.
+
+**Tests.**
+
+- `ProfileTest` or a new test class: the values 1.4, 2.5, 6 and 15 m/s give the four profiles. NaN gives null.
+- `ReferenceSelectorTest`: a walking trip on the north route. The only saved track is the same route at 1.4 m/s, but with the profile `CYCLING`. The selector selects it.
+- `ReferenceSelectorTest`: the same trip, and a saved track at 5 m/s with the profile `CYCLING`. It is not a candidate.
+- `ReferenceSelectorTest`: the same trip, a walking track and a track at 1.4 m/s with the profile `CYCLING`, on the same route. The walking track wins.
+- The existing test `onlyNearTracksOfTheProfileAreCandidates` must still pass. Its cycling track goes at 5 m/s, thus it is still not a candidate.
+- `TrackStore` has no JVM test. Ask the maintainer to change the profile of one track on a device, and then to open the track again.
+
+**Documents.** Change item 1 of section 5.5 of `doc/PLAN.md`, and the manual selection of the same section. Add the new menu item to section 5.7. Add one sentence to `README.md`.
+
+**Done when:** `test/run.sh` passes with the new cases.
+
+**Risk.** The speed limits overlap with real trips: a slow cyclist can go at 4 m/s. That only matters for a track of a different profile. The tie rule and `RouteAgreement` protect the comparison.
 
 ---
 
