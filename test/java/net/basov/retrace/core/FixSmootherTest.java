@@ -27,6 +27,7 @@ public final class FixSmootherTest {
         aSpikeIsDropped();
         aRealChangeIsFollowed();
         aGapIsBridged();
+        aLongGapRestartsWithoutVelocityJump();
         theGpsCorrectsANetworkStart();
 
         if (failures > 0) {
@@ -157,6 +158,29 @@ public final class FixSmootherTest {
             }
         }
         check("gap dropped", 0, dropped);
+    }
+
+    // After a long pause at one place, the filter restarts at the new fix.
+    // The next fix then stays near the place with no jump from the old speed.
+    private static void aLongGapRestartsWithoutVelocityJump() {
+        FixSmoother f = new FixSmoother(Profile.DRIVING);
+        long t = TestTracks.START_MS;
+        for (int i = 0; i < 20; i++) {
+            f.filter(accuracy(TestTracks.point(0, i * 20, t), 5));
+            t += 1000;
+        }
+        // A ten-minute pause at the last place.
+        t += 600_000;
+        TrackPoint resume = accuracy(TestTracks.point(0, 380, t), 5);
+        TrackPoint first = f.filter(resume);
+        check("resume accepted", true, first != null);
+        check("resume stays at fix", true, first != null && Geo.distanceM(first, resume) < 0.01);
+
+        TrackPoint next = accuracy(TestTracks.point(0, 380, t + 1000), 20);
+        TrackPoint second = f.filter(next);
+        check("next accepted", true, second != null);
+        check("no backward velocity jump", true,
+                second != null && Geo.distanceM(second, next) < 1);
     }
 
     // At the start, the network gives fixes with an error of 40 m and an

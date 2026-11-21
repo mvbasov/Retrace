@@ -58,6 +58,10 @@ public final class FixSmoother {
     // changes its speed faster than a person on foot.
     static final double ACCELERATION_FACTOR = 0.15;
 
+    // A gap longer than this restarts the filter at the new fix. After a
+    // long pause or signal loss, the old speed is no longer valid.
+    static final double MAX_GAP_S = 60;
+
     private static final double METERS_PER_DEGREE = Geo.EARTH_RADIUS_M * Math.PI / 180.0;
 
     private final double q;
@@ -106,6 +110,10 @@ public final class FixSmoother {
         double dt = 0;
         if (fix.hasTime() && lastTimeMs != TrackPoint.NO_TIME && fix.timeMs > lastTimeMs) {
             dt = (fix.timeMs - lastTimeMs) / 1000.0;
+        }
+        if (dt > MAX_GAP_S) {
+            restart(fix, r);
+            return fix;
         }
         // Step 1: the prediction to the time of the fix.
         double px = x + vx * dt;
