@@ -26,6 +26,7 @@ import java.io.IOException;
 import java.io.Writer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import net.basov.retrace.core.FixSelector;
@@ -158,9 +159,9 @@ public final class TrackService extends Service {
     // The last state of the recording. The activity reads it.
     private static volatile RecordingSnapshot snapshot = RecordingSnapshot.IDLE;
 
-    // True from onCreate to onDestroy. TrackStore reads it before it saves an
-    // old log file.
-    private static volatile boolean active;
+    // Count of live service instances, from onCreate until finish() ends on
+    // destroy. TrackStore reads it before it saves an old log file.
+    private static final AtomicInteger ACTIVE = new AtomicInteger();
 
     // The points of the current track, for the map of the trip screen. The
     // worker thread adds them. The activity reads a copy.
@@ -183,7 +184,7 @@ public final class TrackService extends Service {
     }
 
     static boolean isActive() {
-        return active;
+        return ACTIVE.get() > 0;
     }
 
     // Returns a copy of the points from an index to the end.
@@ -263,8 +264,9 @@ public final class TrackService extends Service {
     private final LocationListener listener = new PassFixes();
 
     // The extra GPS request of a pause has its own listener. Thus Continue
-    // can remove it and keep the fused request.
-    private final LocationListener pauseGpsListener = new PassFixes();
+    // can remove it and keep the fused request. It keeps the GPS receiver
+    // awake and does not send fixes to onFix().
+    private final LocationListener pauseGpsListener = new KeepGps();
 
     // The saved tracks of TrackStore for the comparison. The id of a track
     // is the path of its file.
@@ -306,10 +308,31 @@ public final class TrackService extends Service {
         }
     }
 
+    // Keeps the GPS receiver awake during a pause without sending fixes to
+    // onFix(). The fused provider still sends the fixes of the pause.
+    private static final class KeepGps implements LocationListener {
+        @Override
+        public void onLocationChanged(Location location) {
+        }
+
+        // Android 6 to 10 declare the next three methods as abstract.
+        @Override
+        public void onStatusChanged(String provider, int status, Bundle extras) {
+        }
+
+        @Override
+        public void onProviderEnabled(String provider) {
+        }
+
+        @Override
+        public void onProviderDisabled(String provider) {
+        }
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();
-        active = true;
+        ACTIVE.incrementAndGet();
         thread = new HandlerThread("track-service");
         thread.start();
         worker = new Handler(thread.getLooper());
@@ -399,9 +422,15 @@ public final class TrackService extends Service {
 
     @Override
     public void onDestroy() {
-        active = false;
-        // quitSafely runs the posted work first. Thus finish saves the track.
-        worker.post(() -> finish(false));
+        // quitSafely runs the posted work first. Thus finish saves the track
+        // before isActive() becomes false.
+        worker.post(() -> {
+            try {
+                finish(false);
+            } finally {
+                ACTIVE.decrementAndGet();
+            }
+        });
         thread.quitSafely();
         super.onDestroy();
     }
