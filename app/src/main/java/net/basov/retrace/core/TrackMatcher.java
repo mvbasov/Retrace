@@ -275,8 +275,7 @@ public final class TrackMatcher {
                 s = 0;
                 return result(fix, fromStart);
             }
-            search(fix, 0, totalM, Double.NaN);
-            if (foundCross <= limitM && foundAlong > circleM) {
+            if (search(fix, 0, totalM, Double.NaN) && foundAlong > circleM) {
                 joinCount++;
                 if (joinCount >= JOIN_FIXES) {
                     s = foundAlong;
@@ -296,8 +295,7 @@ public final class TrackMatcher {
                 lastInsideMs = fix.timeMs;
                 return result(fix, fromStart);
             }
-            search(fix, 0, baseWindowM, 0);
-            s = foundCross <= limitM ? foundAlong : 0;
+            s = search(fix, 0, baseWindowM, 0) ? foundAlong : 0;
             tripStartMs = hasTime ? fix.timeMs - referenceTimeAt(s) : lastInsideMs;
             state = State.ON_ROUTE;
             history.clear();
@@ -308,8 +306,7 @@ public final class TrackMatcher {
         if (state == State.ON_ROUTE) {
             double window = baseWindowM
                     + Math.min(Math.max(gapMs, 0), MAX_GAP_MS) / 1000.0 * profile.maxSpeedMps;
-            search(fix, s - BACK_TOLERANCE_M, s + window, s);
-            if (foundCross <= limitM) {
+            if (search(fix, s - BACK_TOLERANCE_M, s + window, s)) {
                 s = foundAlong;
                 offCount = 0;
             } else {
@@ -323,11 +320,11 @@ public final class TrackMatcher {
         }
 
         // OFF_ROUTE: first the rest of the route, then the whole route.
-        search(fix, s - BACK_TOLERANCE_M, totalM, s);
-        if (foundCross > limitM) {
-            search(fix, 0, totalM, s);
+        boolean onRoute = search(fix, s - BACK_TOLERANCE_M, totalM, s);
+        if (!onRoute) {
+            onRoute = search(fix, 0, totalM, s);
         }
-        if (foundCross <= limitM) {
+        if (onRoute) {
             onCount++;
             if (onCount >= BACK_ON_ROUTE_FIXES) {
                 state = State.ON_ROUTE;
@@ -445,10 +442,13 @@ public final class TrackMatcher {
     }
 
     // Finds the place of the fix on the route between two distances along
-    // it. The result goes to foundCross and foundAlong. If near is a number,
-    // the local minimum inside the off-route limit with the lowest cost wins.
-    // Otherwise, or with no minimum inside the limit, the nearest part wins.
-    private void search(TrackPoint fix, double fromM, double toM, double near) {
+    // it. The result goes to foundCross and foundAlong. Returns true if a
+    // local minimum inside the off-route limit agrees with the direction of
+    // movement and is not behind fromM. If near is a number, the minimum
+    // with the lowest cost wins; otherwise the nearest minimum wins. With no
+    // valid minimum, foundCross holds the distance to the nearest part and
+    // the method returns false.
+    private boolean search(TrackPoint fix, double fromM, double toM, double near) {
         double from = Math.max(0, fromM);
         double to = Math.min(totalM, toM);
         int first = segmentAt(from);
@@ -471,9 +471,6 @@ public final class TrackMatcher {
         }
         foundCross = crossBuffer[nearest];
         foundAlong = placeBuffer[nearest];
-        if (Double.isNaN(near)) {
-            return;
-        }
 
         double bestCost = Double.POSITIVE_INFINITY;
         for (int k = 0; k < count; k++) {
@@ -483,8 +480,11 @@ public final class TrackMatcher {
             boolean against = directionBuffer[k] < MIN_DIRECTION;
             boolean tooFarBack = placeBuffer[k] < fromM;
             if (minimum && c <= limitM && !against && !tooFarBack) {
-                double step = placeBuffer[k] - near;
-                double cost = c + (step >= 0 ? step * FORWARD_COST : -step * BACK_COST);
+                double cost = c;
+                if (!Double.isNaN(near)) {
+                    double step = placeBuffer[k] - near;
+                    cost += step >= 0 ? step * FORWARD_COST : -step * BACK_COST;
+                }
                 if (cost < bestCost) {
                     bestCost = cost;
                     foundCross = c;
@@ -492,6 +492,7 @@ public final class TrackMatcher {
                 }
             }
         }
+        return bestCost < Double.POSITIVE_INFINITY;
     }
 
     // Projects a position onto segment i. The result goes to slot k of the
