@@ -445,9 +445,9 @@ public final class TrackMatcher {
     // it. The result goes to foundCross and foundAlong. Returns true if a
     // local minimum inside the off-route limit agrees with the direction of
     // movement and is not behind fromM. If near is a number, the minimum
-    // with the lowest cost wins; otherwise the nearest minimum wins. With no
-    // valid minimum, foundCross holds the distance to the nearest part and
-    // the method returns false.
+    // with the lowest cost wins. Otherwise, the nearest minimum wins. With
+    // no valid minimum, foundCross holds the distance to the nearest part
+    // and the method returns false.
     private boolean search(TrackPoint fix, double fromM, double toM, double near) {
         double from = Math.max(0, fromM);
         double to = Math.min(totalM, toM);

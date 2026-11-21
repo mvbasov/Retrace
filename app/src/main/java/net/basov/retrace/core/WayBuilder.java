@@ -223,6 +223,9 @@ public final class WayBuilder {
         }
         Stations st = Stations.smoothed(b.trimmed(profile.radiusM + profile.offRouteM,
                 profile.minDistanceM), stepM(profile));
+        if (st.count() < 2) {
+            return new Match(REJECT_NO_JOIN, 0, false);
+        }
         Crossings forward = Crossings.of(o, st, profile, limit);
         Crossings backward = Crossings.of(o.reversed(), st, profile, limit);
         boolean reversed = prefersReverse(forward, backward);
@@ -614,6 +617,9 @@ public final class WayBuilder {
         // The distance along the stations at station k. The last step can
         // be shorter.
         double along(int k) {
+            if (k <= 0 || x.length < 2) {
+                return 0;
+            }
             if (k < x.length - 1) {
                 return k * step;
             }
