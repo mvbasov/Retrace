@@ -65,8 +65,12 @@ import net.basov.retrace.core.Waypoint;
 // The camera at the start of a trip, also of a replay: the map shows the
 // reference track until the first point. At the first point, the map
 // follows the position, as after a push on Me, and zooms in to at least
-// FIRST_FIX_ZOOM. During a replay, All also shows the whole replayed track.
-// After a rotation of the screen, the camera of the user stays.
+// FIRST_FIX_ZOOM. The first snapshot of a trip can already have points. An
+// example is a replay with a manual reference track, because its first
+// point comes before the screen opens. The first refresh then gives these
+// points, and the same zoom applies to the last of them. During a replay,
+// All also shows the whole replayed track. After a rotation of the screen,
+// the camera of the user stays.
 //
 // During a trip with the GPS, a dot at the top left corner of the map shows
 // the source of the fixes. See SourceDot.
@@ -515,13 +519,13 @@ public final class RunActivity extends ThemedActivity {
         if (s.isReplay()) {
             loadFitPoints(s.replayPath, s.startTimeMs);
         }
-        if (move && s.recording && s.points == 0) {
+        if (move) {
             // The reference track shows until the first point. See the
-            // read of the reference track.
+            // read of the reference track. If the trip already has points,
+            // this refresh gives them, and the map zooms in to the last one.
+            // A follow with no zoom shows the whole world.
             waitingForFirstFix = true;
             map.setFollow(false);
-        } else if (move) {
-            map.setFollow(true);
         }
     }
 
