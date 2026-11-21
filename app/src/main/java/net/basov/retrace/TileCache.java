@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 import net.basov.retrace.core.TileCachePolicy;
 
@@ -58,17 +59,26 @@ final class TileCache {
         }
     }
 
+    // One memory cache for all screens. It uses one eighth of the memory of
+    // the application.
+    private static final LruCache<String, Bitmap> MEMORY = createMemoryCache();
+    private static final AtomicLong TEMP_ID = new AtomicLong();
+    private static final Object TRIM_LOCK = new Object();
+    private static int writesSinceTrim;
+
     private final File directory;
-    private final LruCache<String, Bitmap> memory;
-    private int writesSinceTrim;
 
     TileCache(Context context) {
         directory = new File(context.getCacheDir(), "tiles");
-        int kilobytes = (int) Math.min(Integer.MAX_VALUE, Runtime.getRuntime().maxMemory() / 1024 / 8);
-        memory = new LruCache<String, Bitmap>(kilobytes) {
+    }
+
+    private static LruCache<String, Bitmap> createMemoryCache() {
+        int kilobytes = Math.max(1, (int) Math.min(Integer.MAX_VALUE,
+                Runtime.getRuntime().maxMemory() / 1024 / 8));
+        return new LruCache<String, Bitmap>(kilobytes) {
             @Override
             protected int sizeOf(String key, Bitmap value) {
-                return value.getByteCount() / 1024;
+                return Math.max(1, value.getByteCount() / 1024);
             }
         };
     }
@@ -78,11 +88,11 @@ final class TileCache {
     }
 
     Bitmap fromMemory(String key) {
-        return memory.get(key);
+        return MEMORY.get(key);
     }
 
     void toMemory(String key, Bitmap bitmap) {
-        memory.put(key, bitmap);
+        MEMORY.put(key, bitmap);
     }
 
     // Reads a tile from the disk. Returns null if the disk does not hold it.
@@ -114,7 +124,7 @@ final class TileCache {
         if (parent == null || (!parent.isDirectory() && !parent.mkdirs())) {
             return;
         }
-        File temp = new File(file.getPath() + ".tmp");
+        File temp = new File(file.getPath() + "." + TEMP_ID.incrementAndGet() + ".tmp");
         try (DataOutputStream out = new DataOutputStream(new FileOutputStream(temp))) {
             out.writeLong(expiryMs);
             out.write(png);
@@ -131,22 +141,27 @@ final class TileCache {
         }
     }
 
-    // Two loader threads write tiles. Thus the count has a lock.
-    private synchronized boolean countWrite() {
-        if (++writesSinceTrim < WRITES_PER_TRIM) {
-            return false;
+    // Loader threads across screens share one disk cache. Thus the count
+    // and the trim share one lock.
+    private static boolean countWrite() {
+        synchronized (TRIM_LOCK) {
+            if (++writesSinceTrim < WRITES_PER_TRIM) {
+                return false;
+            }
+            writesSinceTrim = 0;
+            return true;
         }
-        writesSinceTrim = 0;
-        return true;
     }
 
     // Removes the oldest tiles when the disk cache is above the limit. The
     // file time of a tile is its download time.
     void trim(long limitBytes) {
-        List<TileCachePolicy.Entry> entries = new ArrayList<>();
-        collect(directory, entries);
-        for (TileCachePolicy.Entry e : TileCachePolicy.toRemove(entries, limitBytes)) {
-            new File(e.name).delete();
+        synchronized (TRIM_LOCK) {
+            List<TileCachePolicy.Entry> entries = new ArrayList<>();
+            collect(directory, entries);
+            for (TileCachePolicy.Entry e : TileCachePolicy.toRemove(entries, limitBytes)) {
+                new File(e.name).delete();
+            }
         }
     }
 

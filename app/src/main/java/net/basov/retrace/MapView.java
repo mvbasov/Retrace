@@ -134,6 +134,13 @@ public final class MapView extends View {
     private boolean fitPending;
     private FollowListener followListener;
 
+    // The tile level and range of the last wanted set given to the loader.
+    private int wantedLevel = -1;
+    private int wantedX0;
+    private int wantedY0;
+    private int wantedX1;
+    private int wantedY1;
+
     public MapView(Context context, TileLoader loader) {
         super(context);
         this.loader = loader;
@@ -474,16 +481,24 @@ public final class MapView extends View {
     private void drawTiles(Canvas canvas) {
         int level = viewport.tileLevel();
         int[] t = viewport.visibleTiles();
-        Set<String> wanted = new HashSet<>();
-        for (int ty = t[1]; ty <= t[3]; ty++) {
-            for (int tx = t[0]; tx <= t[2]; tx++) {
-                wanted.add(TileCache.key(level, tx, ty));
-                for (int up = 1; up <= MAX_LEVELS_UP && level - up >= 0; up++) {
-                    wanted.add(TileCache.key(level - up, tx >> up, ty >> up));
+        if (level != wantedLevel || t[0] != wantedX0 || t[1] != wantedY0
+                || t[2] != wantedX1 || t[3] != wantedY1) {
+            wantedLevel = level;
+            wantedX0 = t[0];
+            wantedY0 = t[1];
+            wantedX1 = t[2];
+            wantedY1 = t[3];
+            Set<String> wanted = new HashSet<>();
+            for (int ty = t[1]; ty <= t[3]; ty++) {
+                for (int tx = t[0]; tx <= t[2]; tx++) {
+                    wanted.add(TileCache.key(level, tx, ty));
+                    for (int up = 1; up <= MAX_LEVELS_UP && level - up >= 0; up++) {
+                        wanted.add(TileCache.key(level - up, tx >> up, ty >> up));
+                    }
                 }
             }
+            loader.setWanted(wanted);
         }
-        loader.setWanted(wanted);
 
         float size = (float) viewport.tileScreenSizePx();
         for (int ty = t[1]; ty <= t[3]; ty++) {
