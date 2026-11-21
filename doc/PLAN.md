@@ -45,7 +45,7 @@ Newer APIs go behind a `Build.VERSION.SDK_INT` check. Examples: notification cha
 
 The build follows the pattern of OMN-Go.
 
-- `Dockerfile.base` makes the toolchain image. It holds Debian trixie, OpenJDK 21, the Android command-line tools, SDK platform 36, build-tools 36 and Gradle 9. It holds no Go and no NDK.
+- `Dockerfile.base` makes the toolchain image. It holds Alpine 3.23, OpenJDK 21, the Android command-line tools, SDK platform 36, build-tools 36 and Gradle 9. It holds no Go and no NDK.
 - `Dockerfile` runs the test gate. Then it runs `gradle assembleRelease`, and the signing configuration signs the APK.
 - `local/build.sh` builds the two images and copies the APK to `./output-binaries/`.
 - Gradle uses the Android Gradle plugin 9 and **no dependency**. The release build sets `minifyEnabled true` and `shrinkResources true`.

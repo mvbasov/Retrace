@@ -9,16 +9,12 @@
 # image holds no NDK.
 #
 # The JDK runs Gradle and javac. The language level of the source stays at
-# 17, see app/build.gradle. The Debian trixie release has a package for
-# JDK 21.
-FROM debian:trixie-slim
+# 17, see app/build.gradle.
+FROM alpine:3.23
 
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
-    openjdk-21-jdk-headless ca-certificates wget unzip
+# Android SDK native tools, including AAPT2, expect glibc.
+RUN apk add --no-cache \
+    openjdk21-jdk ca-certificates wget unzip gcompat libstdc++ zlib
 
 # The Android command-line tools give sdkmanager.
 RUN --mount=type=cache,target=/tmp/dl,sharing=locked \

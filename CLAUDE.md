@@ -115,7 +115,7 @@ feat(track): Record a track in a foreground service. v26.10.2
 
 - The Docker build is the reference build. The host needs no Java, no Android Studio and no Gradle.
 - `Dockerfile.base` makes the toolchain image `retrace-base:latest`. Docker keeps it in the cache.
-- The toolchain: Debian trixie, JDK 21, Gradle 9, the Android Gradle plugin 9, SDK platform 36 and build-tools 36.
+- The toolchain: Alpine 3.23, JDK 21, Gradle 9, the Android Gradle plugin 9, SDK platform 36 and build-tools 36.
 - The version of the Android Gradle plugin is in `build.gradle`. The version of Gradle is in `Dockerfile.base`. Change the two together.
 - The Gradle files use the `name = value` form for each property. Do not use the old `name value` form.
 - `app/build.gradle` sets `enableKotlin = false`. Without it, the plugin adds the Kotlin standard library to the APK. Do not use the deprecated `android.builtInKotlin` option.

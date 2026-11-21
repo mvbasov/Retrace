@@ -24,14 +24,11 @@
 # gives the keystore and the .env file.
 
 # ============================== STAGE 1 ===============================
-FROM debian:trixie-slim AS base_env
+FROM alpine:3.23 AS base_env
 
-ENV DEBIAN_FRONTEND=noninteractive
-
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
-    openjdk-21-jdk-headless ca-certificates wget unzip
+# Android SDK native tools, including AAPT2, expect glibc.
+RUN apk add --no-cache \
+    openjdk21-jdk ca-certificates wget unzip gcompat libstdc++ zlib
 
 # The Android command-line tools give sdkmanager.
 RUN --mount=type=cache,target=/tmp/dl,sharing=locked \
